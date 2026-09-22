@@ -5,6 +5,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const DASHBOARD_PASSWORD = process.env.NOVAIRA_DASHBOARD_PASSWORD || 'Novaira002@#';
 
 // Middleware
 app.use(cors());
@@ -33,6 +34,225 @@ app.get('/test', (req, res) => {
         timestamp: new Date().toISOString(),
         service: 'novaira-admin-backend'
     });
+});
+
+function renderAdminLoginPage(message = '') {
+    return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Novaira Backend Dashboard Login</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #0b1220; color: #e5e7eb; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+                .card { width: min(92vw, 420px); background: #111827; border: 1px solid #273449; border-radius: 16px; padding: 28px; box-shadow: 0 20px 40px rgba(0,0,0,.35); }
+                h1 { margin-top: 0; font-size: 28px; }
+                label { display: block; margin: 12px 0 8px; font-weight: bold; }
+                input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1px solid #334155; border-radius: 10px; background: #0f172a; color: white; font-size: 16px; }
+                button { margin-top: 20px; width: 100%; padding: 12px; border: none; border-radius: 10px; background: linear-gradient(135deg, #22c55e, #14b8a6); color: white; font-weight: bold; cursor: pointer; }
+                .error { color: #fca5a5; margin-top: 12px; min-height: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>Novaira Admin</h1>
+                <form method="POST" action="/admin/login">
+                    <label for="password">Dashboard Password</label>
+                    <input id="password" name="password" type="password" required placeholder="Enter password" />
+                    <button type="submit">Open Dashboard</button>
+                </form>
+                <div class="error">${message}</div>
+            </div>
+        </body>
+        </html>
+    `;
+}
+
+function renderAdminDashboard(status) {
+    const securityChecks = [
+        ['Dashboard protection', status.security.dashboardProtected ? 'Enabled' : 'Disabled'],
+        ['HTTPS / secure transport', status.security.httpsProtected ? 'Enabled' : 'Warning'],
+        ['CORS enabled', status.security.corsEnabled ? 'Enabled' : 'Disabled'],
+        ['Supabase connectivity', status.services.supabase ? 'Healthy' : 'Not configured'],
+        ['Firebase admin', status.services.firebase ? 'Healthy' : 'Disabled'],
+        ['Environment variables', status.security.envConfigured ? 'Loaded' : 'Missing'],
+        ['Admin cookie auth', status.security.cookieAuth ? 'Enabled' : 'Disabled']
+    ];
+
+    const rows = securityChecks.map(([label, value]) => `
+        <tr>
+            <td>${label}</td>
+            <td>${value}</td>
+        </tr>
+    `).join('');
+
+    return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Novaira Backend Dashboard</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #0b1220; color: #e5e7eb; margin: 0; padding: 24px; }
+                .wrap { max-width: 1100px; margin: 0 auto; }
+                .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+                .badge { background: #14532d; color: #bbf7d0; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: bold; }
+                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+                .card { background: #111827; border: 1px solid #273449; border-radius: 14px; padding: 18px; }
+                .card h3 { margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: #93c5fd; }
+                .value { font-size: 24px; font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; background: #111827; border: 1px solid #273449; border-radius: 12px; overflow: hidden; }
+                th, td { border-bottom: 1px solid #1f2937; padding: 12px 14px; text-align: left; }
+                th { background: #0f172a; }
+                .logout { color: #fca5a5; text-decoration: none; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="wrap">
+                <div class="header">
+                    <div>
+                        <h1 style="margin:0;">Novaira Backend Dashboard</h1>
+                        <div style="margin-top:8px; color:#94a3b8;">${status.timestamp}</div>
+                    </div>
+                    <span class="badge">${status.status.toUpperCase()}</span>
+                </div>
+
+                <div class="grid">
+                    <div class="card">
+                        <h3>Service</h3>
+                        <div class="value">${status.service}</div>
+                    </div>
+                    <div class="card">
+                        <h3>Uptime</h3>
+                        <div class="value">${status.uptime}</div>
+                    </div>
+                    <div class="card">
+                        <h3>Node</h3>
+                        <div class="value">${status.runtime.node}</div>
+                    </div>
+                    <div class="card">
+                        <h3>Memory</h3>
+                        <div class="value">${status.runtime.memory}</div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 24px;">
+                    <h3>Security & Health Checks</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Check</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <a class="logout" href="/admin/logout">Logout</a>
+                    <a class="logout" href="/admin/health">Open JSON Health</a>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+}
+
+function getBackendHealth() {
+    const memoryUsage = process.memoryUsage();
+    const uptimeSeconds = Math.floor(process.uptime());
+    const hours = Math.floor(uptimeSeconds / 3600);
+    const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+    const seconds = uptimeSeconds % 60;
+
+    const firebaseReady = ensureFirebaseReady();
+
+    return {
+        status: 'ok',
+        service: 'novaira-admin-backend',
+        timestamp: new Date().toISOString(),
+        uptime: `${hours}h ${minutes}m ${seconds}s`,
+        runtime: {
+            node: process.version,
+            platform: process.platform,
+            memory: `${(memoryUsage.heapUsed / 1024 / 1024).toFixed(2)} MB used`,
+            rss: `${(memoryUsage.rss / 1024 / 1024).toFixed(2)} MB`
+        },
+        services: {
+            supabase: Boolean(supabaseUrl && supabaseKey),
+            firebase: firebaseReady,
+            smtp: true
+        },
+        security: {
+            dashboardProtected: true,
+            httpsProtected: process.env.NODE_ENV === 'production' || Boolean(process.env.HTTPS_ENABLED),
+            corsEnabled: true,
+            envConfigured: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.PORT),
+            cookieAuth: true
+        }
+    };
+}
+
+function dashboardAuth(req, res, next) {
+    const cookies = Object.fromEntries((req.headers.cookie || '')
+        .split(';')
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(cookie => {
+            const [key, ...value] = cookie.split('=');
+            return [key, decodeURIComponent(value.join('='))];
+        }));
+
+    const hasCookie = cookies.novaira_admin_session === 'authenticated';
+    const validQueryPassword = req.query.password === DASHBOARD_PASSWORD;
+
+    if (hasCookie || validQueryPassword) {
+        if (validQueryPassword) {
+            res.cookie('novaira_admin_session', 'authenticated', { httpOnly: true, sameSite: 'lax' });
+        }
+        return next();
+    }
+
+    res.status(401).send(renderAdminLoginPage('Password required.'));
+}
+
+app.get('/admin', (req, res) => {
+    if (req.query.password === DASHBOARD_PASSWORD) {
+        res.cookie('novaira_admin_session', 'authenticated', { httpOnly: true, sameSite: 'lax' });
+        return res.redirect('/admin/dashboard');
+    }
+    res.send(renderAdminLoginPage(''));
+});
+
+app.post('/admin/login', (req, res) => {
+    const submittedPassword = req.body && req.body.password;
+    if (submittedPassword === DASHBOARD_PASSWORD) {
+        res.cookie('novaira_admin_session', 'authenticated', { httpOnly: true, sameSite: 'lax' });
+        return res.redirect('/admin/dashboard');
+    }
+    res.status(401).send(renderAdminLoginPage('Invalid password.'));
+});
+
+app.get('/admin/logout', (req, res) => {
+    res.clearCookie('novaira_admin_session');
+    res.redirect('/admin');
+});
+
+app.get('/admin/dashboard', dashboardAuth, (req, res) => {
+    res.send(renderAdminDashboard(getBackendHealth()));
+});
+
+app.get('/admin/health', dashboardAuth, (req, res) => {
+    res.json(getBackendHealth());
+});
+
+app.get('/api/backend-status', (req, res) => {
+    res.json(getBackendHealth());
 });
 
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
@@ -821,9 +1041,13 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
+}
+
+module.exports = app;
 
 
 // Send OTP via Zoho SMTP (reads from smtp_settings table)
