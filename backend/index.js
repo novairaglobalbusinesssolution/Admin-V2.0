@@ -27,7 +27,7 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Initialize Firebase Admin
+// Initialize Firebase Admin only when the service account file exists.
 try {
     const serviceAccount = require('./serviceAccountKey.json');
     initializeApp({
@@ -35,7 +35,11 @@ try {
     });
     console.log("Firebase Admin Initialized Successfully");
 } catch (error) {
-    console.error("Firebase Admin Initialization Error:", error.message);
+    if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('serviceAccountKey')) {
+        console.warn("Firebase Admin: serviceAccountKey.json not found. FCM features will remain disabled.");
+    } else {
+        console.error("Firebase Admin Initialization Error:", error.message);
+    }
 }
 
 // Push Notification Route
