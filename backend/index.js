@@ -264,31 +264,54 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+function loadFirebaseServiceAccount() {
+    try {
+        const firebaseEnvJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+        if (firebaseEnvJson) {
+            return JSON.parse(firebaseEnvJson);
+        }
+    } catch (error) {
+        console.error('Firebase Service Account env JSON parse error:', error.message);
+        return null;
+    }
+
+    try {
+        return require('./serviceAccountKey.json');
+    } catch (error) {
+        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('serviceAccountKey')) {
+            console.warn('Firebase Admin: serviceAccountKey.json not found. FCM features will remain disabled.');
+        } else {
+            console.error('Firebase Admin file load error:', error.message);
+        }
+        return null;
+    }
+}
+
 function ensureFirebaseReady() {
     if (getApps().length > 0) {
         return true;
     }
 
+    const serviceAccount = loadFirebaseServiceAccount();
+    if (!serviceAccount) {
+        return false;
+    }
+
     try {
-        const serviceAccount = require('./serviceAccountKey.json');
         initializeApp({
             credential: cert(serviceAccount)
         });
         console.log('Firebase Admin Initialized Successfully');
         return true;
     } catch (error) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('serviceAccountKey')) {
-            console.warn('Firebase Admin: serviceAccountKey.json not found. FCM features will remain disabled.');
-        } else {
-            console.error('Firebase Admin Initialization Error:', error.message);
-        }
+        console.error('Firebase Admin Initialization Error:', error.message);
         return false;
     }
 }
 
 function getFirebaseMessaging() {
     if (!ensureFirebaseReady()) {
-        throw new Error('Firebase Admin is not configured on this server. Add serviceAccountKey.json to enable push notifications.');
+        throw new Error('Firebase Admin is not configured on this server. Add FIREBASE_SERVICE_ACCOUNT or serviceAccountKey.json to enable push notifications.');
     }
     return getMessaging();
 }
