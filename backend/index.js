@@ -17,6 +17,23 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'success', message: 'Novaira Admin API is running' });
 });
 
+app.get('/', (req, res) => {
+    res.json({
+        status: 'success',
+        message: 'Novaira Admin backend is online',
+        timestamp: new Date().toISOString(),
+        routes: ['/api/health', '/test']
+    });
+});
+
+app.get('/test', (req, res) => {
+    res.json({
+        status: 'success',
+        message: 'Backend test route is active',
+        timestamp: new Date().toISOString(),
+        service: 'novaira-admin-backend'
+    });
+});
 
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
