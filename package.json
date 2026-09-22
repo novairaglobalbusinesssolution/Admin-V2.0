@@ -1,0 +1,75 @@
+{
+    "name": "frontend",
+    "private": true,
+    "version": "2.0.7",
+    "type": "module",
+    "scripts": {
+        "dev": "concurrently \"vite\" \"cd backend && npm start\"",
+        "build": "vite build",
+        "lint": "oxlint",
+        "preview": "vite preview",
+        "electron:start": "vite build && electron .",
+        "electron:build": "vite build && electron-builder"
+    },
+    "dependencies": {
+        "@emotion/react": "^11.14.0",
+        "@emotion/styled": "^11.14.1",
+        "@mui/icons-material": "^9.4.0",
+        "@mui/material": "^9.4.0",
+        "@supabase/supabase-js": "^2.116.0",
+        "@tailwindcss/vite": "^4.3.3",
+        "cloudinary": "^2.11.0",
+        "cors": "^2.8.6",
+        "dotenv": "^17.4.2",
+        "express": "^5.2.1",
+        "firebase-admin": "^14.4.0",
+        "lucide-react": "^1.44.0",
+        "nodemailer": "^10.0.10",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "react-router-dom": "^7.18.3",
+        "sweetalert2": "^11.26.25",
+        "tesseract.js": "^7.0.0"
+    },
+    "devDependencies": {
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.7",
+        "@vitejs/plugin-react": "^6.1.1",
+        "concurrently": "^10.0.5",
+        "electron": "^44.4.1",
+        "electron-builder": "^26.15.3",
+        "electron-winstaller": "^5.4.4",
+        "oxlint": "^1.81.0",
+        "png-to-ico": "^3.0.2",
+        "tailwindcss": "^4.3.3",
+        "vite": "^8.3.0"
+    },
+    "main": "electron/main.cjs",
+    "build": {
+        "appId": "com.novaira.admin",
+        "productName": "NOVAIRA ADMIN",
+        "directories": {
+            "output": "dist_installer"
+        },
+        "files": [
+            "dist/**/*",
+            "electron/**/*",
+            "package.json",
+            "backend/.env",
+            "backend/**/*",
+            "!backend/node_modules/**/*"
+        ],
+        "win": {
+            "target": "nsis"
+        },
+        "nsis": {
+            "createDesktopShortcut": true,
+            "shortcutName": "Novaira Admin V2",
+            "oneClick": false,
+            "createStartMenuShortcut": true,
+            "perMachine": false,
+            "allowToChangeInstallationDirectory": true,
+            "runAfterFinish": true
+        }
+    }
+}

@@ -63,3 +63,36 @@ Novaira Admin V2.0 is a highly optimized, full-stack desktop application built t
 ```bash
 git clone https://github.com/novairaglobalbusinesssolution/Admin-V2.0.git
 cd Admin-V2.0/frontend
+```
+
+### 2. Install Dependencies
+```bash
+npm install
+```
+
+### 3. Run the App
+```bash
+npm run dev
+```
+
+### 4. Build for Production
+```bash
+npm run build
+```
+
+---
+
+## 📁 Project Structure
+
+- `src/` – React frontend app
+- `backend/` – Express API and database helpers
+- `electron/` – Electron desktop shell
+- `public/` – static assets and icons
+- `dist/` – production build output
+
+---
+
+## 🔐 Notes
+
+This project uses Supabase for data access and Firebase Admin for push notifications. Keep environment variables and service account keys private and never commit them to Git.
+
