@@ -35,7 +35,7 @@ app.get('/test', (req, res) => {
     });
 });
 
-const { initializeApp, cert } = require('firebase-admin/app');
+const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -44,19 +44,33 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Initialize Firebase Admin only when the service account file exists.
-try {
-    const serviceAccount = require('./serviceAccountKey.json');
-    initializeApp({
-        credential: cert(serviceAccount)
-    });
-    console.log("Firebase Admin Initialized Successfully");
-} catch (error) {
-    if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('serviceAccountKey')) {
-        console.warn("Firebase Admin: serviceAccountKey.json not found. FCM features will remain disabled.");
-    } else {
-        console.error("Firebase Admin Initialization Error:", error.message);
+function ensureFirebaseReady() {
+    if (getApps().length > 0) {
+        return true;
     }
+
+    try {
+        const serviceAccount = require('./serviceAccountKey.json');
+        initializeApp({
+            credential: cert(serviceAccount)
+        });
+        console.log('Firebase Admin Initialized Successfully');
+        return true;
+    } catch (error) {
+        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('serviceAccountKey')) {
+            console.warn('Firebase Admin: serviceAccountKey.json not found. FCM features will remain disabled.');
+        } else {
+            console.error('Firebase Admin Initialization Error:', error.message);
+        }
+        return false;
+    }
+}
+
+function getFirebaseMessaging() {
+    if (!ensureFirebaseReady()) {
+        throw new Error('Firebase Admin is not configured on this server. Add serviceAccountKey.json to enable push notifications.');
+    }
+    return getMessaging();
 }
 
 // Push Notification Route
@@ -67,6 +81,10 @@ app.post('/api/send-bulk-notification', async (req, res) => {
     
     if (!title || !body) {
         return res.status(400).json({ error: 'Missing title or body' });
+    }
+
+    if (!ensureFirebaseReady()) {
+        return res.status(503).json({ error: 'Firebase Admin is not configured on this server. Add serviceAccountKey.json to enable push notifications.' });
     }
     
     try {
@@ -94,7 +112,7 @@ app.post('/api/send-bulk-notification', async (req, res) => {
                 tokens: chunk
             };
             try {
-                await getMessaging().sendEachForMulticast(message);
+                await getFirebaseMessaging().sendEachForMulticast(message);
             } catch(e) { console.error("FCM Multicast error:", e); }
         }
 
@@ -130,6 +148,10 @@ app.post('/api/send-notification', async (req, res) => {
     if (!earner_id || !title || !body) {
         return res.status(400).json({ error: 'Missing earner_id, title, or body' });
     }
+
+    if (!ensureFirebaseReady()) {
+        return res.status(503).json({ error: 'Firebase Admin is not configured on this server. Add serviceAccountKey.json to enable push notifications.' });
+    }
     
     try {
         // Fetch user's FCM token from profiles table
@@ -152,7 +174,7 @@ app.post('/api/send-notification', async (req, res) => {
         };
         
         // Send via Firebase Admin
-        const response = await getMessaging().send(message);
+        const response = await getFirebaseMessaging().send(message);
         
         // Also save to user_notifications table so it shows in the app Inbox
         await supabase.from('user_notifications').insert([{
@@ -715,6 +737,10 @@ app.post('/api/send-custom-notification', async (req, res) => {
     if (!title || !body) {
         return res.status(400).json({ error: 'Missing title or body' });
     }
+
+    if (!ensureFirebaseReady()) {
+        return res.status(503).json({ error: 'Firebase Admin is not configured on this server. Add serviceAccountKey.json to enable push notifications.' });
+    }
     
     try {
         let profilesData = [];
@@ -752,7 +778,7 @@ app.post('/api/send-custom-notification', async (req, res) => {
             };
             
             try {
-                const response = await getMessaging().sendEachForMulticast(message);
+                const response = await getFirebaseMessaging().sendEachForMulticast(message);
                 successCount += response.successCount;
             } catch (err) {
                 console.error('Firebase send error:', err);
