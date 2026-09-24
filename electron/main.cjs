@@ -8,7 +8,19 @@ function startBackend() {
     const backendPath = path.join(__dirname, '../backend/index.js');
     console.log('Loading backend directly into Electron main process:', backendPath);
     // require it directly, no fork!
-    require(backendPath);
+    const backendApp = require(backendPath);
+    if (backendApp && typeof backendApp.listen === 'function') {
+      const PORT = process.env.PORT || 5000;
+      backendApp.listen(PORT, () => {
+        console.log('Backend started on port ' + PORT + ' from Electron');
+      }).on('error', (e) => {
+        if (e.code === 'EADDRINUSE') {
+          console.log('Port ' + PORT + ' is already in use, assuming backend is already running.');
+        } else {
+          console.error('Backend listen error:', e);
+        }
+      });
+    }
     console.log('Backend loaded successfully.');
   } catch (err) {
     console.error('Failed to start backend:', err);

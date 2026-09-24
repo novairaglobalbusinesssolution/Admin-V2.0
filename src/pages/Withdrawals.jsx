@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, 
   Button, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Stack, CircularProgress,
@@ -62,16 +62,7 @@ export default function Withdrawals() {
     try {
       const { data: withdrawals, error: wErr } = await supabase
         .from('individual_wallet_transactions')
-        .select(`
-            *,
-            profiles:earner_id (
-                first_name,
-                last_name,
-                email,
-                phone,
-                bulker_id
-            )
-        `)
+        .select(`*`)
         .eq('status', 'Pending')
         .eq('transaction_type', 'Debit')
         .ilike('description', 'Withdrawal:%')
@@ -79,10 +70,26 @@ export default function Withdrawals() {
 
       if (wErr) throw wErr;
 
+      // Manually fetch profiles since foreign key might be missing
+      const earnerIds = [...new Set((withdrawals || []).map(w => w.earner_id))].filter(Boolean);
+      let profilesMap = {};
+      if (earnerIds.length > 0) {
+        const { data: profiles, error: pErr } = await supabase
+          .from('profiles')
+          .select('earner_id, first_name, last_name, email, phone, bulker_id')
+          .in('earner_id', earnerIds);
+        
+        if (!pErr && profiles) {
+          profiles.forEach(p => {
+            profilesMap[p.earner_id] = p;
+          });
+        }
+      }
+
       const { data: bulkers } = await supabase.from('bulker_desks').select('bulker_id, full_name');
 
       const combined = (withdrawals || []).map(w => {
-const profile = w.profiles || {};
+        const profile = profilesMap[w.earner_id] || {};
         
         let bulkerMatch = null;
         if (profile.bulker_id) {
@@ -163,7 +170,7 @@ const profile = w.profiles || {};
       if (error) throw error;
       
       // Send push notification
-      fetch('http://localhost:5000/api/send-notification', {
+      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/send-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -203,7 +210,7 @@ const profile = w.profiles || {};
       if (error) throw error;
       
       // Send push notification
-      fetch('http://localhost:5000/api/send-notification', {
+      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/send-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

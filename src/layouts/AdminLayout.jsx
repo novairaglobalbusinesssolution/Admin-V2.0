@@ -279,7 +279,7 @@ export default function AdminLayout() {
           </ListItemButton>
         </ListItem>
         <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 1.4, fontSize: '0.6rem', fontWeight: 600, opacity: 0.7 }}>
-          v2.0.7
+          v2.1.0
         </Typography>
       </Box>
     </Box>

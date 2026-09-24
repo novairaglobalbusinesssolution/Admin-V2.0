@@ -107,7 +107,13 @@ export default function AddComment() {
               .trim();
             return cleaned;
           })
-          .filter(line => line.length > 0)
+          .filter(line => {
+            if (line.length === 0) return false;
+            const l = line.toLowerCase();
+            if (l.includes("5-star review:")) return false;
+            if (l.includes("here are") && l.includes("reviews")) return false;
+            return true;
+          })
           .map(content => ({
             app_id: selectedApp.id,
             content,
@@ -134,7 +140,7 @@ export default function AddComment() {
 
       // Send Bulk Notification
       try {
-        await fetch('http://localhost:5000/api/send-bulk-notification', {
+        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/send-bulk-notification`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
