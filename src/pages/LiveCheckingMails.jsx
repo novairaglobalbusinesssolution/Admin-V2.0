@@ -140,7 +140,7 @@ export default function LiveCheckingMails() {
     setSendingId(app.id);
     try {
       const recEmails = receivers.map(r => r.receiver_email).join(',');
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-live-checking-email`, {
+      const res = await fetch(`${import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com'}/api/send-live-checking-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ smtp_id: selectedSmtp, receiver_email: recEmails, app_data: app })
@@ -160,7 +160,7 @@ export default function LiveCheckingMails() {
     
     setSendingBulk(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-bulk-live-checking`, {
+      const res = await fetch(`${import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com'}/api/send-bulk-live-checking`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ smtp_id: selectedSmtp, apps })

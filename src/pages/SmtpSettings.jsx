@@ -119,7 +119,7 @@ export default function SmtpSettings() {
     if (!testEmail) return;
     setTesting(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/test-smtp`, {
+      const res = await fetch(`${import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com'}/api/test-smtp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
