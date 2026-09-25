@@ -1,4 +1,4 @@
-﻿import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar, Box, CssBaseline, Drawer, IconButton, Button,
@@ -103,7 +103,6 @@ export default function AdminLayout() {
   const commentManagementItems = [
     { text: 'Add Comment', icon: <RateReviewIcon fontSize="small" />, path: '/add-comment' },
     { text: 'Manage Comment', icon: <ForumIcon fontSize="small" />, path: '/manage-comment' },
-    { text: 'Monitoring', icon: <TimelineIcon fontSize="small" />, path: '/comment-monitoring' },
   ];
 
   const liveListItems = [
