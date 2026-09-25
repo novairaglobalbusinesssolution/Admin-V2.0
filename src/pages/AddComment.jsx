@@ -140,7 +140,7 @@ export default function AddComment() {
 
       // Send Bulk Notification
       try {
-        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/send-bulk-notification`, {
+        await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-bulk-notification`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -33,7 +33,7 @@ const FolderTreeItem = ({ folder, currentPath, onNavigate, pinnedFolders, toggle
     if (loaded) return;
     setLoading(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/list`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/list`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder: folder.path })
@@ -128,7 +128,7 @@ export default function FileManager() {
 
   const fetchRootTree = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/list`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/list`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder: '' })
@@ -148,7 +148,7 @@ export default function FileManager() {
     setLoading(true);
     setPreviewFile(null); // close preview when navigating
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/list`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/list`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder })
@@ -198,7 +198,7 @@ export default function FileManager() {
     setDeleting(true);
     const isFolder = isFolderMenu;
     try {
-      const url = isFolder ? `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/delete-folder` : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/delete`;
+      const url = isFolder ? `${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/delete-folder` : `${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/delete`;
       const body = isFolder ? { folder: selectedItem.path } : { public_ids: [selectedItem.public_id] };
       
       const res = await fetch(url, {
@@ -241,12 +241,12 @@ export default function FileManager() {
       let url, body;
       
       if (isFolder) {
-        url = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/rename-folder`;
+        url = `${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/rename-folder`;
         const parts = selectedItem.path.split('/');
         parts[parts.length - 1] = newName.trim();
         body = { from_path: selectedItem.path, to_path: parts.join('/') };
       } else {
-        url = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/rename`;
+        url = `${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/rename`;
         const parts = selectedItem.public_id.split('/');
         parts[parts.length - 1] = newName.trim();
         body = { from_id: selectedItem.public_id, to_id: parts.join('/') };
@@ -278,7 +278,7 @@ export default function FileManager() {
     if (isFolderMenu) {
       setSnack({ open: true, message: 'Creating zip, please wait... (may take time for large folders)', type: 'info' });
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/cloudinary/download-folder`, {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/cloudinary/download-folder`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ folder: selectedItem.path })

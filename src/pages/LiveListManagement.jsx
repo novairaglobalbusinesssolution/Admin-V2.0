@@ -239,10 +239,24 @@ export default function LiveListManagement() {
 
         const { data: liveProfiles = [], error: profileErr } = await supabase
           .from('profiles')
-          .select('earner_id, referral_code')
+          .select('earner_id, referral_code, account_type')
           .in('earner_id', allSelectedEarnersArr);
 
         if (profileErr) console.warn('Failed to fetch referral references.', profileErr);
+
+        // Fetch Bulker profiles to check account_type
+        const bulkerIdsForTxn = [...new Set(toMarkLive.map(m => m.bulker_id).filter(Boolean))];
+        // Clean bulker IDs just in case they have NOVAIRA/BULKER/
+        const fullBulkerIds = bulkerIdsForTxn.map(id => id.includes('NOVAIRA/BULKER/') ? id : `NOVAIRA/BULKER/${id}`);
+        
+        const { data: bulkerProfiles = [], error: bulkerErr } = await supabase
+          .from('bulker_desks')
+          .select('bulker_id, account_type')
+          .in('bulker_id', fullBulkerIds);
+        
+        if (bulkerErr) console.warn('Failed to fetch bulker profiles.', bulkerErr);
+        const profileByBulker = Object.fromEntries((bulkerProfiles || []).map(b => [b.bulker_id, b]));
+
 
         // SAFEGUARD: Fetch existing transactions for this app to avoid duplicate rewards and referral bonuses
         const { data: existingTxns } = await supabase
@@ -262,9 +276,11 @@ export default function LiveListManagement() {
         // 1. Give REWARDS to newly marked Live earners
         toMarkLive.forEach(m => {
           const normalizedEarnerId = normalizeId(m.earner_id);
+          const earnerProfile = profileByEarner[normalizedEarnerId];
+          const isWalletSystem = earnerProfile && earnerProfile.account_type === 'Wallet System';
 
-          // Safeguard: Only add reward if it does not already exist
-          if (!existingEarnersReward.has(normalizedEarnerId)) {
+          // Safeguard: Only add reward if it does not already exist AND earner is Wallet System
+          if (isWalletSystem && !existingEarnersReward.has(normalizedEarnerId)) {
             walletTransactions.push({
               transaction_id: generateTrxId(),
               earner_id: normalizedEarnerId,
@@ -274,6 +290,35 @@ export default function LiveListManagement() {
               description: `Reward for Task ID ${appDetails.taskId}: ${appDetails.name}`,
               status: 'Completed'
             });
+          }
+
+          // 1.5 Give REWARDS to Bulker if Wallet System
+          const bulkerId = m.bulker_id;
+          if (bulkerId) {
+            const fullBulkerId = bulkerId.includes('NOVAIRA/BULKER/') ? bulkerId : `NOVAIRA/BULKER/${bulkerId}`;
+            const bulkerProfile = profileByBulker[fullBulkerId];
+            if (bulkerProfile && bulkerProfile.account_type === 'Wallet System') {
+                const bulkerDesc = `Bulker Reward for Task ID ${appDetails.taskId}: ${appDetails.name} (${normalizedEarnerId})`;
+                if (!existingDescriptions.has(bulkerDesc)) {
+                    // Extract rate from app assigned_bulkers
+                    const assignedList = appData.assigned_bulkers || [];
+                    const bulkerRateObj = assignedList.find(b => b.bulker_id === fullBulkerId || b.bulker_id === bulkerId);
+                    const bulkerRate = bulkerRateObj ? Number(bulkerRateObj.amount || 0) : 0;
+                    
+                    if (bulkerRate > 0) {
+                        walletTransactions.push({
+                          transaction_id: generateTrxId(),
+                          earner_id: fullBulkerId,
+                          app_id: appDetails.id,
+                          amount: bulkerRate,
+                          transaction_type: 'Credit',
+                          description: bulkerDesc,
+                          status: 'Completed'
+                        });
+                        existingDescriptions.add(bulkerDesc);
+                    }
+                }
+            }
           }
         });
 
@@ -291,18 +336,21 @@ export default function LiveListManagement() {
           );
 
           if (isReferralEligible) {
-            const refDesc = `Referral bonus for inviting ${normalizedEarnerId}`;
-            // Safeguard: Only add referral bonus if it does not already exist
-            if (!existingDescriptions.has(refDesc)) {
-              walletTransactions.push({
-                transaction_id: generateTrxId(),
-                earner_id: referrerId,
-                app_id: appDetails.id,
-                amount: 0.60,
-                transaction_type: 'Credit',
-                description: refDesc,
-                status: 'Completed'
-              });
+            const referrerProfile = profileByEarner[referrerId];
+            if (referrerProfile && referrerProfile.account_type === 'Wallet System') {
+                const refDesc = `Referral bonus for inviting ${normalizedEarnerId}`;
+                // Safeguard: Only add referral bonus if it does not already exist
+                if (!existingDescriptions.has(refDesc)) {
+                  walletTransactions.push({
+                    transaction_id: generateTrxId(),
+                    earner_id: referrerId,
+                    app_id: appDetails.id,
+                    amount: 0.60,
+                    transaction_type: 'Credit',
+                    description: refDesc,
+                    status: 'Completed'
+                  });
+                }
             }
           }
         });
@@ -340,13 +388,24 @@ export default function LiveListManagement() {
         if (delWalletErr) console.warn("Failed to delete wallet transactions.", delWalletErr);
 
         // Delete the referral bonus given to their referrer for this app
-        const { error: delRefErr } = await supabase
-          .from('individual_wallet_transactions')
-          .delete()
-          .eq('app_id', appDetails.id)
-          .in('description', revertDescriptions);
+          const { error: delRefErr } = await supabase
+            .from('individual_wallet_transactions')
+            .delete()
+            .eq('app_id', appDetails.id)
+            .in('description', revertDescriptions);
+            
+          if (delRefErr) console.warn("Failed to delete referral bonuses.", delRefErr);
 
-        if (delRefErr) console.warn("Failed to delete referral bonuses.", delRefErr);
+          // Delete the bulker bonus for these earners
+          const revertBulkerDescriptions = revertEarnerIds.map(id => `Bulker Reward for Task ID ${appDetails.taskId}: ${appDetails.name} (${id})`);
+          const { error: delBulkerErr } = await supabase
+            .from('individual_wallet_transactions')
+            .delete()
+            .eq('app_id', appDetails.id)
+            .in('description', revertBulkerDescriptions);
+          
+          if (delBulkerErr) console.warn("Failed to delete bulker rewards.", delBulkerErr);
+
       }
 
       Swal.fire({

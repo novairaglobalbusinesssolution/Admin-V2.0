@@ -29,7 +29,7 @@ export default function PushNotifications() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/users`);
       const json = await res.json();
       if (json.status === 'success') {
         setUsers(json.data || []);
@@ -47,7 +47,7 @@ export default function PushNotifications() {
 
     setSending(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/send-custom-notification`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-custom-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -170,7 +170,7 @@ export default function Withdrawals() {
       if (error) throw error;
       
       // Send push notification
-      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/send-notification`, {
+      fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -210,7 +210,7 @@ export default function Withdrawals() {
       if (error) throw error;
       
       // Send push notification
-      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/send-notification`, {
+      fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

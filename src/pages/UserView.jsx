@@ -53,6 +53,7 @@ export default function UserView() {
   // Reviews and Wallet Data
   const [reviews, setReviews] = useState([]);
   const [bulkerApps, setBulkerApps] = useState([]);
+  const [billingHistory, setBillingHistory] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
 
@@ -272,6 +273,15 @@ export default function UserView() {
           const { data: profiles } = await supabase.from('profiles').select('*').in('bulker_id', [data.bulker_id, shortBulkerId, longBulkerId]).order('created_at', { ascending: false });
           if (profiles) setReferrals(profiles);
 
+          
+          // Fetch billing history for bulker
+          const { data: hist } = await supabase
+            .from('bulker_billing_history')
+            .select('*')
+            .in('bulker_id', [data.bulker_id, shortBulkerId, longBulkerId])
+            .order('change_date_time', { ascending: true });
+          if (hist) setBillingHistory(hist);
+
           // Fetch wallet transactions for bulker
           const { data: txns, error: txnErr } = await supabase
             .from('individual_wallet_transactions')
@@ -331,13 +341,39 @@ export default function UserView() {
     if (type !== 'individual' && type !== 'bulker') return;
     setSavingProfile(true);
     try {
-      const { error } = await supabase.from('profiles').update({
-        first_name: editForm.first_name,
-        last_name: editForm.last_name,
-        phone: editForm.phone
-      }).eq('id', id);
+      if (type === 'individual') {
+        const updates = {
+          first_name: editForm.first_name,
+          last_name: editForm.last_name,
+          phone: editForm.phone,
+          account_type: editForm.account_type
+        };
+        const { error } = await supabase.from('profiles').update(updates).eq('id', id);
+        if (error) throw error;
+      } else if (type === 'bulker') {
+        const updates = {
+          full_name: editForm.full_name,
+          email: editForm.email,
+          phone: editForm.phone,
+          password: editForm.password,
+          account_type: editForm.account_type
+        };
+        const { error } = await supabase.from('bulker_desks').update(updates).eq('id', id);
+        if (error) throw error;
 
-      if (error) throw error;
+        // Check if account_type was changed and log to history for bulker
+        if (data.account_type !== editForm.account_type) {
+            const bulkerIdToLog = data.bulker_id;
+            if (bulkerIdToLog) {
+                await supabase.from('bulker_billing_history').insert([{
+                    bulker_id: bulkerIdToLog,
+                    change_mode: editForm.account_type,
+                    status: 'Active'
+                }]);
+            }
+        }
+      }
+
       setData({ ...data, ...editForm });
       setSnack({ open: true, message: 'Profile updated successfully!', severity: 'success' });
     } catch (e) {
@@ -878,9 +914,107 @@ export default function UserView() {
                   <Typography color="text.secondary">Monthly Invoice only applies to Bulker Users.</Typography>
                 </Box>
               ) : (
-                <Box sx={{ p: 5, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '16px' }}>
-                  <Typography color="text.secondary">Monthly Invoice Coming Soon...</Typography>
-                </Box>
+                <>
+                {data?.account_type !== 'Manual' ? (
+                  <Box sx={{ p: 5, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '16px' }}>
+                    <Typography color="text.secondary">Monthly Invoice is only available for users with a Monthly billing cycle. This user is on a {data?.account_type || 'Unknown'} cycle.</Typography>
+                  </Box>
+                ) : (
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 800, mb: 3 }}>Monthly Invoice Data</Typography>
+                    <TableContainer component={Paper} elevation={0} sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '16px', maxHeight: 600 }}>
+                      <Table stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700 }}>App Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700 }}>App ID</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 700 }}>Total Live Count</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>App Rate</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>Total</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {(() => {
+                            const bId = data.bulker_id;
+                            const shortBulkerId = bId ? bId.replace('NOVAIRA/BULKER/', '') : '';
+                            const longBulkerId = `NOVAIRA/BULKER/${shortBulkerId}`;
+                            
+                            const getModeAtDate = (dateStr) => {
+                                let initialMode = data.account_type || 'Manual';
+                                if (billingHistory.length > 0) {
+                                    initialMode = billingHistory[0].change_mode === 'Manual' ? 'Wallet System' : 'Manual';
+                                }
+                                let currentMode = initialMode;
+                                const targetTime = new Date(dateStr).getTime();
+                                
+                                for (const hist of billingHistory) {
+                                    if (new Date(hist.change_date_time).getTime() <= targetTime) {
+                                        currentMode = hist.change_mode;
+                                    }
+                                }
+                                return currentMode;
+                            };
+
+                            let grandTotal = 0;
+                            const rows = bulkerApps.filter(app => {
+                                // Filter apps that belong to the 'Manual' billing period
+                                const mode = getModeAtDate(app.app_date || app.created_at);
+                                return mode === 'Manual';
+                            }).map(app => {
+                              let assigned = app.assigned_bulkers || [];
+                              while (typeof assigned === 'string') {
+                                try { assigned = JSON.parse(assigned); } catch (e) { break; }
+                              }
+                              if (!Array.isArray(assigned)) assigned = [];
+                              
+                              const rateObj = assigned.find(b => {
+                                const id = typeof b === 'string' ? b : b.bulker_id;
+                                return [bId, shortBulkerId, longBulkerId].includes(id);
+                              });
+                              const rate = rateObj && typeof rateObj === 'object' ? Number(rateObj.amount || 0) : 0;
+                              
+                              const appReviews = reviews.filter(r => r.apps?.task_id === app.task_id);
+                              const liveCount = appReviews.filter(r => r.status === 'Live' || r.status === 'Approved').length;
+                              const total = liveCount * rate;
+                              grandTotal += total;
+
+                              return {
+                                ...app,
+                                rate,
+                                liveCount,
+                                total
+                              };
+                            });
+
+                            return (
+                              <>
+                                {rows.map(row => (
+                                  <TableRow key={row.id} hover>
+                                    <TableCell sx={{ fontWeight: 600 }}>{row.app_name}</TableCell>
+                                    <TableCell sx={{ color: 'primary.main', fontWeight: 600 }}>#{row.task_id}</TableCell>
+                                    <TableCell align="center" sx={{ fontWeight: 700 }}>{row.liveCount}</TableCell>
+                                    <TableCell align="right" sx={{ color: 'success.main', fontWeight: 600 }}>₹{row.rate.toFixed(2)}</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 700 }}>₹{row.total.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                ))}
+                                {rows.length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={5} align="center" sx={{ p: 4, color: 'text.secondary' }}>No apps assigned yet.</TableCell>
+                                  </TableRow>
+                                )}
+                                <TableRow sx={{ backgroundColor: theme.palette.mode === 'light' ? '#f8f9fa' : 'rgba(255,255,255,0.05)' }}>
+                                  <TableCell colSpan={4} align="right" sx={{ fontWeight: 800, fontSize: '1.1rem' }}>Final Grand Total:</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 900, fontSize: '1.2rem', color: 'primary.main' }}>₹{grandTotal.toFixed(2)}</TableCell>
+                                </TableRow>
+                              </>
+                            );
+                          })()}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                )}
+                </>
               )}
             </TabPanel>
 
