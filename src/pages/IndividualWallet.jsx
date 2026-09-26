@@ -139,7 +139,7 @@ export default function IndividualWallet() {
         // Send Push Notification
         try {
           const baseUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
-          await fetch(`${baseUrl}/api/send-notification`, {
+          fetch(`${baseUrl}/api/send-notification`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
