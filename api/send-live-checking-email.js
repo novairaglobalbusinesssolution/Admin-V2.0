@@ -49,7 +49,7 @@ export default async function handler(req, res) {
                 <p>This is an automated notification regarding the app <strong>${app_data.app_name}</strong>.</p>
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; max-width: 500px;">
                     <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Task ID:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">#${app_data.task_id}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>App Name:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${app_data.app_name}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>App Name:</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="${app_data.app_package}" style="color: #0b57d0; text-decoration: none; font-weight: bold;">${app_data.app_name}</a></td></tr>
                     <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Package/Link:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${app_data.app_package}</td></tr>
                     <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>App Date:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${app_data.app_date}</td></tr>
                     <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Live Checking Date:</strong></td><td style="padding: 8px; border: 1px solid #ddd; color: #d93025; font-weight: bold;">${app_data.live_checking_date}</td></tr>

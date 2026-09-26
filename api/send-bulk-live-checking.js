@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     const appsRows = apps.map(app => `
         <tr>
             <td style="padding: 8px; border: 1px solid #ddd;">#${app.task_id}</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${app.app_name}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;"><a href="${app.app_package}" style="color: #0b57d0; text-decoration: none; font-weight: bold;">${app.app_name}</a></td>
             <td style="padding: 8px; border: 1px solid #ddd;">${app.app_date}</td>
             <td style="padding: 8px; border: 1px solid #ddd; color: #d93025; font-weight: bold;">${app.live_checking_date}</td>
         </tr>
