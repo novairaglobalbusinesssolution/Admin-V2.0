@@ -134,7 +134,26 @@ export default function IndividualWallet() {
       };
 
       const { error } = await supabase.from('individual_wallet_transactions').insert([payload]);
-      if (error) throw error;
+        if (error) throw error;
+
+        // Send Push Notification
+        try {
+          const baseUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+          await fetch(`${baseUrl}/api/send-notification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              earner_id: selectedUser.earner_id,
+              title: trxType === 'Credit' ? 'Wallet Credited' : 'Wallet Debited',
+              body: trxType === 'Credit' 
+                  ? `Your wallet has been credited with Rs. ${payload.amount}. Reason: ${payload.description}`
+                  : `Your wallet has been debited by Rs. ${payload.amount}. Reason: ${payload.description}`,
+              type: 'wallet'
+            })
+          }).catch(e => console.warn(e));
+        } catch (notifErr) {
+          console.warn("Failed to send push notification:", notifErr);
+        }
 
       // Update local state to reflect new balance instantly
       setUsers(users.map(u => {
