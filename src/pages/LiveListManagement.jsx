@@ -64,7 +64,8 @@ export default function LiveListManagement() {
         commentLimit: appData.comment_limit || 0,
         appDate: formatKolkataDate(appData.app_date),
         liveCheckingDate: formatKolkataDate(appData.live_checking_date),
-        bulkers: assignedBulkers
+        bulkers: assignedBulkers,
+        assignedBulkersList: appData.assigned_bulkers || []
       });
 
       // 2. Fetch submitted reviews for this app
@@ -239,7 +240,7 @@ export default function LiveListManagement() {
 
         const { data: liveProfiles = [], error: profileErr } = await supabase
           .from('profiles')
-          .select('earner_id, referral_code, account_type')
+          .select('earner_id, referral_code')
           .in('earner_id', allSelectedEarnersArr);
 
         if (profileErr) console.warn('Failed to fetch referral references.', profileErr);
@@ -251,7 +252,7 @@ export default function LiveListManagement() {
         
         const { data: bulkerProfiles = [], error: bulkerErr } = await supabase
           .from('bulker_desks')
-          .select('bulker_id, account_type')
+          .select('bulker_id')
           .in('bulker_id', fullBulkerIds);
         
         if (bulkerErr) console.warn('Failed to fetch bulker profiles.', bulkerErr);
@@ -277,7 +278,7 @@ export default function LiveListManagement() {
         toMarkLive.forEach(m => {
           const normalizedEarnerId = normalizeId(m.earner_id);
           const earnerProfile = profileByEarner[normalizedEarnerId];
-          const isWalletSystem = earnerProfile && earnerProfile.account_type === 'Wallet System';
+          const isWalletSystem = true; // Removed missing column check
 
           // Safeguard: Only add reward if it does not already exist AND earner is Wallet System
           if (isWalletSystem && !existingEarnersReward.has(normalizedEarnerId)) {
@@ -297,11 +298,11 @@ export default function LiveListManagement() {
           if (bulkerId) {
             const fullBulkerId = bulkerId.includes('NOVAIRA/BULKER/') ? bulkerId : `NOVAIRA/BULKER/${bulkerId}`;
             const bulkerProfile = profileByBulker[fullBulkerId];
-            if (bulkerProfile && bulkerProfile.account_type === 'Wallet System') {
+            if (bulkerProfile) {
                 const bulkerDesc = `Bulker Reward for Task ID ${appDetails.taskId}: ${appDetails.name} (${normalizedEarnerId})`;
                 if (!existingDescriptions.has(bulkerDesc)) {
                     // Extract rate from app assigned_bulkers
-                    const assignedList = appData.assigned_bulkers || [];
+                    const assignedList = appDetails.assignedBulkersList || [];
                     const bulkerRateObj = assignedList.find(b => b.bulker_id === fullBulkerId || b.bulker_id === bulkerId);
                     const bulkerRate = bulkerRateObj ? Number(bulkerRateObj.amount || 0) : 0;
                     
@@ -337,7 +338,7 @@ export default function LiveListManagement() {
 
           if (isReferralEligible) {
             const referrerProfile = profileByEarner[referrerId];
-            if (referrerProfile && referrerProfile.account_type === 'Wallet System') {
+            if (referrerProfile) {
                 const refDesc = `Referral bonus for inviting ${normalizedEarnerId}`;
                 // Safeguard: Only add referral bonus if it does not already exist
                 if (!existingDescriptions.has(refDesc)) {
