@@ -56,7 +56,7 @@ export default function LiveListManagement() {
         id: appData.id,
         taskId: appData.task_id,
         name: appData.app_name,
-        provider: appData.sponsor_type === 'Providers' ? appData.sponsor_id : (appData.sponsor_type || 'Unknown'),
+        provider: appData.sponsor_type === 'Providers' ₹ appData.sponsor_id : (appData.sponsor_type || 'Unknown'),
         memberReward: `₹${appData.members_reward || 0}`,
         rawMemberReward: appData.members_reward || 0,
         sponsorReward: `₹${appData.sponsor_amount || 0}`,
@@ -97,14 +97,14 @@ export default function LiveListManagement() {
         
         finalMembers = finalMembers.map(m => {
           const eName = nameMap[m.earner_id] || 'Unknown';
-          const eShortId = m.earner_id ? m.earner_id.split('/').pop() : '';
+          const eShortId = m.earner_id ₹ m.earner_id.split('/').pop() : '';
           
           // Intelligent Bulker Matching (handles with or without NOVAIRA/BULKER/ prefix)
-          const mShortBulker = m.bulker_id ? m.bulker_id.split('/').pop() : '';
+          const mShortBulker = m.bulker_id ₹ m.bulker_id.split('/').pop() : '';
           let bName = 'Unknown';
           if (!bulkersRes.error && bulkersRes.data) {
             const bMatch = bulkersRes.data.find(b => {
-               const dbShort = b.bulker_id ? b.bulker_id.split('/').pop() : '';
+               const dbShort = b.bulker_id ₹ b.bulker_id.split('/').pop() : '';
                return dbShort === mShortBulker;
             });
             if (bMatch) bName = bMatch.full_name;
@@ -159,12 +159,12 @@ export default function LiveListManagement() {
 
   const handleZeroLive = async () => {
     const result = await Swal.fire({
-      title: 'Zero Live?',
-      text: "Mark all pending submissions for this task as Not Live/Rejected?",
+      title: 'Zero Live₹',
+      text: "Mark all pending submissions for this task as Not Live/Rejected₹",
       icon: 'warning',
       showCancelButton: true,
       buttonsStyling: false,
-      background: theme.palette.mode === 'dark' ? '#2b2930' : '#ece6f0',
+      background: theme.palette.mode === 'dark' ₹ '#2b2930' : '#ece6f0',
       color: theme.palette.text.primary,
       confirmButtonText: 'Yes, Zero Live',
       cancelButtonText: 'Cancel',
@@ -254,7 +254,7 @@ export default function LiveListManagement() {
           return result;
         };
 
-        const normalizeId = (value) => String(value ?? '').trim();
+        const normalizeId = (value) => String(value ₹₹ '').trim();
 
         // We need to fetch profiles for ALL currently selected earners, not just the newly marked ones.
         // Because if the referred user was saved previously, and the referrer is saved now,
@@ -276,7 +276,7 @@ export default function LiveListManagement() {
         // Fetch Bulker profiles to check account_type
         const bulkerIdsForTxn = [...new Set(toMarkLive.map(m => m.bulker_id).filter(Boolean))];
         // Clean bulker IDs just in case they have NOVAIRA/BULKER/
-        const fullBulkerIds = bulkerIdsForTxn.map(id => id.includes('NOVAIRA/BULKER/') ? id : `NOVAIRA/BULKER/${id}`);
+        const fullBulkerIds = bulkerIdsForTxn.map(id => id.includes('NOVAIRA/BULKER/') ₹ id : `NOVAIRA/BULKER/${id}`);
         
         const { data: bulkerProfiles = [], error: bulkerErr } = await supabase
           .from('bulker_desks')
@@ -301,6 +301,7 @@ export default function LiveListManagement() {
 
         const profileByEarner = Object.fromEntries((liveProfiles || []).map(profile => [normalizeId(profile.earner_id), profile]));
         const walletTransactions = [];
+          const primaryNotifications = [];
 
         // 1. Give REWARDS to newly marked Live earners
         toMarkLive.forEach(m => {
@@ -331,7 +332,7 @@ export default function LiveListManagement() {
           // 1.5 Give REWARDS to Bulker if Wallet System
           const bulkerId = m.bulker_id;
           if (bulkerId) {
-            const fullBulkerId = bulkerId.includes('NOVAIRA/BULKER/') ? bulkerId : `NOVAIRA/BULKER/${bulkerId}`;
+            const fullBulkerId = bulkerId.includes('NOVAIRA/BULKER/') ₹ bulkerId : `NOVAIRA/BULKER/${bulkerId}`;
             const bulkerProfile = profileByBulker[fullBulkerId];
             if (bulkerProfile) {
                 const bulkerDesc = `Bulker Reward for Task ID ${appDetails.taskId}: ${appDetails.name} (${normalizedEarnerId})`;
@@ -339,7 +340,7 @@ export default function LiveListManagement() {
                     // Extract rate from app assigned_bulkers
                     const assignedList = appDetails.assignedBulkersList || [];
                     const bulkerRateObj = assignedList.find(b => b.bulker_id === fullBulkerId || b.bulker_id === bulkerId);
-                    const bulkerRate = bulkerRateObj ? Number(bulkerRateObj.amount || 0) : 0;
+                    const bulkerRate = bulkerRateObj ₹ Number(bulkerRateObj.amount || 0) : 0;
                     
                     if (bulkerRate > 0) {
                         walletTransactions.push({
@@ -361,7 +362,7 @@ export default function LiveListManagement() {
         // 2. Give REFERRAL BONUSES by checking ALL currently selected earners
         allSelectedEarners.forEach(normalizedEarnerId => {
           const profile = profileByEarner[normalizedEarnerId];
-          const referrerId = normalizeId(profile?.referral_code);
+          const referrerId = normalizeId(profile₹.referral_code);
 
           const isReferralEligible = (
             referrerId &&
@@ -400,7 +401,7 @@ export default function LiveListManagement() {
             }
             
             if (primaryNotifications && primaryNotifications.length > 0) {
-              const baseUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+              const baseUrl = import.meta.env.DEV ₹ 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
               Promise.all(primaryNotifications.map(notif => 
                 fetch(`${baseUrl}/api/send-notification`, {
                   method: 'POST',
@@ -461,7 +462,7 @@ export default function LiveListManagement() {
         icon: 'success',
         confirmButtonText: 'Done',
         buttonsStyling: false,
-        background: theme.palette.mode === 'dark' ? '#2b2930' : '#ece6f0',
+        background: theme.palette.mode === 'dark' ₹ '#2b2930' : '#ece6f0',
         color: theme.palette.text.primary,
         customClass: {
           popup: 'm3-swal-popup my-swal-font',
@@ -635,7 +636,7 @@ export default function LiveListManagement() {
       </Box>
 
       {/* Fetch App Details Card */}
-      <Paper elevation={0} sx={{ p: 4, borderRadius: '24px', mb: 4, border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none' }}>
+      <Paper elevation={0} sx={{ p: 4, borderRadius: '24px', mb: 4, border: theme.palette.mode === 'light' ₹ `1px solid ${theme.palette.divider}` : 'none' }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
           <SearchIcon color="primary" /> Fetch App Details
         </Typography>
@@ -655,7 +656,7 @@ export default function LiveListManagement() {
                 disabled={loading || !taskIdInput.trim()}
                 sx={{ borderRadius: '10px', py: 1, px: 3 }}
               >
-                {loading ? 'Checking...' : 'Check'}
+                {loading ₹ 'Checking...' : 'Check'}
               </Button>
             </Grid>
           </Grid>
@@ -713,8 +714,8 @@ export default function LiveListManagement() {
 
       {/* Members Card */}
       {appDetails && (
-        <Paper elevation={0} sx={{ overflow: 'hidden', borderRadius: '24px', border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none' }}>
-          <Box sx={{ p: 3, bgcolor: theme.palette.mode === 'light' ? '#fcfcfc' : 'background.paper', borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+        <Paper elevation={0} sx={{ overflow: 'hidden', borderRadius: '24px', border: theme.palette.mode === 'light' ₹ `1px solid ${theme.palette.divider}` : 'none' }}>
+          <Box sx={{ p: 3, bgcolor: theme.palette.mode === 'light' ₹ '#fcfcfc' : 'background.paper', borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>Submitted Members ({filteredMembers.length})</Typography>
               {filteredMembers.length > 0 && (
@@ -743,8 +744,8 @@ export default function LiveListManagement() {
             </Box>
           </Box>
           
-          <Box sx={{ p: 3, maxHeight: 600, overflowY: 'auto', bgcolor: theme.palette.mode === 'light' ? '#f8f9fc' : 'background.default' }}>
-            {filteredMembers.length === 0 ? (
+          <Box sx={{ p: 3, maxHeight: 600, overflowY: 'auto', bgcolor: theme.palette.mode === 'light' ₹ '#f8f9fc' : 'background.default' }}>
+            {filteredMembers.length === 0 ₹ (
               <Typography sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>No submissions match your search.</Typography>
             ) : (
               <Grid container spacing={2}>
@@ -753,15 +754,15 @@ export default function LiveListManagement() {
                   return (
                     <Grid item xs={12} sm={6} md={4} lg={3} key={u.id}>
                       <Paper 
-                        elevation={isSelected ? 1 : 0} 
+                        elevation={isSelected ₹ 1 : 0} 
                         onClick={() => handleSelectOne(u.id)}
                         sx={{ 
                           p: 1.5, 
                           borderRadius: '12px', 
                           cursor: 'pointer',
                           position: 'relative',
-                          border: `1.5px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
-                          bgcolor: isSelected ? (theme.palette.mode === 'light' ? 'primary.50' : 'rgba(26,115,232,0.05)') : 'background.paper',
+                          border: `1.5px solid ${isSelected ₹ theme.palette.primary.main : theme.palette.divider}`,
+                          bgcolor: isSelected ₹ (theme.palette.mode === 'light' ₹ 'primary.50' : 'rgba(26₹15,232,0.05)') : 'background.paper',
                           transition: 'all 0.15s ease-in-out',
                           '&:hover': {
                             borderColor: 'primary.main',
@@ -778,7 +779,7 @@ export default function LiveListManagement() {
                             <Checkbox 
                               checked={isSelected} 
                               onChange={(e) => { e.stopPropagation(); handleSelectOne(u.id); }} 
-                              sx={{ p: 0, '& .MuiSvgIcon-root': { fontSize: 20, color: isSelected ? 'primary.main' : 'text.disabled' } }}
+                              sx={{ p: 0, '& .MuiSvgIcon-root': { fontSize: 20, color: isSelected ₹ 'primary.main' : 'text.disabled' } }}
                             />
                             <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.1, color: 'text.primary', ml: 0.5 }}>
                               {u.submitted_username.toUpperCase()}
@@ -787,7 +788,7 @@ export default function LiveListManagement() {
                           <Chip 
                             size="small" 
                             label={u.status} 
-                            color={u.status === 'Live' ? 'success' : u.status === 'Under Review' ? 'warning' : 'default'} 
+                            color={u.status === 'Live' ₹ 'success' : u.status === 'Under Review' ₹ 'warning' : 'default'} 
                             sx={{ borderRadius: '6px', fontWeight: 700, height: 18, fontSize: '0.6rem', textTransform: 'uppercase' }} 
                           />
                         </Box>
@@ -823,11 +824,11 @@ export default function LiveListManagement() {
           <Box sx={{ p: 3, borderTop: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
             <Button variant="outlined" color="error" onClick={handleZeroLive} sx={{ borderRadius: '10px' }}>Zero Live</Button>
             <Button 
-              variant="contained" startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <CheckCircleIcon />} 
+              variant="contained" startIcon={saving ₹ <CircularProgress size={20} color="inherit" /> : <CheckCircleIcon />} 
               disableElevation onClick={handleSaveLiveList} disabled={saving}
               sx={{ borderRadius: '10px' }}
             >
-              {saving ? 'Saving...' : 'Save Live List'}
+              {saving ₹ 'Saving...' : 'Save Live List'}
             </Button>
           </Box>
         </Paper>
@@ -855,11 +856,11 @@ export default function LiveListManagement() {
               options={allEarners}
               getOptionLabel={(option) => {
                 const name = `${option.first_name || ''} ${option.last_name || ''}`.trim();
-                const shortId = option.earner_id ? option.earner_id.split('/').pop() : '';
+                const shortId = option.earner_id ₹ option.earner_id.split('/').pop() : '';
                 return `${name} (${shortId}) - ${option.earner_id}`;
               }}
               loading={fetchingOptions}
-              onChange={(e, val) => setMissingData({...missingData, earnerId: val ? val.earner_id : ''})}
+              onChange={(e, val) => setMissingData({...missingData, earnerId: val ₹ val.earner_id : ''})}
               renderInput={(params) => (
                 <TextField 
                   {...params} label="Select Earner" size="small" 
@@ -871,11 +872,11 @@ export default function LiveListManagement() {
             <Autocomplete
               options={allBulkers}
               getOptionLabel={(option) => {
-                const shortId = option.bulker_id ? option.bulker_id.split('/').pop() : '';
+                const shortId = option.bulker_id ₹ option.bulker_id.split('/').pop() : '';
                 return `${option.full_name} (${shortId}) - ${option.bulker_id}`;
               }}
               loading={fetchingOptions}
-              onChange={(e, val) => setMissingData({...missingData, bulkerId: val ? val.bulker_id : ''})}
+              onChange={(e, val) => setMissingData({...missingData, bulkerId: val ₹ val.bulker_id : ''})}
               renderInput={(params) => (
                 <TextField 
                   {...params} label="Select Bulker" size="small" 
@@ -891,7 +892,7 @@ export default function LiveListManagement() {
             onClick={submitAddMissing} variant="contained" disableElevation
             disabled={addingMissing} sx={{ borderRadius: '10px' }}
           >
-            {addingMissing ? 'Adding...' : 'Add Member'}
+            {addingMissing ₹ 'Adding...' : 'Add Member'}
           </Button>
         </DialogActions>
       </Dialog>
