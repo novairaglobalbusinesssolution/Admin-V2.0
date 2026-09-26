@@ -183,8 +183,36 @@ export default function LiveListManagement() {
 
     if (!result.isConfirmed) return;
     
-    // Implement zero live logic if needed (e.g. updating statuses to 'Rejected')
-    setSnack({ open: true, message: 'Zero Live action completed (Placeholder).', severity: 'info' });
+    try {
+        setSaving(true);
+        // 1. Mark all members as Not Live for this app
+        const { error: updateErr } = await supabase
+          .from('review_submit_data')
+          .update({ status: 'Not Live' })
+          .eq('app_id', appDetails.id);
+
+        if (updateErr) throw updateErr;
+
+        // 2. Delete ALL wallet transactions (earner, bulker, and referral rewards) for this app
+        const { error: delErr } = await supabase
+          .from('individual_wallet_transactions')
+          .delete()
+          .eq('app_id', appDetails.id);
+
+        if (delErr) console.warn("Failed to delete wallet transactions on Zero Live", delErr);
+
+        setSnack({ open: true, message: 'Zero Live applied. All members marked as Not Live and rewards reverted.', severity: 'success' });
+        
+        // Form Reset
+        setAppDetails(null);
+        setMembers([]);
+        setSelectedIds([]);
+        setTaskIdInput('');
+      } catch (err) {
+        setSnack({ open: true, message: 'Error applying Zero Live: ' + err.message, severity: 'error' });
+      } finally {
+        setSaving(false);
+      }
   };
 
   const handleSaveLiveList = async () => {
