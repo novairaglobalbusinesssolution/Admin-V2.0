@@ -291,6 +291,13 @@ export default function LiveListManagement() {
               description: `Reward for Task ID ${appDetails.taskId}: ${appDetails.name}`,
               status: 'Completed'
             });
+
+            primaryNotifications.push({
+              earner_id: normalizedEarnerId,
+              title: 'Wallet Credited',
+              body: `You received ₹${appDetails.rawMemberReward} for completing ${appDetails.name}.`,
+              type: 'wallet'
+            });
           }
 
           // 1.5 Give REWARDS to Bulker if Wallet System
@@ -362,7 +369,18 @@ export default function LiveListManagement() {
           if (walletErr) {
               console.error("Failed to insert wallet transactions.", walletErr);
               throw walletErr; // throw it so it triggers the snackbar error in the UI
-          }
+            }
+            
+            if (primaryNotifications && primaryNotifications.length > 0) {
+              const baseUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+              Promise.all(primaryNotifications.map(notif => 
+                fetch(`${baseUrl}/api/send-notification`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(notif)
+                }).catch(e => console.warn(e))
+              )).catch(err => console.error('Push Notification Error:', err));
+            }
         }
       }
 
