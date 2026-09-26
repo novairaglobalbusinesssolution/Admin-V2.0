@@ -238,7 +238,7 @@ export default function IndividualWallet() {
                   Total Users Liability
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                  ₹{totalPlatformLiability.toFixed(2)}
+                  Rs. {totalPlatformLiability.toFixed(2)}
                 </Typography>
               </Box>
             </Box>
@@ -317,7 +317,7 @@ export default function IndividualWallet() {
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace', color: 'text.secondary', fontWeight: 600 }}>{user.earner_id}</TableCell>
                         <TableCell sx={{ textAlign: 'right', fontWeight: 800, fontSize: '0.9rem', color: user.balance > 0 ? theme.palette.success.main : (user.balance < 0 ? theme.palette.error.main : 'text.primary') }}>
-                          ₹{user.balance.toFixed(2)}
+                          Rs. {user.balance.toFixed(2)}
                         </TableCell>
                         <TableCell sx={{ textAlign: 'center' }}>
                           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
@@ -390,7 +390,7 @@ export default function IndividualWallet() {
                 <Box sx={{ px: 2, pt: 2, pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, fontSize: '0.7rem', letterSpacing: 0.5 }}>CURRENT BALANCE</Typography>
                   <Typography variant="h5" sx={{ fontWeight: 900, color: selectedUser.balance > 0 ? theme.palette.success.main : 'text.primary' }}>
-                    ₹{selectedUser.balance.toFixed(2)}
+                    Rs. {selectedUser.balance.toFixed(2)}
                   </Typography>
                 </Box>
 
@@ -434,7 +434,7 @@ export default function IndividualWallet() {
 
                       <TextField
                         fullWidth
-                        label="Amount (₹)"
+                        label="Amount (Rs. )"
                         type="number"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
@@ -457,7 +457,7 @@ export default function IndividualWallet() {
                         onClick={handleProcessTransaction}
                         variant="contained"
                         disabled={processing}
-                        sx={{ borderRadius: '100px', py: 1.5, fontWeight: 800, fontSize: '0.9rem', boxShadow: '0 4px 14px rgba(13,110,253,0.4)' }}
+                        sx={{ borderRadius: '100px', py: 1.5, fontWeight: 800, fontSize: '0.9rem', boxShadow: '0 4px 14px rgba(13Rs. 10,253,0.4)' }}
                       >
                         {processing ? 'Processing...' : 'Confirm Transaction'}
                       </Button>
@@ -481,7 +481,7 @@ export default function IndividualWallet() {
                                 </Typography>
                               </Box>
                               <Typography variant="body1" sx={{ fontWeight: 900, color: txn.transaction_type === 'Credit' ? theme.palette.success.main : theme.palette.error.main }}>
-                                {txn.transaction_type === 'Credit' ? '+' : '-'}₹{parseFloat(txn.amount).toFixed(2)}
+                                {txn.transaction_type === 'Credit' ? '+' : '-'}Rs. {parseFloat(txn.amount).toFixed(2)}
                               </Typography>
                             </Box>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
