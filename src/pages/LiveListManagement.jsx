@@ -221,7 +221,7 @@ export default function LiveListManagement() {
     setSaving(true);
     try {
       const toMarkLive = members.filter(m => selectedIds.includes(m.id) && m.status !== 'Live');
-      const toMarkNotLive = members.filter(m => !selectedIds.includes(m.id) && m.status === 'Live');
+      const toMarkNotLive = members.filter(m => !selectedIds.includes(m.id) && m.status !== 'Not Live');
 
       console.log('selectedIds', selectedIds);
       console.log('members', members);
