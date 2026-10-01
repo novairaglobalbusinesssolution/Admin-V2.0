@@ -18,6 +18,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CommentIcon from '@mui/icons-material/Comment';
 import GroupIcon from '@mui/icons-material/Group';
+import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import { useNavigate } from 'react-router-dom';
 
 export default function AppList() {
@@ -43,6 +44,11 @@ export default function AppList() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [appToDelete, setAppToDelete] = useState(null);
+
+  // Unassign Bulker Dialog State
+  const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
+  const [bulkerToUnassign, setBulkerToUnassign] = useState(null);
+  const [unassigning, setUnassigning] = useState(false);
   
   // Snack
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
@@ -133,6 +139,67 @@ export default function AppList() {
     setAppToDelete(app);
     setDeleteDialogOpen(true);
     setAnchorEl(null);
+  };
+
+  const initiateUnassignBulker = (bulker) => {
+    setBulkerToUnassign(bulker);
+    setUnassignDialogOpen(true);
+  };
+
+  const handleUnassignBulkerConfirm = async () => {
+    if (!selectedApp || !bulkerToUnassign) return;
+    setUnassigning(true);
+    try {
+      const bIdToUnassign = bulkerToUnassign.bulker_id;
+      const shortId = (bIdToUnassign || '').replace(/^NOVAIRA\/BULKER\//i, '').trim();
+      const fullId = (bIdToUnassign || '').startsWith('NOVAIRA/BULKER/') ? bIdToUnassign : `NOVAIRA/BULKER/${bIdToUnassign}`;
+
+      // 1. Filter out from assigned_bulkers array in apps
+      const currentList = selectedApp.assigned_bulkers || [];
+      const updatedList = currentList.filter(b => {
+        const itemShort = (b.bulker_id || '').replace(/^NOVAIRA\/BULKER\//i, '').trim();
+        return b.bulker_id !== bIdToUnassign && b.bulker_id !== fullId && itemShort.toUpperCase() !== shortId.toUpperCase();
+      });
+
+      // 2. Update apps table
+      const { error: appErr } = await supabase
+        .from('apps')
+        .update({ assigned_bulkers: updatedList })
+        .eq('id', selectedApp.id);
+
+      if (appErr) throw appErr;
+
+      // 3. Delete from bulker_app_acceptances
+      const idVariations = [bIdToUnassign, shortId, fullId].filter(Boolean);
+      const { error: accErr } = await supabase
+        .from('bulker_app_acceptances')
+        .delete()
+        .eq('app_id', selectedApp.id)
+        .in('bulker_id', idVariations);
+
+      if (accErr) console.warn('Warning deleting from bulker_app_acceptances:', accErr);
+
+      // 4. Update UI states
+      const updatedApp = { ...selectedApp, assigned_bulkers: updatedList };
+      setSelectedApp(updatedApp);
+      setExtendedDetails(prev => ({
+        ...prev,
+        bulkers: (prev.bulkers || []).filter(b => {
+          const itemShort = (b.bulker_id || '').replace(/^NOVAIRA\/BULKER\//i, '').trim();
+          return b.bulker_id !== bIdToUnassign && b.bulker_id !== fullId && itemShort.toUpperCase() !== shortId.toUpperCase();
+        })
+      }));
+
+      setApps(prev => prev.map(a => a.id === selectedApp.id ? updatedApp : a));
+
+      setSnack({ open: true, message: `Bulker ${bulkerToUnassign.full_name || bIdToUnassign} unassigned successfully!`, severity: 'success' });
+      setUnassignDialogOpen(false);
+      setBulkerToUnassign(null);
+    } catch (e) {
+      setSnack({ open: true, message: `Failed to unassign bulker: ${e.message}`, severity: 'error' });
+    } finally {
+      setUnassigning(false);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -363,14 +430,30 @@ export default function AppList() {
                 ) : (
                   <List disablePadding>
                     {extendedDetails.bulkers.map((bulker, i) => (
-                      <ListItem key={i} disablePadding sx={{ py: 1, borderBottom: i !== extendedDetails.bulkers.length - 1 ? `1px dashed ${theme.palette.divider}` : 'none' }}>
+                      <ListItem 
+                        key={i} 
+                        disablePadding 
+                        secondaryAction={
+                          <IconButton 
+                            edge="end" 
+                            size="small" 
+                            color="error"
+                            onClick={() => initiateUnassignBulker(bulker)}
+                            title="Unassign Bulker"
+                            sx={{ bgcolor: theme.palette.mode === 'light' ? '#fee2e2' : 'rgba(239, 68, 68, 0.15)', ml: 1 }}
+                          >
+                            <PersonRemoveIcon fontSize="small" />
+                          </IconButton>
+                        }
+                        sx={{ py: 1, borderBottom: i !== extendedDetails.bulkers.length - 1 ? `1px dashed ${theme.palette.divider}` : 'none' }}
+                      >
                         <ListItemText 
                           primary={bulker.full_name} 
                           secondary={bulker.bulker_id}
                           primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
                           secondaryTypographyProps={{ variant: 'caption' }}
                         />
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>₹ {bulker.amount}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, mr: 2 }}>₹ {bulker.amount}</Typography>
                       </ListItem>
                     ))}
                   </List>
@@ -388,6 +471,25 @@ export default function AppList() {
           </Box>
         )}
       </Drawer>
+
+      {/* Unassign Bulker Dialog */}
+      <Dialog open={unassignDialogOpen} onClose={() => !unassigning && setUnassignDialogOpen(false)} PaperProps={{ sx: { borderRadius: '20px', minWidth: '320px' } }}>
+        <DialogTitle sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600 }}>Unassign Bulker</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to unassign <b>{bulkerToUnassign?.full_name}</b> ({bulkerToUnassign?.bulker_id}) from <b>{selectedApp?.app_name}</b>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will completely remove the bulker assignment from this task and delete any acceptance records in the database.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setUnassignDialogOpen(false)} color="inherit" disabled={unassigning}>Cancel</Button>
+          <Button onClick={handleUnassignBulkerConfirm} variant="contained" color="error" disableElevation disabled={unassigning}>
+            {unassigning ? 'Unassigning...' : 'Unassign Bulker'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar open={snack.open} autoHideDuration={3000} onClose={() => setSnack(s => ({...s, open: false}))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity={snack.severity} variant="filled" sx={{ borderRadius: '12px' }}>{snack.message}</Alert>

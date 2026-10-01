@@ -84,8 +84,8 @@ export default function LiveListManagement() {
         const earnerIds = [...new Set(finalMembers.map(m => m.earner_id))];
 
         const [profilesRes, bulkersRes] = await Promise.all([
-          supabase.from('profiles').select('earner_id, first_name, last_name').in('earner_id', earnerIds),
-          supabase.from('bulker_desks').select('bulker_id, full_name') // Fetch all to avoid prefix mismatch issues
+          supabase.from('profiles').select('earner_id, first_name, last_name, bulker_id').in('earner_id', earnerIds),
+          supabase.from('bulker_desks').select('bulker_id, full_name, account_type') // Fetch all to avoid prefix mismatch issues
         ]);
           
         const nameMap = {};
@@ -102,16 +102,21 @@ export default function LiveListManagement() {
           // Intelligent Bulker Matching (handles with or without NOVAIRA/BULKER/ prefix)
           const mShortBulker = m.bulker_id ? m.bulker_id.split('/').pop() : '';
           let bName = 'Unknown';
+          let bAccountType = 'Manual';
           if (!bulkersRes.error && bulkersRes.data) {
             const bMatch = bulkersRes.data.find(b => {
                const dbShort = b.bulker_id ? b.bulker_id.split('/').pop() : '';
-               return dbShort === mShortBulker;
+               return dbShort.toUpperCase() === mShortBulker.toUpperCase() || b.bulker_id === m.bulker_id;
             });
-            if (bMatch) bName = bMatch.full_name;
+            if (bMatch) {
+              bName = bMatch.full_name;
+              bAccountType = bMatch.account_type || 'Manual';
+            }
           }
 
           return {
             ...m,
+            bulker_account_type: bAccountType,
             formatted_earner: `${eName} (${eShortId})`,
             formatted_bulker: `${bName} (${mShortBulker})`
           };
@@ -268,24 +273,50 @@ export default function LiveListManagement() {
 
         const { data: liveProfiles = [], error: profileErr } = await supabase
           .from('profiles')
-          .select('earner_id, referral_code')
+          .select('earner_id, referral_code, bulker_id')
           .in('earner_id', allSelectedEarnersArr);
 
         if (profileErr) console.warn('Failed to fetch referral references.', profileErr);
 
-        // Fetch Bulker profiles to check account_type
-        const bulkerIdsForTxn = [...new Set(toMarkLive.map(m => m.bulker_id).filter(Boolean))];
-        // Clean bulker IDs just in case they have NOVAIRA/BULKER/
-        const fullBulkerIds = bulkerIdsForTxn.map(id => id.includes('NOVAIRA/BULKER/') ? id : `NOVAIRA/BULKER/${id}`);
-        
-        const { data: bulkerProfiles = [], error: bulkerErr } = await supabase
+        // Fetch Bulker profiles to check account_type and name
+        const { data: allBulkerDesks = [], error: bulkerErr } = await supabase
           .from('bulker_desks')
-          .select('bulker_id')
-          .in('bulker_id', fullBulkerIds);
+          .select('id, bulker_id, full_name, account_type');
         
         if (bulkerErr) console.warn('Failed to fetch bulker profiles.', bulkerErr);
-        const profileByBulker = Object.fromEntries((bulkerProfiles || []).map(b => [b.bulker_id, b]));
 
+        // Fetch bulker app acceptances for this app
+        const { data: appAcceptances = [], error: acceptancesErr } = await supabase
+          .from('bulker_app_acceptances')
+          .select('app_id, bulker_id, assigned_amount, member_amount, status')
+          .eq('app_id', appDetails.id);
+
+        if (acceptancesErr) console.warn('Failed to fetch bulker app acceptances.', acceptancesErr);
+
+        const getShortBulkerCode = (id) => normalizeId(id).replace(/^NOVAIRA\/BULKER\//i, '').toUpperCase();
+
+        const isPratik1 = (id) => {
+          const short = getShortBulkerCode(id);
+          return short === 'PRATIK1' || normalizeId(id).toUpperCase().includes('PRATIK1');
+        };
+
+        const findBulkerDesk = (bId) => {
+          if (!bId) return null;
+          const short = getShortBulkerCode(bId);
+          return (allBulkerDesks || []).find(b => {
+            const dbShort = getShortBulkerCode(b.bulker_id);
+            return dbShort === short || normalizeId(b.bulker_id).toLowerCase() === normalizeId(bId).toLowerCase();
+          });
+        };
+
+        const findBulkerAcceptance = (bId) => {
+          if (!bId) return null;
+          const short = getShortBulkerCode(bId);
+          return (appAcceptances || []).find(a => {
+            const aShort = getShortBulkerCode(a.bulker_id);
+            return aShort === short || normalizeId(a.bulker_id).toLowerCase() === normalizeId(bId).toLowerCase();
+          });
+        };
 
         // SAFEGUARD: Fetch existing transactions for this app to avoid duplicate rewards and referral bonuses
         const { data: existingTxns } = await supabase
@@ -301,60 +332,123 @@ export default function LiveListManagement() {
 
         const profileByEarner = Object.fromEntries((liveProfiles || []).map(profile => [normalizeId(profile.earner_id), profile]));
         const walletTransactions = [];
-          const primaryNotifications = [];
+        const primaryNotifications = [];
 
         // 1. Give REWARDS to newly marked Live earners
         toMarkLive.forEach(m => {
           const normalizedEarnerId = normalizeId(m.earner_id);
           const earnerProfile = profileByEarner[normalizedEarnerId];
-          const isWalletSystem = true; // Removed missing column check
+          
+          const rawBulkerId = m.bulker_id || earnerProfile?.bulker_id;
+          const bulkerDesk = findBulkerDesk(rawBulkerId);
+          const fullBulkerId = bulkerDesk?.bulker_id || (rawBulkerId ? (rawBulkerId.includes('NOVAIRA/BULKER/') ? rawBulkerId : `NOVAIRA/BULKER/${rawBulkerId}`) : null);
 
-          // Safeguard: Only add reward if it does not already exist AND earner is Wallet System
-          if (isWalletSystem && !existingEarnersReward.has(normalizedEarnerId)) {
-            walletTransactions.push({
-              transaction_id: generateTrxId(),
-              earner_id: normalizedEarnerId,
-              app_id: appDetails.id,
-              amount: appDetails.rawMemberReward,
-              transaction_type: 'Credit',
-              description: `Reward for Task ID ${appDetails.taskId}: ${appDetails.name}`,
-              status: 'Completed'
-            });
+          const isPratik = isPratik1(rawBulkerId) || isPratik1(fullBulkerId);
 
-            primaryNotifications.push({
-              earner_id: normalizedEarnerId,
-              title: 'Wallet Credited',
-              body: `You received Rs. ${appDetails.rawMemberReward} for completing ${appDetails.name}.`,
-              type: 'wallet'
-            });
+          let userReward = 0;
+          let bulkerProfit = 0;
+          let shouldCreditUserWallet = false;
+          let shouldCreditBulkerWallet = false;
+
+          if (isPratik) {
+            // PRATIK1 bulker: Keep current logic intact!
+            shouldCreditUserWallet = true;
+            userReward = appDetails.rawMemberReward;
+
+            if (fullBulkerId) {
+              const assignedList = appDetails.assignedBulkersList || [];
+              const bulkerAssignment = assignedList.find(b => getShortBulkerCode(b.bulker_id) === getShortBulkerCode(fullBulkerId));
+              const acceptance = findBulkerAcceptance(fullBulkerId || rawBulkerId);
+
+              if (acceptance && acceptance.member_amount && !isNaN(parseFloat(acceptance.member_amount))) {
+                userReward = parseFloat(acceptance.member_amount);
+                const totalAssigned = parseFloat(acceptance.assigned_amount || 0);
+                bulkerProfit = totalAssigned > userReward ? (totalAssigned - userReward) : 0;
+              } else if (bulkerAssignment) {
+                if (bulkerAssignment.member_amount && !isNaN(parseFloat(bulkerAssignment.member_amount))) {
+                  userReward = parseFloat(bulkerAssignment.member_amount);
+                  const totalAssignedAmount = parseFloat(bulkerAssignment.amount || 0);
+                  bulkerProfit = totalAssignedAmount > userReward ? (totalAssignedAmount - userReward) : 0;
+                } else {
+                  bulkerProfit = parseFloat(bulkerAssignment.amount || 0);
+                }
+              }
+              shouldCreditBulkerWallet = bulkerProfit > 0;
+            }
+          } else {
+            // Other Bulkers: check bulker account_type
+            const accountType = String(bulkerDesk?.account_type || '').trim().toLowerCase();
+            const isWalletSystem = accountType === 'wallet system';
+
+            if (!isWalletSystem) {
+              // Manual Bulker: No wallet credit for user or bulker
+              shouldCreditUserWallet = false;
+              shouldCreditBulkerWallet = false;
+              userReward = 0;
+              bulkerProfit = 0;
+            } else {
+              // Wallet System Bulker: User gets member_amount set by bulker from bulker_app_acceptances
+              shouldCreditUserWallet = true;
+
+              const acceptance = findBulkerAcceptance(fullBulkerId || rawBulkerId);
+              if (acceptance && acceptance.member_amount && !isNaN(parseFloat(acceptance.member_amount))) {
+                userReward = parseFloat(acceptance.member_amount);
+                const totalAssigned = parseFloat(acceptance.assigned_amount || 0);
+                bulkerProfit = totalAssigned > userReward ? (totalAssigned - userReward) : 0;
+              } else {
+                // Fallback to assignedBulkersList JSON
+                const assignedList = appDetails.assignedBulkersList || [];
+                const bulkerAssignment = assignedList.find(b => getShortBulkerCode(b.bulker_id) === getShortBulkerCode(fullBulkerId || rawBulkerId));
+
+                if (bulkerAssignment && bulkerAssignment.member_amount && !isNaN(parseFloat(bulkerAssignment.member_amount))) {
+                  userReward = parseFloat(bulkerAssignment.member_amount);
+                  const totalAssignedAmount = parseFloat(bulkerAssignment.amount || 0);
+                  bulkerProfit = totalAssignedAmount > userReward ? (totalAssignedAmount - userReward) : 0;
+                } else {
+                  userReward = appDetails.rawMemberReward;
+                  bulkerProfit = parseFloat(bulkerAssignment?.amount || 0);
+                }
+              }
+              shouldCreditBulkerWallet = bulkerProfit > 0;
+            }
           }
 
-          // 1.5 Give REWARDS to Bulker if Wallet System
-          const bulkerId = m.bulker_id;
-          if (bulkerId) {
-            const fullBulkerId = bulkerId.includes('NOVAIRA/BULKER/') ? bulkerId : `NOVAIRA/BULKER/${bulkerId}`;
-            const bulkerProfile = profileByBulker[fullBulkerId];
-            if (bulkerProfile) {
-                const bulkerDesc = `Bulker Reward for Task ID ${appDetails.taskId}: ${appDetails.name} (${normalizedEarnerId})`;
-                if (!existingDescriptions.has(bulkerDesc)) {
-                    // Extract rate from app assigned_bulkers
-                    const assignedList = appDetails.assignedBulkersList || [];
-                    const bulkerRateObj = assignedList.find(b => b.bulker_id === fullBulkerId || b.bulker_id === bulkerId);
-                    const bulkerRate = bulkerRateObj ? Number(bulkerRateObj.amount || 0) : 0;
-                    
-                    if (bulkerRate > 0) {
-                        walletTransactions.push({
-                          transaction_id: generateTrxId(),
-                          earner_id: fullBulkerId,
-                          app_id: appDetails.id,
-                          amount: bulkerRate,
-                          transaction_type: 'Credit',
-                          description: bulkerDesc,
-                          status: 'Completed'
-                        });
-                        existingDescriptions.add(bulkerDesc);
-                    }
-                }
+          // User reward transaction
+          if (shouldCreditUserWallet && userReward > 0) {
+            if (!existingEarnersReward.has(normalizedEarnerId)) {
+              walletTransactions.push({
+                transaction_id: generateTrxId(),
+                earner_id: normalizedEarnerId,
+                app_id: appDetails.id,
+                amount: userReward,
+                transaction_type: 'Credit',
+                description: `Reward for Task ID ${appDetails.taskId}: ${appDetails.name}`,
+                status: 'Completed'
+              });
+
+              primaryNotifications.push({
+                earner_id: normalizedEarnerId,
+                title: 'Wallet Credited',
+                body: `You received Rs. ${userReward} for completing ${appDetails.name}.`,
+                type: 'wallet'
+              });
+            }
+          }
+
+          // Bulker profit transaction
+          if (shouldCreditBulkerWallet && fullBulkerId && bulkerProfit > 0) {
+            const bulkerDesc = `Bulker Reward for Task ID ${appDetails.taskId}: ${appDetails.name} (${normalizedEarnerId})`;
+            if (!existingDescriptions.has(bulkerDesc)) {
+              walletTransactions.push({
+                transaction_id: generateTrxId(),
+                earner_id: fullBulkerId,
+                app_id: appDetails.id,
+                amount: bulkerProfit,
+                transaction_type: 'Credit',
+                description: bulkerDesc,
+                status: 'Completed'
+              });
+              existingDescriptions.add(bulkerDesc);
             }
           }
         });
@@ -373,21 +467,32 @@ export default function LiveListManagement() {
           );
 
           if (isReferralEligible) {
+            const earnerBulkerId = profile?.bulker_id || (members.find(m => normalizeId(m.earner_id) === normalizedEarnerId)?.bulker_id);
+            const isPratik = isPratik1(earnerBulkerId);
+            const bulkerDesk = findBulkerDesk(earnerBulkerId);
+            const isWalletSystem = String(bulkerDesk?.account_type || '').trim().toLowerCase() === 'wallet system';
+
+            // Manual bulker earners do not receive referral wallet bonuses
+            if (!isPratik && !isWalletSystem) {
+              return;
+            }
+
             const referrerProfile = profileByEarner[referrerId];
             if (referrerProfile) {
-                const refDesc = `Referral bonus for inviting ${normalizedEarnerId}`;
-                // Safeguard: Only add referral bonus if it does not already exist
-                if (!existingDescriptions.has(refDesc)) {
-                  walletTransactions.push({
-                    transaction_id: generateTrxId(),
-                    earner_id: referrerId,
-                    app_id: appDetails.id,
-                    amount: 0.60,
-                    transaction_type: 'Credit',
-                    description: refDesc,
-                    status: 'Completed'
-                  });
-                }
+              const refDesc = `Referral bonus for inviting ${normalizedEarnerId}`;
+              // Safeguard: Only add referral bonus if it does not already exist
+              if (!existingDescriptions.has(refDesc)) {
+                walletTransactions.push({
+                  transaction_id: generateTrxId(),
+                  earner_id: referrerId,
+                  app_id: appDetails.id,
+                  amount: 0.60,
+                  transaction_type: 'Credit',
+                  description: refDesc,
+                  status: 'Completed'
+                });
+                existingDescriptions.add(refDesc);
+              }
             }
           }
         });

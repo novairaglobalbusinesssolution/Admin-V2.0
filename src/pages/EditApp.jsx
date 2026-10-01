@@ -39,6 +39,7 @@ export default function EditApp() {
   const [bulkerDialogOpen, setBulkerDialogOpen] = useState(false);
   const [newBulkerData, setNewBulkerData] = useState({ full_name: '', phone: '', email: '' });
   const [creatingBulker, setCreatingBulker] = useState(false);
+  const [initialBulkerIds, setInitialBulkerIds] = useState([]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -96,11 +97,14 @@ export default function EditApp() {
 
       // Transform assigned_bulkers array back to object state format { 'BLK-123': '500' }
       const bulkersObj = {};
+      const initIds = [];
       if (data.assigned_bulkers) {
         data.assigned_bulkers.forEach(b => {
           bulkersObj[b.bulker_id] = b.amount;
+          if (b.bulker_id) initIds.push(b.bulker_id);
         });
       }
+      setInitialBulkerIds(initIds);
 
       setFormData({
         task_type: data.task_type || 'Android App',
@@ -272,6 +276,32 @@ export default function EditApp() {
         bulker_id: bId,
         amount: parseFloat(formData.assigned_bulkers[bId]) || 0
       }));
+
+      // Identify unassigned bulkers and delete their acceptances
+      const newBulkerIds = assignedArray.map(b => b.bulker_id);
+      const removedBulkerIds = initialBulkerIds.filter(bId => {
+        const shortBId = (bId || '').replace(/^NOVAIRA\/BULKER\//i, '').trim();
+        return !newBulkerIds.some(nId => {
+          const shortNId = (nId || '').replace(/^NOVAIRA\/BULKER\//i, '').trim();
+          return nId === bId || shortNId.toUpperCase() === shortBId.toUpperCase();
+        });
+      });
+
+      if (removedBulkerIds.length > 0) {
+        const allRemovedVariations = removedBulkerIds.flatMap(bId => {
+          const short = bId.replace(/^NOVAIRA\/BULKER\//i, '').trim();
+          const full = bId.startsWith('NOVAIRA/BULKER/') ? bId : `NOVAIRA/BULKER/${bId}`;
+          return [bId, short, full];
+        });
+
+        const { error: delAccErr } = await supabase
+          .from('bulker_app_acceptances')
+          .delete()
+          .eq('app_id', id)
+          .in('bulker_id', allRemovedVariations);
+
+        if (delAccErr) console.warn("Failed to delete removed bulker acceptances:", delAccErr);
+      }
 
       const payload = {
         app_name: formData.app_name,
