@@ -4,7 +4,8 @@ import {
   CircularProgress, Snackbar, Alert, useTheme,
   IconButton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TablePagination,
-  Tabs, Tab, Divider, List, ListItem, ListItemText, Chip, Slide, Fade
+  Tabs, Tab, Divider, List, ListItem, ListItemText, Chip, Slide, Fade,
+  Checkbox, FormControlLabel
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddCardIcon from '@mui/icons-material/AddCard';
@@ -14,6 +15,23 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CloseIcon from '@mui/icons-material/Close';
 import { supabase } from '../supabaseClient';
+
+const fetchAllRows = async (createQuery) => {
+  const pageSize = 1000;
+  const rows = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await createQuery().range(offset, offset + pageSize - 1);
+    if (error) throw error;
+
+    const pageRows = data || [];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) return rows;
+
+    offset += pageSize;
+  }
+};
 
 export default function IndividualWallet() {
   const theme = useTheme();
@@ -27,6 +45,7 @@ export default function IndividualWallet() {
   const [panelMode, setPanelMode] = useState('manage'); // 'manage' or 'history'
   
   const [trxType, setTrxType] = useState('Credit');
+  const [syncCompanyFund, setSyncCompanyFund] = useState(true);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -40,17 +59,16 @@ export default function IndividualWallet() {
   const fetchWallets = async () => {
     setLoading(true);
     try {
-      const { data: profiles, error: profErr } = await supabase
+      const profiles = await fetchAllRows(() => supabase
         .from('profiles')
-        .select('id, earner_id, first_name, last_name, phone, status');
-      if (profErr) throw profErr;
+        .select('id, earner_id, first_name, last_name, phone, status')
+        .order('id', { ascending: true }));
 
-      // Fetch ALL details for transactions so we can show history
-      const { data: txns, error: txnErr } = await supabase
+      const txns = await fetchAllRows(() => supabase
         .from('individual_wallet_transactions')
         .select('*')
-        .order('created_at', { ascending: false });
-      if (txnErr) throw txnErr;
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false }));
 
       setAllTransactions(txns);
 
@@ -98,6 +116,7 @@ export default function IndividualWallet() {
     setSelectedUser(user);
     setPanelMode(mode);
     setTrxType('Credit');
+    setSyncCompanyFund(true);
     setAmount('');
     setDescription('');
   };
@@ -128,6 +147,7 @@ export default function IndividualWallet() {
         earner_id: selectedUser.earner_id,
         amount: parseFloat(amount),
         transaction_type: trxType,
+        sync_to_company_fund: trxType !== 'Debit' || syncCompanyFund,
         description: description || `Manual ${trxType} by Admin`,
         status: 'Completed',
         created_at: new Date().toISOString()
@@ -444,7 +464,10 @@ export default function IndividualWallet() {
                           variant={trxType === 'Debit' ? 'contained' : 'outlined'}
                           color="error"
                           startIcon={<ArrowDownwardIcon sx={{ fontSize: '1rem' }} />}
-                          onClick={() => setTrxType('Debit')}
+                          onClick={() => {
+                            if (trxType !== 'Debit') setSyncCompanyFund(true);
+                            setTrxType('Debit');
+                          }}
                           sx={{ borderRadius: '16px', py: 1.2, fontWeight: 800, fontSize: '0.8rem', borderWidth: trxType === 'Debit' ? 0 : 2, '&:hover': { borderWidth: trxType === 'Debit' ? 0 : 2 } }}
                         >
                           Debit
@@ -470,6 +493,39 @@ export default function IndividualWallet() {
                         rows={3}
                         sx={{ mb: 4, '& .MuiOutlinedInput-root': { borderRadius: '16px', bgcolor: 'background.paper', fontSize: '0.9rem' } }}
                       />
+
+                      {trxType === 'Debit' && (
+                        <FormControlLabel
+                          control={(
+                            <Checkbox
+                              checked={syncCompanyFund}
+                              onChange={(event) => setSyncCompanyFund(event.target.checked)}
+                              size="small"
+                            />
+                          )}
+                          label={(
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                Record in Company Fund Transactions
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Include this debit in the company fund ledger.
+                              </Typography>
+                            </Box>
+                          )}
+                          sx={{
+                            alignItems: 'flex-start',
+                            mx: 0,
+                            mb: 2.5,
+                            p: 1.25,
+                            width: '100%',
+                            border: `1px solid ${theme.palette.divider}`,
+                            borderRadius: '12px',
+                            bgcolor: 'background.paper',
+                            '& .MuiFormControlLabel-label': { flex: 1 },
+                          }}
+                        />
+                      )}
 
                       <Button 
                         fullWidth

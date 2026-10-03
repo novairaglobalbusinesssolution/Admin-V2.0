@@ -163,7 +163,8 @@ export default function Withdrawals() {
         .from('individual_wallet_transactions')
         .update({
           status: 'Completed',
-          utr_id: utrInput.trim()
+          utr_id: utrInput.trim(),
+          created_at: new Date().toISOString(),
         })
         .eq('id', selectedTx.id);
         
