@@ -439,6 +439,65 @@ app.post('/api/send-notification', async (req, res) => {
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : supabase;
 
+app.post('/api/send-account-status-email', async (req, res) => {
+    const { earner_id, previous_status, status } = req.body;
+    const allowedStatuses = ['Active', 'Suspended'];
+
+    if (!earner_id || !allowedStatuses.includes(status)) {
+        return res.status(400).json({ error: 'A valid earner_id and account status are required.' });
+    }
+
+    try {
+        const { data: profile, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('first_name, last_name, email, status')
+            .eq('earner_id', earner_id)
+            .single();
+
+        if (profileError) throw profileError;
+        if (!profile.email) return res.status(404).json({ error: 'No email address is registered for this user.' });
+        if (profile.status !== status) {
+            return res.status(409).json({ error: 'The requested status does not match the current account status.' });
+        }
+
+        const { data: smtpData, error: smtpError } = await supabaseAdmin
+            .from('smtp_settings')
+            .select('*')
+            .eq('is_default', true)
+            .maybeSingle();
+
+        if (smtpError) throw smtpError;
+        if (!smtpData) return res.status(503).json({ error: 'No default SMTP configuration is available.' });
+
+        const transporter = nodemailer.createTransport({
+            host: smtpData.host,
+            port: Number(smtpData.port) || 465,
+            secure: Number(smtpData.port) === 465 || smtpData.encryption === 'SSL',
+            auth: {
+                user: smtpData.username,
+                pass: smtpData.password,
+            },
+        });
+
+        const userName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'there';
+        const statusMessage = status === 'Active'
+            ? 'Your Novaira account is active again. You can now sign in and use your account.'
+            : 'Your Novaira account has been suspended. Please contact support if you believe this is a mistake.';
+
+        await transporter.sendMail({
+            from: `"${smtpData.sender_name}" <${smtpData.sender_email}>`,
+            to: profile.email,
+            subject: `Your Novaira account status is ${status}`,
+            text: `Hello ${userName},\n\nYour account status changed from ${previous_status || 'Active'} to ${status}.\n\n${statusMessage}\n\nRegards,\n${smtpData.sender_name || 'Novaira Support'}`,
+        });
+
+        return res.json({ status: 'success', message: 'Account status email sent.' });
+    } catch (error) {
+        console.error('Account status email error:', error);
+        return res.status(500).json({ error: error.message || 'Failed to send account status email.' });
+    }
+});
+
 app.post('/api/truecaller-login', async (req, res) => {
     try {
         if (!supabaseServiceKey) {

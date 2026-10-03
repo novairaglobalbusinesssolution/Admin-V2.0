@@ -421,13 +421,57 @@ export default function UserView() {
   };
 
   const handleUpdateStatus = async () => {
-    if (type !== 'individual' && type !== 'bulker') return;
+    if (type !== 'individual') return;
     setUpdatingStatus(true);
     try {
+      const previousStatus = data.status || 'Active';
+      const nextStatus = accountStatus;
       const { error } = await supabase.from('profiles').update({ status: accountStatus }).eq('id', id);
       if (error) throw error;
-      setData({ ...data, status: accountStatus });
-      setSnack({ open: true, message: 'Account status updated!', severity: 'success' });
+      setData({ ...data, status: nextStatus });
+
+      const backendUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+      const notificationBody = nextStatus === 'Active'
+        ? 'Your Novaira account is active again.'
+        : 'Your Novaira account has been suspended. Please contact support if you believe this is a mistake.';
+      const notifications = await Promise.allSettled([
+        fetch(`${backendUrl}/api/send-notification`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            earner_id: data.earner_id,
+            title: 'Account status updated',
+            body: notificationBody,
+            type: 'account',
+          }),
+        }).then(async (response) => {
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Push notification failed.');
+        }),
+        fetch(`${backendUrl}/api/send-account-status-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            earner_id: data.earner_id,
+            previous_status: previousStatus,
+            status: nextStatus,
+          }),
+        }).then(async (response) => {
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Status email failed.');
+        }),
+      ]);
+
+      const failedChannels = notifications
+        .map((result, index) => result.status === 'rejected' ? ['push notification', 'email'][index] : null)
+        .filter(Boolean);
+      setSnack({
+        open: true,
+        message: failedChannels.length
+          ? `Status updated, but ${failedChannels.join(' and ')} could not be sent.`
+          : 'Account status updated. Push notification and email sent.',
+        severity: failedChannels.length ? 'warning' : 'success',
+      });
     } catch (e) {
       console.error(e);
       setSnack({ open: true, message: e.message, severity: 'error' });
@@ -486,7 +530,7 @@ export default function UserView() {
       <Paper elevation={0} sx={{ p: 3, borderRadius: '24px', mb: 3, border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none' }}>
         
         {/* Profile Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, mb: 3, flexWrap: 'wrap' }}>
           <Avatar sx={{ width: 64, height: 64, fontSize: '1.6rem', bgcolor: 'secondary.main', fontWeight: 600 }}>
             {((data.name || data.full_name || data.first_name || 'U')[0]).toUpperCase()}
           </Avatar>
@@ -500,10 +544,36 @@ export default function UserView() {
             <Chip 
               size="small" 
               label={data.status || 'Active'} 
-              color={data.status?.toLowerCase() === 'active' ? 'success' : 'default'} 
+              color={data.status?.toLowerCase() === 'active' ? 'success' : 'error'}
               sx={{ mt: 1, height: 22, fontSize: '0.7rem', fontWeight: 600 }} 
             />
           </Box>
+          {type === 'individual' && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: { xs: 0, sm: 'auto' }, width: { xs: '100%', sm: 'auto' } }}>
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel id="individual-account-status-label">Account status</InputLabel>
+                <Select
+                  labelId="individual-account-status-label"
+                  label="Account status"
+                  value={accountStatus}
+                  onChange={(event) => setAccountStatus(event.target.value)}
+                  disabled={updatingStatus}
+                >
+                  <MenuItem value="Active">Active</MenuItem>
+                  <MenuItem value="Suspended">Suspended</MenuItem>
+                </Select>
+              </FormControl>
+              <Button
+                variant="contained"
+                startIcon={updatingStatus ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                onClick={handleUpdateStatus}
+                disabled={updatingStatus || accountStatus === (data.status || 'Active')}
+                sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+              >
+                {updatingStatus ? 'Saving...' : 'Save status'}
+              </Button>
+            </Box>
+          )}
         </Box>
 
         <Divider sx={{ mb: 3 }} />
