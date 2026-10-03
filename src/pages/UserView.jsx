@@ -16,6 +16,7 @@ import LockResetIcon from '@mui/icons-material/LockReset';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -48,6 +49,8 @@ export default function UserView() {
   const [transferring, setTransferring] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
 
   // Reviews and Wallet Data
@@ -177,6 +180,7 @@ export default function UserView() {
       if (error) throw error;
       
       let finalData = result;
+      setAccountStatus(result.status || 'Active');
 
       if (type === 'individual' || type === 'bulker') {
         // Fetch specific bulker name
@@ -206,7 +210,6 @@ export default function UserView() {
           });
         }
         setTargetBulker(result.bulker_id || '');
-        setAccountStatus(result.status || 'Active');
       }
 
       setData(finalData);
@@ -421,62 +424,84 @@ export default function UserView() {
   };
 
   const handleUpdateStatus = async () => {
-    if (type !== 'individual') return;
+    const statusTable = type === 'individual' ? 'profiles' : type === 'provider' ? 'providers' : type === 'client' ? 'clients' : null;
+    if (!statusTable) return;
     setUpdatingStatus(true);
     try {
       const previousStatus = data.status || 'Active';
       const nextStatus = accountStatus;
-      const { error } = await supabase.from('profiles').update({ status: accountStatus }).eq('id', id);
+      const { error } = await supabase.from(statusTable).update({ status: nextStatus }).eq('id', id);
       if (error) throw error;
       setData({ ...data, status: nextStatus });
 
-      const backendUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
-      const notificationBody = nextStatus === 'Active'
-        ? 'Your Novaira account is active again.'
-        : 'Your Novaira account has been suspended. Please contact support if you believe this is a mistake.';
-      const notifications = await Promise.allSettled([
-        fetch(`${backendUrl}/api/send-notification`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            earner_id: data.earner_id,
-            title: 'Account status updated',
-            body: notificationBody,
-            type: 'account',
+      if (type === 'individual') {
+        const backendUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+        const notificationBody = nextStatus === 'Active'
+          ? 'Your Novaira account is active again.'
+          : 'Your Novaira account has been suspended. Please contact support if you believe this is a mistake.';
+        const notifications = await Promise.allSettled([
+          fetch(`${backendUrl}/api/send-notification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              earner_id: data.earner_id,
+              title: 'Account status updated',
+              body: notificationBody,
+              type: 'account',
+            }),
+          }).then(async (response) => {
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || 'Push notification failed.');
           }),
-        }).then(async (response) => {
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(result.error || 'Push notification failed.');
-        }),
-        fetch(`${backendUrl}/api/send-account-status-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            earner_id: data.earner_id,
-            previous_status: previousStatus,
-            status: nextStatus,
+          fetch(`${backendUrl}/api/send-account-status-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              earner_id: data.earner_id,
+              previous_status: previousStatus,
+              status: nextStatus,
+            }),
+          }).then(async (response) => {
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || 'Status email failed.');
           }),
-        }).then(async (response) => {
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(result.error || 'Status email failed.');
-        }),
-      ]);
+        ]);
 
-      const failedChannels = notifications
-        .map((result, index) => result.status === 'rejected' ? ['push notification', 'email'][index] : null)
-        .filter(Boolean);
-      setSnack({
-        open: true,
-        message: failedChannels.length
-          ? `Status updated, but ${failedChannels.join(' and ')} could not be sent.`
-          : 'Account status updated. Push notification and email sent.',
-        severity: failedChannels.length ? 'warning' : 'success',
-      });
+        const failedChannels = notifications
+          .map((result, index) => result.status === 'rejected' ? ['push notification', 'email'][index] : null)
+          .filter(Boolean);
+        setSnack({
+          open: true,
+          message: failedChannels.length
+            ? `Status updated, but ${failedChannels.join(' and ')} could not be sent.`
+            : 'Account status updated. Push notification and email sent.',
+          severity: failedChannels.length ? 'warning' : 'success',
+        });
+      } else {
+        setSnack({ open: true, message: `${type === 'provider' ? 'Provider' : 'Client'} status updated!`, severity: 'success' });
+      }
     } catch (e) {
       console.error(e);
       setSnack({ open: true, message: e.message, severity: 'error' });
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (type !== 'provider' && type !== 'client') return;
+    const table = type === 'provider' ? 'providers' : 'clients';
+    setDeletingAccount(true);
+    try {
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) throw error;
+      setDeleteAccountOpen(false);
+      navigate(-1);
+    } catch (e) {
+      console.error(e);
+      setSnack({ open: true, message: e.message || `Failed to delete ${type}.`, severity: 'error' });
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -548,12 +573,12 @@ export default function UserView() {
               sx={{ mt: 1, height: 22, fontSize: '0.7rem', fontWeight: 600 }} 
             />
           </Box>
-          {type === 'individual' && (
+          {(type === 'individual' || type === 'provider' || type === 'client') && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: { xs: 0, sm: 'auto' }, width: { xs: '100%', sm: 'auto' } }}>
               <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel id="individual-account-status-label">Account status</InputLabel>
+                <InputLabel id="account-status-label">Account status</InputLabel>
                 <Select
-                  labelId="individual-account-status-label"
+                  labelId="account-status-label"
                   label="Account status"
                   value={accountStatus}
                   onChange={(event) => setAccountStatus(event.target.value)}
@@ -572,6 +597,17 @@ export default function UserView() {
               >
                 {updatingStatus ? 'Saving...' : 'Save status'}
               </Button>
+              {(type === 'provider' || type === 'client') && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteOutlinedIcon />}
+                  onClick={() => setDeleteAccountOpen(true)}
+                  sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+                >
+                  Delete {type}
+                </Button>
+              )}
             </Box>
           )}
         </Box>
@@ -1279,6 +1315,41 @@ export default function UserView() {
             <Button onClick={handleCloseModal} variant="contained" disableElevation sx={{ borderRadius: '10px' }}>Close</Button>
           </DialogActions>
         </Dialog>
+
+      <Dialog
+        open={deleteAccountOpen}
+        onClose={() => !deletingAccount && setDeleteAccountOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Delete {type} account?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This permanently deletes <strong>{data.name || data.provider_id || data.client_id}</strong> from the {type === 'provider' ? 'providers' : 'clients'} table. This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteAccountOpen(false)}
+            disabled={deletingAccount}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteAccount}
+            disabled={deletingAccount}
+            startIcon={deletingAccount ? <CircularProgress size={16} color="inherit" /> : <DeleteOutlinedIcon />}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            {deletingAccount ? 'Deleting...' : `Delete ${type}`}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack({...snack, open: false})} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert onClose={() => setSnack({...snack, open: false})} severity={snack.severity} sx={{ width: '100%', borderRadius: '12px' }}>
