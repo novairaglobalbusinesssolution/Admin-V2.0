@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient';
 
 const normalizeAmount = (value) => Number(value || 0);
 const normalizeString = (value) => String(value || '').trim();
+const isSuccessfulStatus = (status) => ['completed', 'success', 'successful'].includes(normalizeString(status).toLowerCase());
 
 const formatDate = (value) => {
   if (!value) return 'N/A';
@@ -33,7 +34,7 @@ export async function fetchPaymentDashboardData() {
   const companyTransactions = Array.isArray(data) ? data : [];
 
   const currentCompanyBalance = companyTransactions.reduce((sum, tx) => {
-    if (isIgnoredStatus(tx.status)) return sum;
+    if (isIgnoredStatus(tx.status) || !isSuccessfulStatus(tx.status)) return sum;
 
     const amount = normalizeAmount(tx.amount);
     if (normalizeString(tx.transaction_type).toLowerCase() === 'credit') {
@@ -57,7 +58,7 @@ export async function fetchPaymentDashboardData() {
   const pendingWithdrawalAmount = pendingWithdrawalRequests.reduce((sum, tx) => sum + normalizeAmount(tx.amount), 0);
 
   const totalProcessed = companyTransactions.reduce((sum, tx) => {
-    if (isIgnoredStatus(tx.status)) return sum;
+    if (isIgnoredStatus(tx.status) || !isSuccessfulStatus(tx.status)) return sum;
     return sum + normalizeAmount(tx.amount);
   }, 0);
 

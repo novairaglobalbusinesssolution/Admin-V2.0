@@ -390,14 +390,15 @@ export default function PaymentDashboard() {
         const amount = Number(row.amount || 0);
         const transactionType = String(row.transaction_type || '').toLowerCase();
         const status = String(row.status || '').toLowerCase();
+        const isSuccessful = ['completed', 'success', 'successful'].includes(status);
         const isPendingWithdrawal = transactionType === 'debit' && ['pending', 'processing'].includes(status);
 
         return {
           ...prev,
-          currentCompanyBalance: prev.currentCompanyBalance + (transactionType === 'debit' ? amount : -amount),
+          currentCompanyBalance: prev.currentCompanyBalance + (isSuccessful ? (transactionType === 'debit' ? amount : -amount) : 0),
           totalWithdrawalRequests: Math.max(0, prev.totalWithdrawalRequests - (isPendingWithdrawal ? 1 : 0)),
           pendingWithdrawalAmount: Math.max(0, prev.pendingWithdrawalAmount - (isPendingWithdrawal ? amount : 0)),
-          totalProcessed: Math.max(0, prev.totalProcessed - amount),
+          totalProcessed: Math.max(0, prev.totalProcessed - (isSuccessful ? amount : 0)),
           transactions: prev.transactions.filter((item) => item.id !== row.id),
         };
       });
@@ -481,8 +482,8 @@ export default function PaymentDashboard() {
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Company Entries"
-            value={summary.transactions.length}
-            helper="Total company fund records"
+            value={summary.transactions.filter((transaction) => ['completed', 'success', 'successful'].includes(String(transaction.status || '').toLowerCase())).length}
+            helper="Completed company fund records"
             icon={<TrendingUpIcon fontSize="small" />}
             loading={summaryUpdating}
           />
