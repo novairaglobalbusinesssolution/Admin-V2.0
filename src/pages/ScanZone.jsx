@@ -159,7 +159,7 @@ export default function ScanZone() {
           const { data } = await worker.recognize(file);
           const text = data.text || '';
           const extractedName = extractUsernameFromOCR(text);
-          const match = getBestProfileMatch(text, profiles);
+          const match = getBestProfileMatch(text, bulkerMembers);
           rows.push({
             id: `${Date.now()}-${Math.random()}`, file, preview: URL.createObjectURL(file),
             ocrText: extractedName || text,
@@ -643,7 +643,7 @@ export default function ScanZone() {
                 <Stack spacing={2}>
                   <Typography variant="h6" sx={{ fontWeight: 700 }}>Edit Scan Match</Typography>
                   <Autocomplete
-                    options={profiles}
+                    options={bulkerMembers}
                     getOptionLabel={(o) => { const fn = `${o.first_name || ''} ${o.last_name || ''}`.trim(); return fn ? `${fn} (${o.earner_id || 'No ID'})` : o.earner_id || 'No ID'; }}
                     value={editRow.selectedProfile || null}
                     onChange={(e, v) => setEditRow((p) => ({ ...p, selectedProfile: v }))}
@@ -665,3 +665,4 @@ export default function ScanZone() {
     </Box>
   );
 }
+
