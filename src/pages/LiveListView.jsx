@@ -338,35 +338,63 @@ export default function LiveListView() {
   const fetchLiveLists = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('review_submit_data')
-        .select(`
-          id, 
-          submitted_username, 
-          earner_id,
-          app_id, 
-          apps ( task_id, app_name, app_date, task_type, sponsor_type, sponsor_id )
-        `)
-        .eq('status', 'Live')
-        .order('submitted_at', { ascending: true });
+      let data = [];
+      let pageNum = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (error) throw error;
+      while (hasMore) {
+        const from = pageNum * pageSize;
+        const to = from + pageSize - 1;
+        const { data: chunk, error } = await supabase
+          .from('review_submit_data')
+          .select(`
+            id, 
+            submitted_username, 
+            earner_id,
+            app_id, 
+            apps ( task_id, app_name, app_date, task_type, sponsor_type, sponsor_id )
+          `)
+          .eq('status', 'Live')
+          .range(from, to)
+          .order('submitted_at', { ascending: false });
+
+        if (error) throw error;
+        if (chunk && chunk.length > 0) {
+          data = data.concat(chunk);
+          if (chunk.length < pageSize) {
+            hasMore = false;
+          } else {
+            pageNum++;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
       
       const earnerIds = [...new Set(data.map(d => d.earner_id).filter(Boolean))];
       const allSponsorIds = [...new Set(data.map(d => d.apps?.sponsor_id).filter(Boolean))];
 
-      const [profilesRes, clientsRes, providersRes] = await Promise.all([
-        supabase.from('profiles').select('earner_id, first_name, last_name').in('earner_id', earnerIds),
+      // Chunk profile fetches to prevent URL size limits
+      const profileChunks = [];
+      const pChunkSize = 100;
+      for (let i = 0; i < earnerIds.length; i += pChunkSize) {
+        const slice = earnerIds.slice(i, i + pChunkSize);
+        profileChunks.push(supabase.from('profiles').select('earner_id, first_name, last_name').in('earner_id', slice));
+      }
+
+      const [profilesResults, clientsRes, providersRes] = await Promise.all([
+        Promise.all(profileChunks),
         allSponsorIds.length > 0 ? supabase.from('clients').select('client_id, name').in('client_id', allSponsorIds) : Promise.resolve({ data: [] }),
         allSponsorIds.length > 0 ? supabase.from('providers').select('provider_id, name').in('provider_id', allSponsorIds) : Promise.resolve({ data: [] })
       ]);
       
       const nameMap = {};
-      if (profilesRes.data) {
-         profilesRes.data.forEach(p => {
-             nameMap[p.earner_id] = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
-         });
-      }
+      profilesResults.forEach(res => {
+        (res.data || []).forEach(p => {
+          nameMap[p.earner_id] = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+        });
+      });
 
       const sponsorMap = {};
       (clientsRes.data || []).forEach(c => {
