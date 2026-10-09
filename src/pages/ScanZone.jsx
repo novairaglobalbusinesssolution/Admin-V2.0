@@ -28,9 +28,30 @@ const normalizeName = (value = '') =>
 
 const extractUsernameFromOCR = (text) => {
   if (!text) return null;
+  
+  // 1. Try original review match
   const match = text.match(/Your review\s+([A-Za-z0-9\s]+?)\s*[\.\*]/i);
-  return match ? match[1].trim() : null;
+  if (match) return match[1].trim();
+
+  // 2. Try ID card parsing
+  const idCardKeywords = ['branch', 'jranch', 'session', 'guardian', 'address', 'blood group', 'emergency', 'principal'];
+  let cleaned = text;
+  for (const kw of idCardKeywords) {
+    const idx = cleaned.toLowerCase().indexOf(kw);
+    if (idx !== -1) {
+      cleaned = cleaned.substring(0, idx);
+    }
+  }
+  
+  // Extract just the alphabetic characters and spaces from the first valid line
+  const lines = cleaned.split('\n').map(l => l.replace(/[^a-zA-Z\s]/g, '').trim()).filter(Boolean);
+  if (lines.length > 0) {
+    return lines[0].substring(0, 50); // Max length safeguard
+  }
+  
+  return null;
 };
+
 
 const getBestProfileMatch = (ocrText, profiles) => {
   const extracted = extractUsernameFromOCR(ocrText);
@@ -74,6 +95,7 @@ export default function ScanZone() {
   const [previewImage, setPreviewImage] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
+  const [createUserModal, setCreateUserModal] = useState({ open: false, rows: [], name: '', shortBulkerId: '', loading: false });
 
   // ——— Member Add state ———
   const [bulkerMembers, setBulkerMembers] = useState([]);
@@ -143,7 +165,106 @@ export default function ScanZone() {
     setMemberPage(0);
   };
 
-  // ——— OCR Scan functions (unchanged) ———
+  // ——— User Creation logic ———
+  const openCreateUserModal = (rowsToCreate) => {
+    const initialName = rowsToCreate.length === 1 ? 
+      (rowsToCreate[0].ocrText !== 'OCR Failed' && rowsToCreate[0].ocrText !== 'No text detected' ? rowsToCreate[0].ocrText : '') 
+      : '';
+    const initialShortId = selectedBulker ? selectedBulker.bulker_id.replace('NOVAIRA/BULKER/', '') : '';
+    setCreateUserModal({ open: true, rows: rowsToCreate, name: initialName, shortBulkerId: initialShortId, loading: false });
+  };
+
+  const confirmCreateUser = async () => {
+    const { rows, name, shortBulkerId } = createUserModal;
+    if (!rows.length) return;
+
+    const fullBulkerId = shortBulkerId.toUpperCase().startsWith('NOVAIRA/BULKER/') ? shortBulkerId.toUpperCase() : `NOVAIRA/BULKER/${shortBulkerId.toUpperCase()}`;
+    const matchedBulker = bulkers.find(b => b.bulker_id === fullBulkerId);
+    
+    if (!matchedBulker) {
+      setMessage({ type: 'error', text: 'Invalid Bulker ID. Please check and try again.' });
+      return;
+    }
+
+    setCreateUserModal(prev => ({ ...prev, loading: true }));
+    try {
+      // Create a secondary client so we don't overwrite the admin's current session
+      const { createClient } = await import('@supabase/supabase-js');
+      const altSupabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
+
+      const finalProfiles = [];
+      const rowUpdates = [];
+
+      for (const row of rows) {
+        let nameText = '';
+        if (rows.length === 1) {
+          nameText = name.trim() || 'Unknown User';
+        } else {
+          nameText = row.ocrText && row.ocrText !== 'OCR Failed' && row.ocrText !== 'No text detected' ? row.ocrText : 'Unknown User';
+        }
+        
+        const nameParts = nameText.split(' ').filter(Boolean);
+        const firstName = nameParts[0] || 'Unknown';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        const mockEmail = `user_${Date.now()}_${Math.floor(Math.random() * 10000)}@novairasolution.com`;
+        
+        // 1. Create Auth User
+        const { data: authData, error: authErr } = await altSupabase.auth.signUp({
+          email: mockEmail,
+          password: `Novaira@${Date.now()}`
+        });
+
+        if (authErr) throw authErr;
+        const userId = authData?.user?.id;
+        if (!userId) throw new Error("Failed to get user ID from signup");
+
+        // 2. Wait a brief moment for the database trigger to create the profile
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // 3. Update the auto-created profile
+        const { data: updatedProfile, error: updateErr } = await supabase
+          .from('profiles')
+          .update({ first_name: firstName, last_name: lastName, bulker_id: matchedBulker.bulker_id })
+          .eq('id', userId)
+          .select()
+          .single();
+
+        if (updateErr) throw updateErr;
+
+        finalProfiles.push(updatedProfile);
+        rowUpdates.push({ rowId: row.id, profile: updatedProfile });
+      }
+
+      setBulkerMembers(prev => [...finalProfiles, ...prev]);
+
+      setScanRows(prev => prev.map(r => {
+        const update = rowUpdates.find(u => u.rowId === r.id);
+        if (update) {
+          return {
+            ...r,
+            bestMatch: { profile: update.profile },
+            matchedName: `${update.profile.first_name || ''} ${update.profile.last_name || ''}`.trim(),
+            earnerId: update.profile.earner_id,
+            status: 'Matched'
+          };
+        }
+        return r;
+      }));
+      
+      setMessage({ type: 'success', text: `Successfully created ${finalProfiles.length} user(s).` });
+      setCreateUserModal({ open: false, rows: [], name: '', shortBulkerId: '', loading: false });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to create users.' });
+      setCreateUserModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // ——— OCR Scan functions ———
   const processImageFiles = async (filesList) => {
     if (!filesList.length) return;
     if (!selectedApp) { setMessage({ type: 'error', text: 'Please choose an app first.' }); return; }
@@ -560,9 +681,21 @@ export default function ScanZone() {
                     <Box sx={{ mt: 3 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
                         <Typography variant="h6" sx={{ fontWeight: 700 }}>OCR Match Results</Typography>
-                        <Button variant="contained" color="success" startIcon={<SaveAltIcon />} onClick={handleSaveScans} disabled={saveLoading}>
-                          {saveLoading ? 'Saving...' : 'Save Scanned Data'}
-                        </Button>
+                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                          {scanRows.some(r => r.status === 'Unmatched') && (
+                            <Button 
+                              variant="outlined" 
+                              color="primary" 
+                              startIcon={<PersonAddIcon />} 
+                              onClick={() => openCreateUserModal(scanRows.filter(r => r.status === 'Unmatched'))}
+                            >
+                              Create All Unmatched Users
+                            </Button>
+                          )}
+                          <Button variant="contained" color="success" startIcon={<SaveAltIcon />} onClick={handleSaveScans} disabled={saveLoading}>
+                            {saveLoading ? 'Saving...' : 'Save Scanned Data'}
+                          </Button>
+                        </Box>
                       </Box>
 
                       <TableContainer component={Paper} sx={{ borderRadius: '16px' }}>
@@ -603,8 +736,13 @@ export default function ScanZone() {
                                 </TableCell>
                                 <TableCell align="right" sx={{ minWidth: 120 }}>
                                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                                    <IconButton color="primary" onClick={() => openEditDialog(row)}><EditIcon /></IconButton>
-                                    <IconButton color="error" onClick={() => removeScanRow(row.id)}><DeleteOutlineIcon /></IconButton>
+                                    {row.status === 'Unmatched' && (
+                                      <IconButton color="success" onClick={() => openCreateUserModal([row])} title="Create New User">
+                                        <PersonAddIcon />
+                                      </IconButton>
+                                    )}
+                                    <IconButton color="primary" onClick={() => openEditDialog(row)} title="Edit"><EditIcon /></IconButton>
+                                    <IconButton color="error" onClick={() => removeScanRow(row.id)} title="Delete"><DeleteOutlineIcon /></IconButton>
                                   </Box>
                                 </TableCell>
                               </TableRow>
@@ -661,6 +799,59 @@ export default function ScanZone() {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={createUserModal.open} onClose={() => !createUserModal.loading && setCreateUserModal(prev => ({ ...prev, open: false }))} maxWidth="sm" fullWidth>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              {createUserModal.rows.length > 1 ? `Create ${createUserModal.rows.length} Users` : 'Create New User'}
+            </Typography>
+            
+            {createUserModal.rows.length === 1 && (
+              <TextField 
+                label="Account Name (From Scan)" 
+                fullWidth 
+                value={createUserModal.name} 
+                onChange={(e) => setCreateUserModal(prev => ({ ...prev, name: e.target.value }))} 
+                placeholder="E.g. SUBHADEEP JANA"
+              />
+            )}
+            
+            <Box>
+              <TextField 
+                label="Bulker ID (Short)" 
+                fullWidth 
+                value={createUserModal.shortBulkerId} 
+                onChange={(e) => setCreateUserModal(prev => ({ ...prev, shortBulkerId: e.target.value }))} 
+                placeholder="E.g. HFTF"
+              />
+              {(() => {
+                const sid = createUserModal.shortBulkerId.trim().toUpperCase();
+                if (!sid) return null;
+                const fullBulkerId = sid.startsWith('NOVAIRA/BULKER/') ? sid : `NOVAIRA/BULKER/${sid}`;
+                const matched = bulkers.find(b => b.bulker_id === fullBulkerId);
+                return matched ? (
+                  <Typography variant="caption" sx={{ color: 'success.main', mt: 1, display: 'block', fontWeight: 600 }}>
+                    <CheckCircleIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
+                    Verified Bulker: {matched.full_name}
+                  </Typography>
+                ) : (
+                  <Typography variant="caption" sx={{ color: 'error.main', mt: 1, display: 'block', fontWeight: 600 }}>
+                    Bulker not found.
+                  </Typography>
+                );
+              })()}
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button onClick={() => setCreateUserModal(prev => ({ ...prev, open: false }))} color="inherit" disabled={createUserModal.loading}>Cancel</Button>
+          <Button variant="contained" onClick={confirmCreateUser} disabled={createUserModal.loading}>
+            {createUserModal.loading ? 'Creating...' : 'Create User(s)'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
