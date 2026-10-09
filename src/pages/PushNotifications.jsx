@@ -18,6 +18,7 @@ export default function PushNotifications() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [link, setLink] = useState('');
+  const [image, setImage] = useState('');
   const [notiType, setNotiType] = useState('system'); // system, tasks, wallet
   
   const [sending, setSending] = useState(false);
@@ -56,6 +57,7 @@ export default function PushNotifications() {
           title,
           body: description,
           link,
+          image,
           type: notiType
         })
       });
@@ -65,6 +67,7 @@ export default function PushNotifications() {
         setTitle('');
         setDescription('');
         setLink('');
+        setImage('');
         setSelectedUsers([]);
       } else {
         throw new Error(data.error || 'Failed to send');
@@ -154,14 +157,24 @@ export default function PushNotifications() {
                 />
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField 
                   fullWidth label="Action Link (Optional)" variant="outlined" placeholder="https://"
                   value={link} onChange={(e) => setLink(e.target.value)}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
                 />
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                  If provided, tapping the notification will open this link in the app.
+                  Internal page or external URL
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField 
+                  fullWidth label="Image URL (Optional)" variant="outlined" placeholder="https://"
+                  value={image} onChange={(e) => setImage(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  URL to display as banner
                 </Typography>
               </Grid>
 
@@ -197,9 +210,12 @@ export default function PushNotifications() {
                   <Typography variant="caption" sx={{ ml: 'auto', color: 'text.disabled' }}>now</Typography>
                 </Box>
                 <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>{title || 'Notification Title'}</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', mb: image ? 1 : 0 }}>
                   {description || "This is how your description will appear on the user's lock screen."}
                 </Typography>
+                {image && (
+                  <Box sx={{ width: '100%', height: 120, mt: 1, borderRadius: '8px', overflow: 'hidden', backgroundImage: `url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center', border: '1px solid', borderColor: 'divider' }} />
+                )}
               </Box>
 
             </CardContent>
@@ -216,3 +232,6 @@ export default function PushNotifications() {
     </Box>
   );
 }
+
+
+

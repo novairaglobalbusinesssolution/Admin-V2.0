@@ -1,4 +1,4 @@
-﻿const nodemailer = require('nodemailer');
+const nodemailer = require('nodemailer');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
@@ -1034,7 +1034,7 @@ setInterval(async () => {
 // SEND CUSTOM PUSH NOTIFICATIONS
 // ----------------------------------------------------
 app.post('/api/send-custom-notification', async (req, res) => {
-    const { target, user_ids, title, body, link, type } = req.body;
+    const { target, user_ids, title, body, link, image, type } = req.body;
     
     if (!title || !body) {
         return res.status(400).json({ error: 'Missing title or body' });
@@ -1066,22 +1066,44 @@ app.post('/api/send-custom-notification', async (req, res) => {
 
         const validTokens = profilesData.filter(p => p.fcm_token).map(p => p.fcm_token);
         
+        if (validTokens.length === 0) {
+            return res.status(400).json({ error: 'Selected users do not have FCM tokens configured.' });
+        }
+        
         const chunkSize = 500;
         for (let i = 0; i < validTokens.length; i += chunkSize) {
             const chunk = validTokens.slice(i, i + chunkSize);
-            const message = {
-                notification: { title, body },
+                                    const message = {
                 data: {
+                    title: title,
+                    body: body,
                     type: type || 'system',
                     link: link || '',
-                    click_action: 'FLUTTER_NOTIFICATION_CLICK'
+                    image: image || ''
                 },
                 tokens: chunk
             };
             
-            try {
+                        try {
                 const response = await getFirebaseMessaging().sendEachForMulticast(message);
                 successCount += response.successCount;
+                
+                if (response.failureCount > 0) {
+                    const failedTokens = [];
+                    response.responses.forEach((resp, idx) => {
+                        if (!resp.success) {
+                            console.error("FCM Send Error for token", chunk[idx], ":", resp.error);
+                            if (resp.error && (resp.error.code === "messaging/invalid-registration-token" || resp.error.code === "messaging/registration-token-not-registered")) {
+                                failedTokens.push(chunk[idx]);
+                            }
+                        }
+                    });
+                    
+                    if (failedTokens.length > 0) {
+                        console.log("Removing", failedTokens.length, "invalid tokens from database");
+                        await supabase.from("profiles").update({ fcm_token: null }).in("fcm_token", failedTokens);
+                    }
+                }
             } catch (err) {
                 console.error('Firebase send error:', err);
             }
@@ -1209,3 +1231,8 @@ app.post('/api/cloudinary/upload', async (req, res) => {
         res.status(500).json({ error: 'Failed to upload image' });
     }
 });
+
+
+
+
+

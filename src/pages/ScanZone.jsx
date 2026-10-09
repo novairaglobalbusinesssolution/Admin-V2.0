@@ -280,7 +280,7 @@ export default function ScanZone() {
           const { data } = await worker.recognize(file);
           const text = data.text || '';
           const extractedName = extractUsernameFromOCR(text);
-          const match = getBestProfileMatch(text, bulkerMembers);
+          const match = getBestProfileMatch(text, profiles);
           rows.push({
             id: `${Date.now()}-${Math.random()}`, file, preview: URL.createObjectURL(file),
             ocrText: extractedName || text,
