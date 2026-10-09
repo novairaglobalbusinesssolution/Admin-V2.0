@@ -3,7 +3,8 @@ import {
   Box, Typography, Paper, TextField, Button, Grid, 
   CircularProgress, Snackbar, Alert, useTheme,
   Chip, IconButton, Tooltip,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, Collapse, Tabs, Tab
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, Collapse, Tabs, Tab,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -13,27 +14,44 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { supabase } from '../supabaseClient';
 
 function AppRow({ app, handleCopyList, theme }) {
-  const [open, setOpen] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
+  const [modalSearch, setModalSearch] = useState('');
+
+  const filteredUsers = (app.users || []).filter(u => {
+    if (!modalSearch) return true;
+    const q = modalSearch.toLowerCase();
+    if (typeof u === 'string') return u.toLowerCase().includes(q);
+    return (
+      (u.username || '').toLowerCase().includes(q) ||
+      (u.earnerName || '').toLowerCase().includes(q) ||
+      (u.earnerId || '').toLowerCase().includes(q)
+    );
+  });
 
   return (
     <>
-      <TableRow 
-        hover 
-        sx={{ 
-          '& > *': { borderBottom: 'unset' }, 
-          bgcolor: open ? (theme.palette.mode === 'light' ? '#f4f6f8' : 'rgba(255,255,255,0.05)') : 'inherit' 
-        }}
-      >
-        <TableCell>
-          <IconButton size="small" onClick={() => setOpen(!open)}>
-            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
-        </TableCell>
+      <TableRow hover sx={{ '& > *': { borderBottom: 'unset' } }}>
         <TableCell sx={{ fontWeight: 600, color: 'primary.main' }}>Task #{app.taskId}</TableCell>
         <TableCell sx={{ fontWeight: 600 }}>{app.appName}</TableCell>
+        <TableCell>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {app.sponsorName || 'Unknown'}
+          </Typography>
+          {app.sponsorId && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              {app.sponsorId}
+            </Typography>
+          )}
+        </TableCell>
         <TableCell>{app.appDate ? new Date(app.appDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</TableCell>
         <TableCell align="center">
-          <Chip label={app.users.length} size="small" color="primary" sx={{ fontWeight: 700 }} />
+          <Chip 
+            label={(app.users || []).length} 
+            size="small" 
+            color="primary" 
+            sx={{ fontWeight: 700, cursor: 'pointer' }} 
+            onClick={() => setOpenModal(true)} 
+          />
         </TableCell>
         <TableCell align="right">
           <Tooltip title="Copy Live List">
@@ -43,33 +61,146 @@ function AppRow({ app, handleCopyList, theme }) {
           </Tooltip>
         </TableCell>
       </TableRow>
-      <TableRow>
-        <TableCell style={{ paddingBottom: 0, paddingTop: 0, borderBottom: open ? undefined : 'none' }} colSpan={6}>
-          <Collapse in={open} timeout="auto" unmountOnExit>
-            <Box sx={{ m: 2, p: 2, bgcolor: theme.palette.mode === 'light' ? '#fff' : 'background.default', borderRadius: '12px', border: `1px solid ${theme.palette.divider}` }}>
-              <Typography variant="body2" sx={{ fontWeight: 600, mb: 2, textTransform: 'uppercase', color: 'text.secondary' }}>
-                Listed Usernames ({app.users.length})
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {app.users.map((username, idx) => (
-                  <Chip 
-                    key={idx} 
-                    label={username} 
-                    size="small" 
-                    variant="outlined"
-                    sx={{ 
-                      fontWeight: 600, 
-                      borderRadius: '8px',
-                      textTransform: 'uppercase',
-                      bgcolor: theme.palette.mode === 'light' ? '#f8f9fa' : 'transparent'
-                    }} 
-                  />
-                ))}
-              </Box>
-            </Box>
-          </Collapse>
+
+      <Dialog open={openModal} onClose={() => setOpenModal(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>Listed Users - Task #{app.taskId}</Typography>
+          <TextField
+            size="small"
+            placeholder="Search users..."
+            value={modalSearch}
+            onChange={(e) => setModalSearch(e.target.value)}
+            sx={{ minWidth: 250 }}
+            InputProps={{
+              startAdornment: <SearchIcon color="action" sx={{ mr: 1, fontSize: 20 }} />
+            }}
+          />
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <TableContainer>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700, bgcolor: 'background.default' }}>Submitted Username</TableCell>
+                  <TableCell sx={{ fontWeight: 700, bgcolor: 'background.default' }}>Earner Name</TableCell>
+                  <TableCell sx={{ fontWeight: 700, bgcolor: 'background.default' }}>Earner ID</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} align="center" sx={{ py: 3, color: 'text.secondary' }}>No users found matching "{modalSearch}"</TableCell>
+                  </TableRow>
+                ) : (
+                  filteredUsers.map((u, idx) => (
+                    <TableRow key={idx} hover>
+                      <TableCell sx={{ fontWeight: 600 }}>{typeof u === 'string' ? u : u.username}</TableCell>
+                      <TableCell>{typeof u === 'string' ? 'Loading...' : u.earnerName}</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>{typeof u === 'string' ? 'Loading...' : u.earnerId}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenModal(false)} color="inherit" sx={{ mr: 1, fontWeight: 600 }}>
+            Close
+          </Button>
+          <Button onClick={(e) => handleCopyList(e, app)} startIcon={<ContentCopyIcon />} color="primary" variant="contained" disableElevation sx={{ borderRadius: '8px', fontWeight: 600 }}>
+            Copy List
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
+function PendingAppRow({ app, theme }) {
+  const [openModal, setOpenModal] = useState(false);
+  const [modalSearch, setModalSearch] = useState('');
+
+  const filteredUsers = (app.users || []).filter(u => {
+    if (!modalSearch) return true;
+    const q = modalSearch.toLowerCase();
+    if (typeof u === 'string') return u.toLowerCase().includes(q);
+    return (
+      (u.username || '').toLowerCase().includes(q) ||
+      (u.earnerName || '').toLowerCase().includes(q) ||
+      (u.earnerId || '').toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <>
+      <TableRow hover sx={{ '& > *': { borderBottom: 'unset' } }}>
+        <TableCell sx={{ fontWeight: 600, color: 'primary.main' }}>Task #{app.taskId}</TableCell>
+        <TableCell sx={{ fontWeight: 600 }}>{app.appName}</TableCell>
+        <TableCell>{app.appDate ? new Date(app.appDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</TableCell>
+        <TableCell>{app.liveCheckingDate ? new Date(app.liveCheckingDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</TableCell>
+        <TableCell align="center">
+          <Chip 
+            label={app.pendingCount} 
+            size="small" 
+            color="warning" 
+            sx={{ fontWeight: 700, cursor: 'pointer' }} 
+            onClick={() => setOpenModal(true)} 
+          />
+        </TableCell>
+        <TableCell align="center">
+          <Chip label={app.totalCount} size="small" sx={{ fontWeight: 700 }} />
         </TableCell>
       </TableRow>
+
+      <Dialog open={openModal} onClose={() => setOpenModal(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>Pending Users - Task #{app.taskId}</Typography>
+          <TextField
+            size="small"
+            placeholder="Search users..."
+            value={modalSearch}
+            onChange={(e) => setModalSearch(e.target.value)}
+            sx={{ minWidth: 250 }}
+            InputProps={{
+              startAdornment: <SearchIcon color="action" sx={{ mr: 1, fontSize: 20 }} />
+            }}
+          />
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <TableContainer>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700, bgcolor: 'background.default' }}>Submitted Username</TableCell>
+                  <TableCell sx={{ fontWeight: 700, bgcolor: 'background.default' }}>Earner Name</TableCell>
+                  <TableCell sx={{ fontWeight: 700, bgcolor: 'background.default' }}>Earner ID</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} align="center" sx={{ py: 3, color: 'text.secondary' }}>No pending users found matching "{modalSearch}"</TableCell>
+                  </TableRow>
+                ) : (
+                  filteredUsers.map((u, idx) => (
+                    <TableRow key={idx} hover>
+                      <TableCell sx={{ fontWeight: 600 }}>{typeof u === 'string' ? u : u.username}</TableCell>
+                      <TableCell>{typeof u === 'string' ? 'Loading...' : u.earnerName}</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>{typeof u === 'string' ? 'Loading...' : u.earnerId}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOpenModal(false)} color="inherit" sx={{ mr: 1, fontWeight: 600 }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
@@ -77,7 +208,7 @@ function AppRow({ app, handleCopyList, theme }) {
 export default function LiveListView() {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
-  const [appsData, setAppsData] = useState([]);
+  const [liveAppsData, setLiveAppsData] = useState([]);
   const [filteredApps, setFilteredApps] = useState([]);
 
   const [activeTab, setActiveTab] = useState(0);
@@ -108,20 +239,61 @@ export default function LiveListView() {
     try {
       const { data, error } = await supabase
         .from('apps')
-        .select(`id, task_id, app_name, app_date, live_checking_date, review_submit_data ( status )`)
+        .select(`id, task_id, app_name, app_date, live_checking_date, review_submit_data ( status, submitted_username, earner_id )`)
         .order('task_id', { ascending: false });
 
       if (error) throw error;
+      
+      // Collect all earner_ids from all review_submit_data across all apps
+      let allEarnerIds = [];
+      data.forEach(app => {
+         if (app.review_submit_data) {
+             app.review_submit_data.forEach(r => {
+                 if (r.earner_id) allEarnerIds.push(r.earner_id);
+             });
+         }
+      });
+      const uniqueEarnerIds = [...new Set(allEarnerIds)];
+      
+      const { data: profiles } = await supabase.from('profiles').select('earner_id, first_name, last_name').in('earner_id', uniqueEarnerIds);
+      
+      const nameMap = {};
+      if (profiles) {
+         profiles.forEach(p => {
+             nameMap[p.earner_id] = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
+         });
+      }
 
       const pending = data.map(app => {
          const reviews = app.review_submit_data || [];
+         const pendingReviews = reviews.filter(r => r.status === 'Under Review');
+         
+         const pendingUsers = pendingReviews.map(r => {
+            let eName = nameMap[r.earner_id];
+            if (!eName || eName === 'Unknown') {
+              if (r.earner_id && !r.earner_id.startsWith('NOVAIRA/')) {
+                eName = r.earner_id;
+              } else if (r.submitted_username) {
+                eName = r.submitted_username;
+              } else {
+                eName = r.earner_id || 'Member';
+              }
+            }
+            return {
+              username: r.submitted_username || 'Unknown',
+              earnerId: r.earner_id || 'N/A',
+              earnerName: eName
+            };
+         });
+         
          return {
             taskId: app.task_id,
             appName: app.app_name,
             appDate: app.app_date,
             liveCheckingDate: app.live_checking_date,
-            pendingCount: reviews.filter(r => r.status === 'Under Review').length,
-            totalCount: reviews.length
+            pendingCount: pendingReviews.length,
+            totalCount: reviews.length,
+            users: pendingUsers
          }
       }).filter(app => app.pendingCount > 0);
 
@@ -171,33 +343,83 @@ export default function LiveListView() {
         .select(`
           id, 
           submitted_username, 
+          earner_id,
           app_id, 
-          apps ( task_id, app_name, app_date, task_type )
+          apps ( task_id, app_name, app_date, task_type, sponsor_type, sponsor_id )
         `)
         .eq('status', 'Live')
         .order('submitted_at', { ascending: true });
 
       if (error) throw error;
+      
+      const earnerIds = [...new Set(data.map(d => d.earner_id).filter(Boolean))];
+      const allSponsorIds = [...new Set(data.map(d => d.apps?.sponsor_id).filter(Boolean))];
+
+      const [profilesRes, clientsRes, providersRes] = await Promise.all([
+        supabase.from('profiles').select('earner_id, first_name, last_name').in('earner_id', earnerIds),
+        allSponsorIds.length > 0 ? supabase.from('clients').select('client_id, name').in('client_id', allSponsorIds) : Promise.resolve({ data: [] }),
+        allSponsorIds.length > 0 ? supabase.from('providers').select('provider_id, name').in('provider_id', allSponsorIds) : Promise.resolve({ data: [] })
+      ]);
+      
+      const nameMap = {};
+      if (profilesRes.data) {
+         profilesRes.data.forEach(p => {
+             nameMap[p.earner_id] = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
+         });
+      }
+
+      const sponsorMap = {};
+      (clientsRes.data || []).forEach(c => {
+        sponsorMap[c.client_id] = { name: c.name, id: c.client_id };
+      });
+      (providersRes.data || []).forEach(p => {
+        sponsorMap[p.provider_id] = { name: p.name, id: p.provider_id };
+      });
 
       const grouped = {};
       data.forEach(row => {
         if (!row.apps) return;
         const appId = row.app_id;
+        const sId = row.apps.sponsor_id;
+        const sInfo = sponsorMap[sId];
+        const shortSponsorCode = sId ? sId.split('/').pop() : '';
+        const sponsorName = sInfo?.name || (shortSponsorCode ? `${row.apps.sponsor_type || 'Provider'} (${shortSponsorCode})` : (row.apps.sponsor_type || 'Direct'));
+        const sponsorId = sInfo?.id || sId || 'N/A';
+
         if (!grouped[appId]) {
           grouped[appId] = {
             appId: appId,
             taskId: row.apps.task_id,
             appName: row.apps.app_name,
+            sponsorName: sponsorName,
+            sponsorId: sponsorId,
+            provider: `${sponsorName} (${sponsorId})`,
             appDate: row.apps.app_date,
             taskType: row.apps.task_type,
             users: []
           };
         }
-        grouped[appId].users.push(row.submitted_username);
+
+        let earnerName = nameMap[row.earner_id];
+        if (!earnerName || earnerName === 'Unknown') {
+          if (row.earner_id && !row.earner_id.startsWith('NOVAIRA/')) {
+            earnerName = row.earner_id;
+          } else if (row.submitted_username) {
+            earnerName = row.submitted_username;
+          } else {
+            earnerName = row.earner_id || 'Member';
+          }
+        }
+
+        grouped[appId].users.push({
+            username: row.submitted_username || 'Unknown',
+            earnerId: row.earner_id || 'N/A',
+            earnerName: earnerName
+        });
       });
 
       const appsArray = Object.values(grouped).sort((a, b) => b.taskId - a.taskId);
-      setAppsData(appsArray);
+      setLiveAppsData(appsArray);
       setFilteredApps(appsArray);
     } catch (err) {
       console.error(err);
@@ -208,14 +430,20 @@ export default function LiveListView() {
   };
 
   useEffect(() => {
-    let result = appsData;
+    let result = liveAppsData;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(app => 
         app.taskId.toString().includes(q) || 
         app.appName.toLowerCase().includes(q) ||
-        app.users.some(u => u.toLowerCase().includes(q))
+        (app.sponsorName && app.sponsorName.toLowerCase().includes(q)) ||
+        (app.sponsorId && app.sponsorId.toLowerCase().includes(q)) ||
+        app.users.some(u => 
+            (u.username || '').toLowerCase().includes(q) || 
+            (u.earnerId || '').toLowerCase().includes(q) || 
+            (u.earnerName || '').toLowerCase().includes(q)
+        )
       );
     }
 
@@ -228,7 +456,7 @@ export default function LiveListView() {
 
     setFilteredApps(result);
     setPage(0); // Reset to first page on filter change
-  }, [searchQuery, dateFilter, appsData]);
+  }, [searchQuery, dateFilter, liveAppsData]);
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
@@ -251,7 +479,7 @@ export default function LiveListView() {
     textToCopy += `APP DATE: ${formattedDate}\n\n`;
 
     app.users.forEach(u => {
-      textToCopy += `${u.toUpperCase()}\n`;
+      textToCopy += `${u.username.toUpperCase()}\n`;
     });
 
     textToCopy += `\nTOTAL LIVE : ${app.users.length}`;
@@ -332,9 +560,9 @@ export default function LiveListView() {
               <Table>
                 <TableHead sx={{ bgcolor: theme.palette.mode === 'light' ? '#f8f9fa' : 'rgba(255,255,255,0.05)' }}>
                   <TableRow>
-                    <TableCell width="50"></TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Task ID</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>App Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Client / Provider</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>App Date</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700 }}>Live Users</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>Action</TableCell>
@@ -393,18 +621,7 @@ export default function LiveListView() {
                   </TableHead>
                   <TableBody>
                     {filteredPendingApps.slice(pendingPage * pendingRowsPerPage, pendingPage * pendingRowsPerPage + pendingRowsPerPage).map(app => (
-                      <TableRow key={app.taskId} hover>
-                        <TableCell sx={{ fontWeight: 600, color: 'primary.main' }}>Task #{app.taskId}</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>{app.appName}</TableCell>
-                        <TableCell>{app.appDate ? new Date(app.appDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</TableCell>
-                        <TableCell>{app.liveCheckingDate ? new Date(app.liveCheckingDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</TableCell>
-                        <TableCell align="center">
-                          <Chip label={app.pendingCount} size="small" color="warning" sx={{ fontWeight: 700 }} />
-                        </TableCell>
-                        <TableCell align="center">
-                          <Chip label={app.totalCount} size="small" sx={{ fontWeight: 700 }} />
-                        </TableCell>
-                      </TableRow>
+                      <PendingAppRow key={app.taskId} app={app} theme={theme} />
                     ))}
                   </TableBody>
                 </Table>

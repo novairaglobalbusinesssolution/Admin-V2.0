@@ -105,11 +105,38 @@ export default function LiveListManagement() {
       // Format bulkers string
       const assignedBulkers = (appData.assigned_bulkers || []).map(b => b.bulker_id).join(', ') || 'None';
 
+      // Fetch Sponsor Name from clients or providers
+      let sponsorName = '';
+      if (appData.sponsor_id) {
+        const isClient = appData.sponsor_type === 'Clients' || appData.sponsor_type === 'Client';
+        const [cRes, pRes] = await Promise.all([
+          supabase.from('clients').select('name').eq('client_id', appData.sponsor_id).maybeSingle(),
+          supabase.from('providers').select('name').eq('provider_id', appData.sponsor_id).maybeSingle()
+        ]);
+        if (isClient && cRes.data?.name) {
+          sponsorName = cRes.data.name;
+        } else if (pRes.data?.name) {
+          sponsorName = pRes.data.name;
+        } else if (cRes.data?.name) {
+          sponsorName = cRes.data.name;
+        }
+      }
+
+      if (!sponsorName) {
+        const shortCode = appData.sponsor_id ? appData.sponsor_id.split('/').pop() : '';
+        sponsorName = shortCode ? `${appData.sponsor_type || 'Provider'} (${shortCode})` : (appData.sponsor_type || 'Direct');
+      }
+
+      const sponsorTypeLabel = (appData.sponsor_type === 'Clients' || appData.sponsor_type === 'Client') ? 'Client' : 'Provider';
+
       setAppDetails({
         id: appData.id,
         taskId: appData.task_id,
         name: appData.app_name,
-        provider: appData.sponsor_type === 'Providers' ? appData.sponsor_id : (appData.sponsor_type || 'Unknown'),
+        provider: `${sponsorName} (${appData.sponsor_id || 'N/A'})`,
+        sponsorName: sponsorName,
+        sponsorId: appData.sponsor_id || 'N/A',
+        sponsorType: sponsorTypeLabel,
         memberReward: `Rs. ${appData.members_reward || 0}`,
         rawMemberReward: appData.members_reward || 0,
         sponsorReward: `Rs. ${appData.sponsor_amount || 0}`,
@@ -118,7 +145,8 @@ export default function LiveListManagement() {
         appDate: formatKolkataDate(appData.app_date),
         liveCheckingDate: formatKolkataDate(appData.live_checking_date),
         bulkers: assignedBulkers,
-        assignedBulkersList: appData.assigned_bulkers || []
+        assignedBulkersList: appData.assigned_bulkers || [],
+        instructions: appData.instructions || 'None'
       });
 
       // 2. Fetch submitted reviews for this app
@@ -149,7 +177,16 @@ export default function LiveListManagement() {
         }
         
         finalMembers = finalMembers.map(m => {
-          const eName = nameMap[m.earner_id] || 'Unknown';
+          let eName = nameMap[m.earner_id];
+          if (!eName) {
+            if (m.earner_id && !m.earner_id.startsWith('NOVAIRA/')) {
+              eName = m.earner_id;
+            } else if (m.submitted_username) {
+              eName = m.submitted_username;
+            } else {
+              eName = m.earner_id || 'Earner';
+            }
+          }
           const eShortId = m.earner_id ? m.earner_id.split('/').pop() : '';
           
           // Intelligent Bulker Matching (handles with or without NOVAIRA/BULKER/ prefix)
@@ -684,27 +721,39 @@ export default function LiveListManagement() {
     }
     setAddingMissing(true);
     try {
-      // 1. Get an available comment for this app
-      const { data: comments, error: comErr } = await supabase
+      // Get any existing comment to satisfy NOT NULL constraint
+      let commentIdToUse = null;
+      const { data: existingComments } = await supabase
         .from('app_comments')
         .select('id')
         .eq('app_id', appDetails.id)
-        .eq('status', 'active')
         .limit(1);
 
-      if (comErr) throw comErr;
-      if (!comments || comments.length === 0) {
-        throw new Error("No available active comments found for this app. Cannot assign a missing member.");
+      if (existingComments && existingComments.length > 0) {
+        commentIdToUse = existingComments[0].id;
+      } else {
+        // Create a dummy comment if none exist
+        const { data: newComment, error: dummyErr } = await supabase
+          .from('app_comments')
+          .insert({
+            app_id: appDetails.id,
+            content: 'Manual Entry Dummy Comment',
+            rating: 5,
+            status: 'completed'
+          })
+          .select('id')
+          .single();
+
+        if (dummyErr) throw new Error("Failed to create dummy comment: " + dummyErr.message);
+        commentIdToUse = newComment.id;
       }
 
-      const commentId = comments[0].id;
-
-      // 2. Insert into review_submit_data
+      // Insert into review_submit_data
       const { error: insertErr } = await supabase
         .from('review_submit_data')
         .insert({
           app_id: appDetails.id,
-          comment_id: commentId,
+          comment_id: commentIdToUse,
           earner_id: missingData.earnerId,
           bulker_id: missingData.bulkerId,
           submitted_username: missingData.username,
@@ -713,9 +762,6 @@ export default function LiveListManagement() {
         });
 
       if (insertErr) throw insertErr;
-
-      // 3. Mark comment as completed
-      await supabase.from('app_comments').update({ status: 'completed' }).eq('id', commentId);
 
       setSnack({ open: true, message: 'Missing member added successfully!', severity: 'success' });
       setAddMissingOpen(false);
@@ -854,8 +900,15 @@ export default function LiveListManagement() {
                 </Box>
               </Grid>
               <Grid item xs={6} md={2}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Provider</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 600 }}>{appDetails.provider}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
+                  {appDetails.sponsorType || 'Client / Provider'}
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600 }}>{appDetails.sponsorName || 'Unknown'}</Typography>
+                {appDetails.sponsorId && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {appDetails.sponsorId}
+                  </Typography>
+                )}
               </Grid>
               <Grid item xs={6} md={2}>
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Rewards</Typography>
@@ -876,6 +929,12 @@ export default function LiveListManagement() {
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Assigned Bulkers</Typography>
                 <Typography variant="body1" sx={{ fontWeight: 600 }}>{appDetails.bulkers}</Typography>
               </Grid>
+              <Grid item xs={12}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Instructions / Hint</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500, whiteSpace: 'pre-line', mt: 0.5, bgcolor: theme.palette.mode === 'light' ? '#f5f5f5' : '#222', p: 1.5, borderRadius: '8px' }}>
+                  {appDetails.instructions}
+                </Typography>
+              </Grid>
             </Grid>
           </Box>
         )}
@@ -886,7 +945,12 @@ export default function LiveListManagement() {
         <Paper elevation={0} sx={{ overflow: 'hidden', borderRadius: '24px', border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none' }}>
           <Box sx={{ p: 3, bgcolor: theme.palette.mode === 'light' ? '#fcfcfc' : 'background.paper', borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>Submitted Members ({filteredMembers.length})</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>Submitted Members ({filteredMembers.length})</Typography>
+                {selectedIds.length > 0 && (
+                  <Chip size="small" label={`${selectedIds.length} Selected`} color="primary" sx={{ fontWeight: 600 }} />
+                )}
+              </Box>
               {filteredMembers.length > 0 && (
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   <Checkbox 
