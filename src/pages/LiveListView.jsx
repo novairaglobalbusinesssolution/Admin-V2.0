@@ -3,7 +3,7 @@ import {
   Box, Typography, Paper, TextField, Button, Grid, 
   CircularProgress, Snackbar, Alert, useTheme,
   Chip, IconButton, Tooltip,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, Collapse
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, Collapse, Tabs, Tab
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -79,6 +79,14 @@ export default function LiveListView() {
   const [loading, setLoading] = useState(true);
   const [appsData, setAppsData] = useState([]);
   const [filteredApps, setFilteredApps] = useState([]);
+
+  const [activeTab, setActiveTab] = useState(0);
+  const [pendingAppsData, setPendingAppsData] = useState([]);
+  const [filteredPendingApps, setFilteredPendingApps] = useState([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [pendingPage, setPendingPage] = useState(0);
+  const [pendingRowsPerPage, setPendingRowsPerPage] = useState(10);
+
   
   // Pagination
   const [page, setPage] = useState(0);
@@ -93,6 +101,67 @@ export default function LiveListView() {
   useEffect(() => {
     fetchLiveLists();
   }, []);
+
+  
+  const fetchPendingApps = async () => {
+    setLoadingPending(true);
+    try {
+      const { data, error } = await supabase
+        .from('apps')
+        .select(`id, task_id, app_name, app_date, live_checking_date, review_submit_data ( status )`)
+        .order('task_id', { ascending: false });
+
+      if (error) throw error;
+
+      const pending = data.map(app => {
+         const reviews = app.review_submit_data || [];
+         return {
+            taskId: app.task_id,
+            appName: app.app_name,
+            appDate: app.app_date,
+            liveCheckingDate: app.live_checking_date,
+            pendingCount: reviews.filter(r => r.status === 'Under Review').length,
+            totalCount: reviews.length
+         }
+      }).filter(app => app.pendingCount > 0);
+
+      setPendingAppsData(pending);
+      setFilteredPendingApps(pending);
+    } catch(err) {
+      console.error(err);
+      setSnack({ open: true, message: 'Failed to fetch pending apps.', severity: 'error' });
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 1 && pendingAppsData.length === 0) {
+      fetchPendingApps();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    let result = pendingAppsData;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(app => 
+        app.taskId.toString().includes(q) || 
+        app.appName.toLowerCase().includes(q)
+      );
+    }
+
+    if (dateFilter) {
+      result = result.filter(app => {
+        if (!app.appDate) return false;
+        return app.appDate.startsWith(dateFilter);
+      });
+    }
+
+    setFilteredPendingApps(result);
+    setPendingPage(0);
+  }, [searchQuery, dateFilter, pendingAppsData]);
 
   const fetchLiveLists = async () => {
     setLoading(true);
@@ -198,19 +267,19 @@ export default function LiveListView() {
   // Calculate pagination data
   const paginatedApps = filteredApps.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
+
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', mt: 1, pb: 10 }}>
       
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600 }}>
-          All Live Lists
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          View and copy live member details for all tasks.
-        </Typography>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
+          <Tab label="Live List" sx={{ fontWeight: 700, textTransform: 'none', fontSize: '1rem' }} />
+          <Tab label="Live Pending List" sx={{ fontWeight: 700, textTransform: 'none', fontSize: '1rem' }} />
+        </Tabs>
       </Box>
 
       {/* Card 1: Advanced Filtering */}
+
       <Paper elevation={0} sx={{ p: 3, borderRadius: '24px', mb: 4, border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none' }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
           <FilterAltIcon color="primary" /> Advanced Filtering
@@ -244,8 +313,9 @@ export default function LiveListView() {
         </Grid>
       </Paper>
 
-      {/* Card 2: App List */}
-      <Paper elevation={0} sx={{ borderRadius: '24px', border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none', overflow: 'hidden' }}>
+      
+      {activeTab === 0 && (
+        <Paper elevation={0} sx={{ borderRadius: '24px', border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none', overflow: 'hidden' }}>
         <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
             Apps with Live Members ({filteredApps.length})
@@ -291,6 +361,69 @@ export default function LiveListView() {
           </>
         )}
       </Paper>
+      )}
+
+      {activeTab === 1 && (
+        <Paper elevation={0} sx={{ borderRadius: '24px', border: theme.palette.mode === 'light' ? `1px solid ${theme.palette.divider}` : 'none', overflow: 'hidden' }}>
+          <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Pending Apps ({filteredPendingApps.length})
+            </Typography>
+          </Box>
+
+          {loadingPending ? (
+            <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
+          ) : filteredPendingApps.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
+              No pending apps found.
+            </Box>
+          ) : (
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead sx={{ bgcolor: theme.palette.mode === 'light' ? '#f8f9fa' : 'rgba(255,255,255,0.05)' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Task ID</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>App Name</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>App Date</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Live Check Date</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700 }}>Pending Users</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700 }}>Total Users</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredPendingApps.slice(pendingPage * pendingRowsPerPage, pendingPage * pendingRowsPerPage + pendingRowsPerPage).map(app => (
+                      <TableRow key={app.taskId} hover>
+                        <TableCell sx={{ fontWeight: 600, color: 'primary.main' }}>Task #{app.taskId}</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>{app.appName}</TableCell>
+                        <TableCell>{app.appDate ? new Date(app.appDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</TableCell>
+                        <TableCell>{app.liveCheckingDate ? new Date(app.liveCheckingDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'N/A'}</TableCell>
+                        <TableCell align="center">
+                          <Chip label={app.pendingCount} size="small" color="warning" sx={{ fontWeight: 700 }} />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip label={app.totalCount} size="small" sx={{ fontWeight: 700 }} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              
+              <TablePagination
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                component="div"
+                count={filteredPendingApps.length}
+                rowsPerPage={pendingRowsPerPage}
+                page={pendingPage}
+                onPageChange={(e, newPage) => setPendingPage(newPage)}
+                onRowsPerPageChange={(e) => { setPendingRowsPerPage(parseInt(e.target.value, 10)); setPendingPage(0); }}
+                sx={{ borderTop: `1px solid ${theme.palette.divider}` }}
+              />
+            </>
+          )}
+        </Paper>
+      )}
 
       <Snackbar 
         open={snack.open} 

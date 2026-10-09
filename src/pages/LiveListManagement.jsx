@@ -3,7 +3,7 @@ import {
   Box, Typography, Paper, TextField, Button, Grid, 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Checkbox, Chip, IconButton, useTheme, Snackbar, Alert, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete
+  Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Tabs, Tab
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -22,6 +22,59 @@ export default function LiveListManagement() {
   const [members, setMembers] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [activeTab, setActiveTab] = useState(0);
+  const [pendingApps, setPendingApps] = useState([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [pendingSearch, setPendingSearch] = useState('');
+
+  const fetchPendingApps = async () => {
+    setLoadingPending(true);
+    try {
+      const { data: appsData, error: appsErr } = await supabase
+        .from('apps')
+        .select('id, task_id, app_name, app_date, live_checking_date, status, review_submit_data(id, status)')
+        .order('created_at', { ascending: false });
+
+      if (appsErr) throw appsErr;
+
+      const processed = appsData.map(app => {
+        const submissions = app.review_submit_data || [];
+        const total = submissions.length;
+        const pending = submissions.filter(r => r.status === 'Under Review').length;
+        return {
+          ...app,
+          totalSubmissions: total,
+          pendingSubmissions: pending
+        };
+      }).filter(app => app.pendingSubmissions > 0);
+
+      setPendingApps(processed);
+    } catch (e) {
+      setSnack({ open: true, message: 'Failed to fetch pending apps', severity: 'error' });
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 1) {
+      fetchPendingApps();
+    }
+  }, [activeTab]);
+
+  const handleOpenTask = (taskId) => {
+    setTaskIdInput(taskId.toString());
+    setActiveTab(0);
+    // Use timeout to allow tab switch state to settle before fetching
+    setTimeout(() => {
+      const formEvent = { preventDefault: () => {} };
+      document.getElementById('task-id-input').value = taskId;
+      setTaskIdInput(taskId.toString());
+      fetchAppDetails(formEvent);
+    }, 100);
+  };
+
   
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
 
@@ -731,6 +784,17 @@ export default function LiveListManagement() {
         `}
       </style>
 
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
+          <Tab label="Live List" sx={{ fontWeight: 700, textTransform: 'none', fontSize: '1rem' }} />
+          <Tab label="Live Pending List" sx={{ fontWeight: 700, textTransform: 'none', fontSize: '1rem' }} />
+        </Tabs>
+      </Box>
+
+      {activeTab === 0 && (
+        <Box>
+
+
       <Box sx={{ mb: 4 }}>
         <Typography variant="h5" sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600 }}>
           Live List Configuration
@@ -937,6 +1001,63 @@ export default function LiveListManagement() {
             </Button>
           </Box>
         </Paper>
+      )}
+
+        </Box>
+      )}
+
+      {activeTab === 1 && (
+        <Box>
+          <Paper sx={{ p: 4, borderRadius: '24px', boxShadow: '0px 10px 30px rgba(0,0,0,0.05)' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+              <Typography variant="h5" sx={{ fontWeight: 800 }}>Pending Live Apps</Typography>
+              <TextField 
+                size="small" placeholder="Search apps..." value={pendingSearch} onChange={(e) => setPendingSearch(e.target.value)}
+                InputProps={{ startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} /> }}
+                sx={{ width: 300, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+              />
+            </Box>
+            
+            {loadingPending ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><CircularProgress /></Box>
+            ) : (
+              <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '12px' }}>
+                <Table>
+                  <TableHead sx={{ bgcolor: 'rgba(0,0,0,0.02)' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Task ID</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>App Name</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Live Check Date</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700 }}>Pending / Total</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>Action</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pendingApps.filter(a => a.app_name.toLowerCase().includes(pendingSearch.toLowerCase()) || a.task_id.toString().includes(pendingSearch)).map(app => (
+                      <TableRow key={app.id} hover>
+                        <TableCell sx={{ fontWeight: 700 }}>#{app.task_id}</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>{app.app_name}</TableCell>
+                        <TableCell><Chip size="small" label={app.status} color={app.status === 'active' ? 'success' : 'default'} sx={{ textTransform: 'capitalize' }} /></TableCell>
+                        <TableCell>{formatKolkataDate(app.live_checking_date)}</TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.main' }}>{app.pendingSubmissions} Pending</Typography>
+                          <Typography variant="caption" color="text.secondary">of {app.totalSubmissions} Total</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button variant="contained" size="small" onClick={() => handleOpenTask(app.task_id)} sx={{ borderRadius: '8px', textTransform: 'none' }}>Check Live List</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {pendingApps.length === 0 && (
+                      <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}><Typography color="text.secondary">No pending apps found.</Typography></TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Paper>
+        </Box>
       )}
 
       <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack({...snack, open: false})} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
