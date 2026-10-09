@@ -80,7 +80,7 @@ export default function AddComment() {
   }, [scheduleTime]);
 
   const fetchApps = async (selectedDate = scheduleTime) => {
-    let query = supabase.from('apps').select('id, app_name, app_package, task_id, task_type, app_date, instructions');
+    let query = supabase.from('apps').select('id, app_name, app_package, task_id, task_type, app_date, instructions, assigned_bulkers');
 
     if (selectedDate) {
       query = query.eq('app_date', selectedDate);
@@ -131,6 +131,20 @@ export default function AddComment() {
 
   // Determine effective current task type
   const effectiveType = selectedApp?.task_type || (selectedCategory !== 'All' ? selectedCategory : 'Android App');
+
+  // Get list of assigned bulkers for display
+  const assignedBulkersDisplay = useMemo(() => {
+    if (!selectedApp) return [];
+    let raw = selectedApp.assigned_bulkers;
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch (e) {}
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.map(b => {
+      const bId = typeof b === 'string' ? b : (b?.bulker_id || '');
+      return bId.replace(/^NOVAIRA\/BULKER\//i, '');
+    }).filter(Boolean);
+  }, [selectedApp]);
 
   // Comment Parser
   const parseText = (text, rating) => {
@@ -230,7 +244,7 @@ export default function AddComment() {
         for (let i = 0; i < count; i++) {
           newComments.push({
             app_id: selectedApp.id,
-            content: regProcedure.trim(),
+            content: '', // Registration tasks use instructions, no dummy comment text
             rating: 5,
             status: 'active'
           });
@@ -250,15 +264,16 @@ export default function AddComment() {
         if (ytCommentMode === 'custom_comments') {
           newComments = parseText(ytCommentsText, 5);
           if (newComments.length === 0) {
-            throw new Error('Please paste at least one YouTube comment.');
+            throw new Error('Please paste at least one YouTube comment (Admin custom added).');
           }
         } else {
+          // Watch & Like only (Without Comment): Slots created with strictly blank content. Zero dummy comments!
           const count = parseInt(ytSlots || 1, 10);
           if (count <= 0) throw new Error('Please specify at least 1 video watch slot.');
           for (let i = 0; i < count; i++) {
             newComments.push({
               app_id: selectedApp.id,
-              content: ytProcedure.trim(),
+              content: '', // Admin did not add extra comment, so content is completely blank
               rating: 5,
               status: 'active'
             });
@@ -276,12 +291,25 @@ export default function AddComment() {
         if (insertError) throw insertError;
       }
 
-      // 5. Trigger Notifications
+      // 5. Trigger Notifications exclusively to workers of assigned bulkers
       try {
+        let assignedBulkerIds = [];
+        if (selectedApp.assigned_bulkers) {
+          let rawB = selectedApp.assigned_bulkers;
+          if (typeof rawB === 'string') {
+            try { rawB = JSON.parse(rawB); } catch(e) {}
+          }
+          if (Array.isArray(rawB)) {
+            assignedBulkerIds = rawB.map(b => typeof b === 'string' ? b : b?.bulker_id).filter(Boolean);
+          }
+        }
+
         await fetch(`${import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com'}/api/send-bulk-notification`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            app_id: selectedApp.id,
+            bulker_ids: assignedBulkerIds,
             title: `New ${effectiveType} Task Available!`,
             body: `Task for "${selectedApp.app_name}" has been published with ${newComments.length} slots. Earn rewards now!`,
             type: 'task'
@@ -294,7 +322,7 @@ export default function AddComment() {
       setAlertData({ 
         open: true, 
         title: 'Task Configured Successfully!', 
-        message: `Deployed ${newComments.length} task slots/comments for "${selectedApp.app_name}". Users have been notified.`, 
+        message: `Deployed ${newComments.length} task slots/comments for "${selectedApp.app_name}". Push notification sent exclusively to assigned bulker earners!`, 
         type: 'success' 
       });
 
@@ -393,6 +421,36 @@ export default function AddComment() {
               )}
               fullWidth
             />
+            {selectedApp && (
+              <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  Assigned Bulker(s):
+                </Typography>
+                {assignedBulkersDisplay.length > 0 ? (
+                  assignedBulkersDisplay.map((bName) => (
+                    <Chip 
+                      key={bName} 
+                      label={bName} 
+                      size="small" 
+                      variant="outlined" 
+                      color="primary"
+                      sx={{ fontWeight: 700, borderRadius: '8px' }} 
+                    />
+                  ))
+                ) : (
+                  <Chip 
+                    label="No Bulkers Assigned" 
+                    size="small" 
+                    color="warning" 
+                    variant="outlined"
+                    sx={{ fontWeight: 600, borderRadius: '8px' }} 
+                  />
+                )}
+                <Typography variant="caption" sx={{ color: 'text.secondary', ml: 0.5 }}>
+                  (Push notification will strictly reach ONLY devices of workers under {assignedBulkersDisplay.length > 0 ? `these ${assignedBulkersDisplay.length} bulker(s)` : 'assigned bulkers'})
+                </Typography>
+              </Box>
+            )}
           </Box>
           <Box sx={{ flex: 1, minWidth: '220px' }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Publish Date (IST Kolkata)</Typography>
@@ -741,9 +799,14 @@ export default function AddComment() {
                   onChange={(e) => setYtCommentMode(e.target.value)}
                   sx={{ borderRadius: '12px', minHeight: 45 }}
                 >
-                  <MenuItem value="none">Watch, Like & Subscribe Only</MenuItem>
-                  <MenuItem value="custom_comments">Post Specific Comments</MenuItem>
+                  <MenuItem value="none">Watch, Like & Subscribe Only (Without Comment)</MenuItem>
+                  <MenuItem value="custom_comments">Post Specific Comments (Admin Added Only)</MenuItem>
                 </Select>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                  {ytCommentMode === 'none' 
+                    ? 'Pure watch & like task. Absolutely no dummy comments will be added.' 
+                    : 'Only comments explicitly entered by you will be assigned.'}
+                </Typography>
               </Grid>
 
               {/* Task Description / Procedure */}

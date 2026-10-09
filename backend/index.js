@@ -320,7 +320,7 @@ function getFirebaseMessaging() {
 
 // Bulk Push Notification Route
 app.post('/api/send-bulk-notification', async (req, res) => {
-    const { title, body, type } = req.body;
+    const { title, body, type, app_id, bulker_ids } = req.body;
     
     if (!title || !body) {
         return res.status(400).json({ error: 'Missing title or body' });
@@ -331,13 +331,105 @@ app.post('/api/send-bulk-notification', async (req, res) => {
     }
     
     try {
-        // Fetch ALL earner profiles
-        const { data: profiles, error: profileErr } = await supabase
+        const targetBulkers = new Set();
+
+        // 1. If app_id is provided, resolve assigned bulkers for this app
+        if (app_id) {
+            const { data: appData } = await supabase
+                .from('apps')
+                .select('id, app_name, assigned_bulkers')
+                .eq('id', app_id)
+                .single();
+
+            if (appData && appData.assigned_bulkers) {
+                let rawAssigned = appData.assigned_bulkers;
+                if (typeof rawAssigned === 'string') {
+                    try { rawAssigned = JSON.parse(rawAssigned); } catch (e) {}
+                }
+                if (Array.isArray(rawAssigned)) {
+                    rawAssigned.forEach(b => {
+                        const bId = typeof b === 'string' ? b : (b?.bulker_id || '');
+                        if (bId) {
+                            const short = String(bId).replace(/^NOVAIRA\/BULKER\//i, '').trim().toUpperCase();
+                            const full = String(bId).toUpperCase().startsWith('NOVAIRA/BULKER/') ? String(bId).toUpperCase() : `NOVAIRA/BULKER/${String(bId).toUpperCase()}`;
+                            targetBulkers.add(short);
+                            targetBulkers.add(full);
+                            targetBulkers.add(String(bId).trim().toUpperCase());
+                        }
+                    });
+                }
+            }
+
+            // Also check bulker_app_acceptances table
+            const { data: acceptances } = await supabase
+                .from('bulker_app_acceptances')
+                .select('bulker_id')
+                .eq('app_id', app_id)
+                .eq('status', 'accepted');
+
+            if (acceptances && Array.isArray(acceptances)) {
+                acceptances.forEach(acc => {
+                    const bId = acc.bulker_id || '';
+                    if (bId) {
+                        const short = String(bId).replace(/^NOVAIRA\/BULKER\//i, '').trim().toUpperCase();
+                        const full = String(bId).toUpperCase().startsWith('NOVAIRA/BULKER/') ? String(bId).toUpperCase() : `NOVAIRA/BULKER/${String(bId).toUpperCase()}`;
+                        targetBulkers.add(short);
+                        targetBulkers.add(full);
+                        targetBulkers.add(String(bId).trim().toUpperCase());
+                    }
+                });
+            }
+        }
+
+        // 2. Direct bulker_ids if provided in payload
+        if (Array.isArray(bulker_ids)) {
+            bulker_ids.forEach(bId => {
+                if (bId) {
+                    const short = String(bId).replace(/^NOVAIRA\/BULKER\//i, '').trim().toUpperCase();
+                    const full = String(bId).toUpperCase().startsWith('NOVAIRA/BULKER/') ? String(bId).toUpperCase() : `NOVAIRA/BULKER/${String(bId).toUpperCase()}`;
+                    targetBulkers.add(short);
+                    targetBulkers.add(full);
+                    targetBulkers.add(String(bId).trim().toUpperCase());
+                }
+            });
+        }
+
+        // If an app_id was specified but no bulkers are assigned to it, skip sending to avoid spamming everyone
+        if (app_id && targetBulkers.size === 0) {
+            return res.json({ 
+                status: 'success', 
+                message: 'No bulkers assigned to this task. Notification dispatch skipped.', 
+                count: 0 
+            });
+        }
+
+        // Fetch earner profiles
+        const { data: allProfiles, error: profileErr } = await supabase
             .from('profiles')
-            .select('earner_id, fcm_token');
+            .select('earner_id, bulker_id, fcm_token');
             
-        if (profileErr || !profiles || profiles.length === 0) {
+        if (profileErr || !allProfiles || allProfiles.length === 0) {
             return res.status(404).json({ error: 'No users found.' });
+        }
+
+        // Filter profiles strictly to users belonging to the assigned bulkers
+        let profiles = allProfiles;
+        if (targetBulkers.size > 0) {
+            profiles = allProfiles.filter(p => {
+                if (!p.bulker_id) return false;
+                const raw = String(p.bulker_id).trim().toUpperCase();
+                const short = raw.replace(/^NOVAIRA\/BULKER\//i, '').trim();
+                const full = raw.startsWith('NOVAIRA/BULKER/') ? raw : `NOVAIRA/BULKER/${raw}`;
+                return targetBulkers.has(raw) || targetBulkers.has(short) || targetBulkers.has(full);
+            });
+        }
+
+        if (profiles.length === 0) {
+            return res.json({
+                status: 'success',
+                message: 'No active users found for the assigned bulkers.',
+                count: 0
+            });
         }
         
         let successCount = 0;
@@ -355,13 +447,14 @@ app.post('/api/send-bulk-notification', async (req, res) => {
                 tokens: chunk
             };
             try {
-                await getFirebaseMessaging().sendEachForMulticast(message);
+                const response = await getFirebaseMessaging().sendEachForMulticast(message);
+                successCount += (response?.successCount || 0);
             } catch(e) { console.error("FCM Multicast error:", e); }
         }
 
-        // Prepare bulk insert into user_notifications
+        // Prepare bulk insert into user_notifications ONLY for targeted earners
         profiles.forEach(p => {
-            if(p.earner_id) {
+            if (p.earner_id) {
                 dbInsertions.push({
                     earner_id: p.earner_id,
                     title: title,
@@ -378,7 +471,13 @@ app.post('/api/send-bulk-notification', async (req, res) => {
             await supabase.from('user_notifications').insert(chunk);
         }
         
-        res.json({ status: 'success', message: `Notification sent to ${profiles.length} users!` });
+        res.json({ 
+            status: 'success', 
+            message: `Notification sent to ${profiles.length} users (${validTokens.length} devices) of assigned bulkers!`,
+            count: profiles.length,
+            deviceCount: validTokens.length,
+            targetBulkers: Array.from(targetBulkers)
+        });
     } catch (error) {
         console.error("Error sending bulk notification:", error);
         res.status(500).json({ error: error.message || (error.error && error.error.message) });
