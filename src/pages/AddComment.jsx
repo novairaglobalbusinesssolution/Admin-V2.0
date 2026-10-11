@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Typography, Paper, TextField, Button, 
-  FormControlLabel, Select, MenuItem, Switch, Checkbox,
+  FormControlLabel, Select, MenuItem, Switch, Checkbox, Radio, RadioGroup,
   Autocomplete, useTheme, Grid, Tabs, Tab, Chip, Card,
   CardContent, InputAdornment, IconButton, Tooltip, Divider,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
@@ -44,6 +44,8 @@ export default function AddComment() {
   const [enableTimer, setEnableTimer] = useState(false);
   const [timerGap, setTimerGap] = useState(10);
   const [blockSameLink, setBlockSameLink] = useState(true);
+  const [blockLinkMode, setBlockLinkMode] = useState('7_days'); // '7_days' | 'custom' | 'none'
+  const [blockUntilDate, setBlockUntilDate] = useState('');
   
   // Date/Time State
   const [scheduleTime, setScheduleTime] = useState(getISTDate());
@@ -108,15 +110,35 @@ export default function AddComment() {
       }
 
       // Pre-fill existing settings & instructions
-      const { data } = await supabase.from('apps')
-        .select('comment_limit, enable_timer, timer_gap_minutes, block_same_link_7_days, instructions, app_package')
+      let { data, error } = await supabase.from('apps')
+        .select('comment_limit, enable_timer, timer_gap_minutes, block_same_link_7_days, block_until_date, instructions, app_package')
         .eq('id', newValue.id).single();
+      
+      if (error && error.message && error.message.includes('block_until_date')) {
+        const fallbackRes = await supabase.from('apps')
+          .select('comment_limit, enable_timer, timer_gap_minutes, block_same_link_7_days, instructions, app_package')
+          .eq('id', newValue.id).single();
+        data = fallbackRes.data;
+      }
         
       if (data) {
         setLimit(data.comment_limit || 1);
         setEnableTimer(data.enable_timer || false);
         setTimerGap(data.timer_gap_minutes || 10);
-        setBlockSameLink(data.block_same_link_7_days ?? true);
+        
+        if (data.block_until_date) {
+          setBlockLinkMode('custom');
+          setBlockUntilDate(data.block_until_date);
+          setBlockSameLink(true);
+        } else if (data.block_same_link_7_days === false) {
+          setBlockLinkMode('none');
+          setBlockUntilDate('');
+          setBlockSameLink(false);
+        } else {
+          setBlockLinkMode('7_days');
+          setBlockUntilDate('');
+          setBlockSameLink(true);
+        }
         
         if (newValue.task_type === 'Registration') {
           setRegProcedure(data.instructions || '1. Download / Open the link\n2. Complete registration with mobile/email\n3. Verify OTP and take screenshot of dashboard');
@@ -192,7 +214,8 @@ export default function AddComment() {
         comment_limit: limit,
         enable_timer: enableTimer,
         timer_gap_minutes: timerGap,
-        block_same_link_7_days: blockSameLink
+        block_same_link_7_days: blockLinkMode === '7_days' || blockLinkMode === 'custom',
+        block_until_date: blockLinkMode === 'custom' ? (blockUntilDate || null) : null
       };
 
       let newComments = [];
@@ -282,7 +305,12 @@ export default function AddComment() {
       }
 
       // 3. Update App in Database
-      const { error: settingsError } = await supabase.from('apps').update(appUpdatePayload).eq('id', selectedApp.id);
+      let { error: settingsError } = await supabase.from('apps').update(appUpdatePayload).eq('id', selectedApp.id);
+      if (settingsError && settingsError.message && settingsError.message.includes('block_until_date')) {
+        const { block_until_date, ...safePayload } = appUpdatePayload;
+        const retryRes = await supabase.from('apps').update(safePayload).eq('id', selectedApp.id);
+        settingsError = retryRes.error;
+      }
       if (settingsError) throw settingsError;
 
       // 4. Insert Generated Comments / Slots
@@ -500,11 +528,46 @@ export default function AddComment() {
               />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-              <FormControlLabel 
-                control={<Checkbox checked={blockSameLink} onChange={e => setBlockSameLink(e.target.checked)} color="primary" />} 
-                label={<Typography variant="body2" sx={{ fontWeight: 600 }}>Block Same Link (7 Days)</Typography>} 
-              />
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>Repeat Link Block Rule:</Typography>
+                <Select
+                  size="small"
+                  fullWidth
+                  value={blockLinkMode}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBlockLinkMode(val);
+                    if (val === 'custom' && !blockUntilDate) {
+                      const d = new Date();
+                      d.setDate(d.getDate() + 7);
+                      setBlockUntilDate(d.toISOString().slice(0, 10));
+                    }
+                  }}
+                  sx={{ borderRadius: '10px' }}
+                >
+                  <MenuItem value="7_days">7 Days Cooldown (Default)</MenuItem>
+                  <MenuItem value="custom">Set Custom Date Block</MenuItem>
+                  <MenuItem value="none">No Block (Allow Repeat)</MenuItem>
+                </Select>
+              </Box>
             </Grid>
+            {blockLinkMode === 'custom' && (
+              <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: 'primary.main' }}>
+                  Block Until Date (IST):
+                </Typography>
+                <TextField 
+                  type="date" 
+                  fullWidth 
+                  value={blockUntilDate} 
+                  onChange={e => setBlockUntilDate(e.target.value)} 
+                  size="small" 
+                  helperText="User cannot repeat task until this date passes"
+                  FormHelperTextProps={{ sx: { fontSize: '0.72rem', mt: 0.5 } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} 
+                />
+              </Grid>
+            )}
           </Grid>
         </Box>
 
