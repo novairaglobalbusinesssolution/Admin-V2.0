@@ -30,6 +30,7 @@ import PaymentDashboard from './pages/PaymentDashboard';
 import IndividualWallet from './pages/IndividualWallet';
 import BulkerWalletList from './pages/BulkerWalletList';
 import BulkerWalletDetails from './pages/BulkerWalletDetails';
+import BulkerInvoicesList from './pages/BulkerInvoicesList';
 import SettingsPayments from './pages/SettingsPayments';
 import GiftCards from './pages/GiftCards';
 import Withdrawals from './pages/Withdrawals';
@@ -201,6 +202,7 @@ function App() {
                 <Route path="payments/individuals/withdrawals" element={<Withdrawals />} />
                 <Route path="payments/bulkers/wallet" element={<BulkerWalletList />} />
                 <Route path="payments/bulkers/wallet/:bulkerId" element={<BulkerWalletDetails />} />
+                <Route path="payments/bulkers/invoices" element={<BulkerInvoicesList />} />
                 <Route path="payments/clients/invoices" element={<ClientInvoicesList />} />
                 <Route path="payments/clients/invoices/:clientId" element={<ClientInvoiceDetails />} />
                 <Route path="payments/clients/invoices/:clientId/create" element={<CreateInvoice />} />

@@ -593,6 +593,11 @@ export default function AdminLayout() {
     { text: 'Settings', path: '/payments/clients/settings' },
   ];
 
+  const bulkerSubMenuItems = [
+    { text: 'User Wallet', path: '/payments/bulkers/wallet' },
+    { text: 'Invoices', path: '/payments/bulkers/invoices' },
+  ];
+
   const paymentsDrawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
       <Box sx={{ px: 2, pt: 2.4, pb: 1.5, display: 'flex', alignItems: 'center' }}>
@@ -636,7 +641,7 @@ export default function AdminLayout() {
         <List sx={{ pt: 0 }}>
           {renderExpandableMenu('CLIENTS', clientSubMenuItems)}
           {renderExpandableMenu('INDIVIDUALS', paymentSubMenuItems.map((m) => ({ ...m, path: `/payments/individuals${m.path.replace('/payments', '')}` })))}
-          {renderExpandableMenu('BULKERS', paymentSubMenuItems.map((m) => ({ ...m, path: `/payments/bulkers${m.path.replace('/payments', '')}` })))}
+          {renderExpandableMenu('BULKERS', bulkerSubMenuItems)}
           {renderExpandableMenu('PROVIDERS', paymentSubMenuItems.map((m) => ({ ...m, path: `/payments/providers${m.path.replace('/payments', '')}` })))}
         </List>
 
