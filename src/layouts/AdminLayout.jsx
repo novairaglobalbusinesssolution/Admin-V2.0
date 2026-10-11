@@ -168,6 +168,7 @@ export default function AdminLayout() {
     { text: 'Dashboard', icon: <DashboardIcon fontSize="small" />, path: '/' },
     { text: 'Users', icon: <PeopleAltIcon fontSize="small" />, path: '/users' },
     { text: 'Payments', icon: <AccountBalanceWalletIcon fontSize="small" />, path: '/payments' },
+    { text: 'Notifications', icon: <NotificationsActiveIcon fontSize="small" />, path: '/notifications', badge: totalNotifications },
   ];
 
   const appManagementItems = [
@@ -198,7 +199,7 @@ export default function AdminLayout() {
   const renderSkeletonItem = (key) => (
     <ListItem key={key} disablePadding sx={{ mb: 0.6 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', px: 2, py: 0.75 }}>
-        <Skeleton variant="circular" width={24} height={24} sx={{ mr: 1.5, bgcolor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)' }} />
+        <Skeleton variant="circular" width={26} height={26} sx={{ mr: 1.5, bgcolor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)' }} />
         <Skeleton variant="text" width="60%" height={18} sx={{ bgcolor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)' }} />
       </Box>
     </ListItem>
@@ -206,40 +207,112 @@ export default function AdminLayout() {
 
   const renderMenuItem = (item) => {
     const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-    const textColor = isActive ? (theme.palette.mode === 'light' ? 'primary.main' : '#e2e8f0') : (theme.palette.mode === 'light' ? 'text.secondary' : '#cbd5e1');
-    const iconColor = isActive ? (theme.palette.mode === 'light' ? 'primary.main' : '#e2e8f0') : (theme.palette.mode === 'light' ? 'text.secondary' : '#94a3b8');
+    const isDark = theme.palette.mode === 'dark';
 
     return (
-      <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+      <ListItem key={item.text} disablePadding sx={{ mb: 0.55 }}>
         <ListItemButton
           onClick={() => {
             navigate(item.path);
             if (isMobile) setMobileOpen(false);
           }}
           sx={{
-            borderRadius: '18px',
+            borderRadius: '16px',
             mx: 1.25,
-            minHeight: '42px',
-            py: 0.75,
-            px: 1.5,
-            backgroundImage: isActive
-              ? (theme.palette.mode === 'light'
-                ? 'linear-gradient(135deg, rgba(37,99,235,0.12), rgba(147,197,253,0.06))'
-                : 'linear-gradient(135deg, rgba(138,180,255,0.18), rgba(15,23,42,0.04))')
-              : 'none',
-            boxShadow: isActive ? 'inset 0 0 0 1px rgba(96,165,250,0.25)' : 'none',
-            color: textColor,
-            transition: 'all 0.2s ease',
-            '&:hover': {
-              backgroundColor: isActive ? 'transparent' : (theme.palette.mode === 'light' ? 'rgba(15,23,42,0.03)' : 'rgba(148,163,184,0.08)'),
-              transform: 'translateX(2px)',
-            },
+            minHeight: '44px',
+            py: 0.8,
+            px: 1.6,
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            // Active State
+            ...(isActive ? {
+              background: isDark
+                ? 'linear-gradient(135deg, rgba(37,99,235,0.22) 0%, rgba(59,130,246,0.10) 100%)'
+                : 'linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(96,165,250,0.06) 100%)',
+              color: isDark ? '#93c5fd' : '#1d4ed8',
+              boxShadow: isDark
+                ? 'inset 0 0 0 1px rgba(96,165,250,0.3), 0 4px 16px rgba(0,0,0,0.25)'
+                : 'inset 0 0 0 1px rgba(37,99,235,0.22), 0 4px 16px rgba(37,99,235,0.1)',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                left: 0,
+                top: '22%',
+                bottom: '22%',
+                width: '4px',
+                borderRadius: '0 4px 4px 0',
+                background: 'linear-gradient(180deg, #3b82f6, #60a5fa)',
+                boxShadow: '0 0 10px #3b82f6',
+              }
+            } : {
+              color: isDark ? '#94a3b8' : '#64748b',
+              '&:hover': {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.04)',
+                color: isDark ? '#f8fafc' : '#0f172a',
+                transform: 'translateX(5px)',
+                '& .menu-icon-wrapper': {
+                  transform: 'scale(1.2) rotate(-4deg)',
+                  backgroundColor: isDark ? 'rgba(59,130,246,0.2)' : 'rgba(37,99,235,0.12)',
+                  color: isDark ? '#60a5fa' : '#2563eb',
+                  boxShadow: '0 4px 12px rgba(37,99,235,0.2)',
+                }
+              }
+            })
           }}
         >
-          <ListItemIcon sx={{ color: iconColor, minWidth: '30px' }}>
+          <Box
+            className="menu-icon-wrapper"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              borderRadius: '10px',
+              mr: 1.5,
+              transition: 'all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              backgroundColor: isActive
+                ? (isDark ? 'rgba(59,130,246,0.22)' : 'rgba(37,99,235,0.14)')
+                : 'transparent',
+              color: isActive
+                ? (isDark ? '#60a5fa' : '#2563eb')
+                : 'inherit',
+              '& svg': {
+                fontSize: '1.2rem',
+                transition: 'transform 0.25s ease',
+              }
+            }}
+          >
             {item.icon}
-          </ListItemIcon>
-          <ListItemText primary={item.text} primaryTypographyProps={{ fontWeight: isActive ? 700 : 600, fontSize: '0.78rem' }} />
+          </Box>
+          <ListItemText
+            primary={item.text}
+            primaryTypographyProps={{
+              fontWeight: isActive ? 750 : 600,
+              fontSize: '0.82rem',
+              letterSpacing: '0.01em',
+            }}
+          />
+          {item.badge > 0 && (
+            <Chip
+              label={item.badge}
+              size="small"
+              color="error"
+              sx={{
+                height: 20,
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                borderRadius: '8px',
+                animation: 'pulseBadge 2s infinite',
+                '@keyframes pulseBadge': {
+                  '0%': { transform: 'scale(1)' },
+                  '50%': { transform: 'scale(1.1)' },
+                  '100%': { transform: 'scale(1)' },
+                }
+              }}
+            />
+          )}
         </ListItemButton>
       </ListItem>
     );
@@ -249,7 +322,7 @@ export default function AdminLayout() {
     if (sidebarLoading) {
       return (
         <Box key={title}>
-          <Typography variant="overline" sx={{ px: 3, mb: 0.8, mt: 1.5, fontWeight: 700, color: 'text.disabled', fontSize: '0.6rem', display: 'block', letterSpacing: 0.6 }}>
+          <Typography variant="overline" sx={{ px: 3, mb: 0.8, mt: 1.6, fontWeight: 800, color: 'text.disabled', fontSize: '0.62rem', display: 'block', letterSpacing: 1 }}>
             {title}
           </Typography>
           <List sx={{ pt: 0 }}>
@@ -261,100 +334,162 @@ export default function AdminLayout() {
     }
 
     return (
-      <Box key={title}>
-        <Typography variant="overline" sx={{ px: 3, mb: 0.8, mt: 1.5, fontWeight: 700, color: 'text.disabled', fontSize: '0.6rem', display: 'block', letterSpacing: 0.7 }}>
+      <Box key={title} sx={{ mb: 0.6 }}>
+        <Typography
+          variant="overline"
+          sx={{
+            px: 2.8,
+            mb: 0.6,
+            mt: 1.8,
+            fontWeight: 800,
+            color: theme.palette.mode === 'light' ? 'rgba(100,116,139,0.85)' : 'rgba(148,163,184,0.65)',
+            fontSize: '0.62rem',
+            display: 'flex',
+            alignItems: 'center',
+            letterSpacing: 1.2,
+            gap: 1.2,
+            '&::after': {
+              content: '""',
+              flex: 1,
+              height: '1px',
+              bgcolor: theme.palette.divider,
+              opacity: 0.7,
+              mr: 2.2
+            }
+          }}
+        >
           {title}
         </Typography>
-        <List sx={{ pt: 0 }}>
+        <List sx={{ pt: 0, pb: 0.4 }}>
           {items.map(renderMenuItem)}
         </List>
-        {addDivider && <Divider sx={{ my: 1, mx: 2, opacity: 0.5 }} />}
       </Box>
     );
   };
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-      <Box sx={{ px: 2.2, pt: 2.2, pb: 1.2 }}>
+      <Box sx={{ px: 2, pt: 2, pb: 1.4 }}>
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
             gap: 1.5,
-            px: 1.25,
-            py: 1.1,
-            borderRadius: '18px',
-            border: theme.palette.mode === 'light' ? '1px solid rgba(148,163,184,0.22)' : '1px solid rgba(148,163,184,0.12)',
+            px: 1.5,
+            py: 1.2,
+            borderRadius: '20px',
+            border: theme.palette.mode === 'light'
+              ? '1px solid rgba(37,99,235,0.12)'
+              : '1px solid rgba(148,163,184,0.12)',
             background: theme.palette.mode === 'light'
-              ? 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.86))'
-              : 'linear-gradient(135deg, rgba(96,165,250,0.10), rgba(17,24,39,0.8))',
-            boxShadow: theme.palette.mode === 'light' ? '0 10px 16px rgba(37,99,235,0.05)' : '0 10px 18px rgba(15,23,42,0.16)',
+              ? 'linear-gradient(135deg, rgba(37,99,235,0.06) 0%, rgba(255,255,255,0.9) 100%)'
+              : 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.85) 100%)',
+            boxShadow: theme.palette.mode === 'light'
+              ? '0 10px 24px -6px rgba(37,99,235,0.08)'
+              : '0 10px 24px -6px rgba(0,0,0,0.3)',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              borderColor: 'primary.main',
+              transform: 'translateY(-1px)',
+              boxShadow: '0 12px 28px -4px rgba(37,99,235,0.15)',
+            }
           }}
         >
-          <Avatar
-            sx={{
-              width: 36,
-              height: 36,
-              color: '#fff',
-              fontSize: '0.95rem',
-              fontWeight: 800,
-              background: 'linear-gradient(135deg, #2563eb, #60a5fa)',
-              boxShadow: '0 10px 20px rgba(37,99,235,0.28)',
-            }}
-          >
-            {adminSession.name ? adminSession.name.charAt(0).toUpperCase() : 'N'}
-          </Avatar>
-          <Box>
-            <Typography variant="body1" sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 700, fontSize: '0.93rem', lineHeight: 1.2 }}>
+          <Box sx={{ position: 'relative' }}>
+            <Avatar
+              sx={{
+                width: 38,
+                height: 38,
+                color: '#fff',
+                fontSize: '1rem',
+                fontWeight: 900,
+                background: 'linear-gradient(135deg, #2563eb, #38bdf8)',
+                boxShadow: '0 8px 16px rgba(37,99,235,0.32)',
+                transition: 'transform 0.3s ease',
+                '&:hover': { transform: 'rotate(10deg) scale(1.05)' }
+              }}
+            >
+              {adminSession.name ? adminSession.name.charAt(0).toUpperCase() : 'N'}
+            </Avatar>
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: -1,
+                right: -1,
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                bgcolor: '#22c55e',
+                border: `2px solid ${theme.palette.mode === 'light' ? '#fff' : '#0f172a'}`,
+                boxShadow: '0 0 8px #22c55e',
+              }}
+            />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body1" sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 800, fontSize: '0.94rem', lineHeight: 1.2, letterSpacing: '-0.01em' }}>
               Novaira Global
             </Typography>
-            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700, fontSize: '0.62rem', letterSpacing: 0.8 }}>
-              ADMIN PANEL
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.3 }}>
+              <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 800, fontSize: '0.62rem', letterSpacing: 1.2 }}>
+                ADMIN PRO
+              </Typography>
+              <Chip label="v2.1" size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 800, bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.08)' : 'rgba(59,130,246,0.15)', color: 'primary.main' }} />
+            </Box>
           </Box>
         </Box>
       </Box>
 
       <Box sx={{ overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, px: 0, pt: 0, pb: 2 }}>
-        {renderNavigationGroup('MAIN MENU', mainMenuItems, true)}
-        {renderNavigationGroup('APP MANAGEMENT', appManagementItems, true)}
-        {renderNavigationGroup('COMMENT MANAGEMENT', commentManagementItems, true)}
-        {renderNavigationGroup('LIVE LIST MANAGEMENT', liveListItems, true)}
+        {renderNavigationGroup('MAIN MENU', mainMenuItems, false)}
+        {renderNavigationGroup('APP MANAGEMENT', appManagementItems, false)}
+        {renderNavigationGroup('COMMENT MANAGEMENT', commentManagementItems, false)}
+        {renderNavigationGroup('LIVE LIST MANAGEMENT', liveListItems, false)}
         {renderNavigationGroup('FILE MANAGER', fileManagerItems, false)}
         {renderNavigationGroup('OTHERS', othersItems, false)}
       </Box>
 
-      <Box sx={{ p: 2, pt: 1.5, borderTop: `1px solid ${theme.palette.divider}`, background: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(15,17,23,0.5)' }}>
-        <List sx={{ p: 0, mb: 1, mx: -0.5 }}>
+      <Box
+        sx={{
+          p: 1.8,
+          borderTop: `1px solid ${theme.palette.divider}`,
+          background: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.8)' : 'rgba(12,15,23,0.8)',
+          backdropFilter: 'blur(10px)',
+        }}
+      >
+        <List sx={{ p: 0, mb: 1.2, mx: -0.5 }}>
           {renderMenuItem({ text: 'Settings', icon: <SettingsIcon fontSize="small" />, path: '/settings' })}
         </List>
 
-        <ListItem disablePadding sx={{ mx: 1 }}>
-          <ListItemButton
-            onClick={handleLogout}
-            sx={{
-              borderRadius: '18px',
-              minHeight: '42px',
-              color: 'error.main',
-              backgroundImage: theme.palette.mode === 'light'
-                ? 'linear-gradient(135deg, rgba(239,68,68,0.08), rgba(239,68,68,0.03))'
-                : 'linear-gradient(135deg, rgba(248,113,113,0.15), rgba(127,29,29,0.04))',
-              '&:hover': {
-                backgroundColor: theme.palette.mode === 'light' ? 'rgba(239,68,68,0.05)' : 'rgba(239,68,68,0.1)',
-              },
-              py: 0.7,
-              px: 1.5,
-            }}
-          >
-            <ListItemIcon sx={{ color: 'error.main', minWidth: '30px' }}>
-              <LogoutIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.75rem' }} />
-          </ListItemButton>
-        </ListItem>
-        <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 1.4, fontSize: '0.6rem', fontWeight: 600, opacity: 0.7 }}>
-          v2.1.0
-        </Typography>
+        <ListItemButton
+          onClick={handleLogout}
+          sx={{
+            borderRadius: '16px',
+            minHeight: '42px',
+            py: 0.8,
+            px: 1.6,
+            color: 'error.main',
+            border: theme.palette.mode === 'light' ? '1px solid rgba(239,68,68,0.15)' : '1px solid rgba(239,68,68,0.2)',
+            background: theme.palette.mode === 'light'
+              ? 'linear-gradient(135deg, rgba(239,68,68,0.05), rgba(239,68,68,0.01))'
+              : 'linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.02))',
+            transition: 'all 0.25s ease',
+            '&:hover': {
+              background: theme.palette.mode === 'light'
+                ? 'linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.06))'
+                : 'linear-gradient(135deg, rgba(239,68,68,0.22), rgba(239,68,68,0.08))',
+              transform: 'translateX(3px)',
+              borderColor: 'error.main',
+              '& .logout-icon': {
+                transform: 'scale(1.15) rotate(-8deg)',
+              }
+            },
+          }}
+        >
+          <ListItemIcon className="logout-icon" sx={{ color: 'error.main', minWidth: '32px', transition: 'transform 0.2s ease' }}>
+            <LogoutIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 800, fontSize: '0.8rem', letterSpacing: '0.02em' }} />
+        </ListItemButton>
       </Box>
     </Box>
   );
@@ -362,61 +497,79 @@ export default function AdminLayout() {
   const renderExpandableMenu = (title, items) => {
     const isExpanded = expandedPaymentMenu === title.toLowerCase();
     const isChildActive = items.some((item) => location.pathname === item.path);
+    const isDark = theme.palette.mode === 'dark';
 
     return (
-      <Box key={title}>
-        <ListItem disablePadding sx={{ mb: 0.3 }}>
+      <Box key={title} sx={{ mb: 0.5 }}>
+        <ListItem disablePadding sx={{ mb: 0.2 }}>
           <ListItemButton
             onClick={() => handleTogglePaymentMenu(title.toLowerCase())}
             sx={{
-              borderRadius: '18px',
+              borderRadius: '16px',
               mx: 1.25,
               minHeight: '42px',
-              py: 0.7,
-              px: 1.5,
+              py: 0.75,
+              px: 1.6,
+              transition: 'all 0.25s ease',
               backgroundImage: isChildActive
-                ? (theme.palette.mode === 'light'
-                  ? 'linear-gradient(135deg, rgba(37,99,235,0.12), rgba(147,197,253,0.05))'
-                  : 'linear-gradient(135deg, rgba(138,180,255,0.18), rgba(15,23,42,0.04))')
+                ? (isDark
+                  ? 'linear-gradient(135deg, rgba(37,99,235,0.18), rgba(147,197,253,0.06))'
+                  : 'linear-gradient(135deg, rgba(37,99,235,0.12), rgba(147,197,253,0.05))')
                 : 'none',
-              color: isChildActive ? 'primary.main' : 'inherit',
+              color: isChildActive ? (isDark ? '#93c5fd' : '#1d4ed8') : 'inherit',
               boxShadow: isChildActive ? 'inset 0 0 0 1px rgba(96,165,250,0.25)' : 'none',
-              '&:hover': { backgroundColor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.03)' : 'rgba(148,163,184,0.08)' },
+              '&:hover': {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.04)',
+                transform: 'translateX(3px)',
+              },
             }}
           >
-            <ListItemText primary={title} primaryTypographyProps={{ fontWeight: isChildActive ? 700 : 600, fontSize: '0.76rem' }} />
-            {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+            <ListItemText primary={title} primaryTypographyProps={{ fontWeight: isChildActive ? 800 : 650, fontSize: '0.78rem', letterSpacing: '0.02em' }} />
+            <Box sx={{
+              transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              <ExpandMore fontSize="small" sx={{ opacity: 0.7 }} />
+            </Box>
           </ListItemButton>
         </ListItem>
         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding sx={{ pl: 1 }}>
+          <List component="div" disablePadding sx={{ pl: 1.2, pt: 0.4 }}>
             {items.map((item) => {
               const isActive = location.pathname === item.path;
-              const textColor = isActive ? (theme.palette.mode === 'light' ? 'primary.main' : '#e2e8f0') : (theme.palette.mode === 'light' ? 'text.secondary' : '#cbd5e1');
+              const textColor = isActive ? (isDark ? '#93c5fd' : '#1d4ed8') : (isDark ? '#94a3b8' : '#64748b');
 
               return (
-                <ListItem key={item.text} disablePadding sx={{ mb: 0.3 }}>
+                <ListItem key={item.text} disablePadding sx={{ mb: 0.35 }}>
                   <ListItemButton
                     onClick={() => {
                       navigate(item.path);
                       if (isMobile) setMobileOpen(false);
                     }}
                     sx={{
-                      borderRadius: '16px',
+                      borderRadius: '14px',
                       mx: 1.5,
                       minHeight: '36px',
-                      py: 0.5,
+                      py: 0.55,
                       px: 1.5,
+                      position: 'relative',
+                      transition: 'all 0.25s ease',
                       backgroundImage: isActive
-                        ? (theme.palette.mode === 'light'
-                          ? 'linear-gradient(135deg, rgba(37,99,235,0.10), rgba(147,197,253,0.05))'
-                          : 'linear-gradient(135deg, rgba(138,180,255,0.15), rgba(15,23,42,0.04))')
+                        ? (isDark
+                          ? 'linear-gradient(135deg, rgba(37,99,235,0.18), rgba(147,197,253,0.05))'
+                          : 'linear-gradient(135deg, rgba(37,99,235,0.10), rgba(147,197,253,0.05))')
                         : 'none',
                       color: textColor,
-                      '&:hover': { backgroundColor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.03)' : 'rgba(148,163,184,0.08)' },
+                      '&:hover': {
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.04)',
+                        transform: 'translateX(4px)'
+                      },
                     }}
                   >
-                    <ListItemText primary={item.text} primaryTypographyProps={{ fontWeight: isActive ? 700 : 500, fontSize: '0.7rem' }} />
+                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: isActive ? 'primary.main' : 'text.disabled', mr: 1.2, transition: 'all 0.2s ease' }} />
+                    <ListItemText primary={item.text} primaryTypographyProps={{ fontWeight: isActive ? 750 : 550, fontSize: '0.74rem' }} />
                   </ListItemButton>
                 </ListItem>
               );
@@ -796,9 +949,18 @@ export default function AdminLayout() {
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
               width: drawerWidth,
-              borderTopRightRadius: '22px',
-              borderBottomRightRadius: '22px',
-              borderRight: 'none',
+              borderTopRightRadius: '24px',
+              borderBottomRightRadius: '24px',
+              borderRight: `1px solid ${theme.palette.divider}`,
+              bgcolor: theme.palette.mode === 'light' ? '#ffffff' : '#0c0f17',
+              boxShadow: theme.palette.mode === 'light'
+                ? '6px 0 32px rgba(0,0,0,0.06)'
+                : '6px 0 32px rgba(0,0,0,0.5)',
+              '&::-webkit-scrollbar': { width: '4px' },
+              '&::-webkit-scrollbar-thumb': {
+                background: theme.palette.mode === 'light' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)',
+                borderRadius: '10px',
+              },
             },
           }}
         >
@@ -812,7 +974,19 @@ export default function AdminLayout() {
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
               width: drawerWidth,
-              borderRight: 'none',
+              borderRight: `1px solid ${theme.palette.divider}`,
+              bgcolor: theme.palette.mode === 'light' ? '#ffffff' : '#0c0f17',
+              backgroundImage: theme.palette.mode === 'light'
+                ? 'radial-gradient(at 0% 0%, rgba(37,99,235,0.03) 0px, transparent 60%)'
+                : 'radial-gradient(at 0% 0%, rgba(59,130,246,0.05) 0px, transparent 60%)',
+              boxShadow: theme.palette.mode === 'light'
+                ? '4px 0 24px rgba(0,0,0,0.02)'
+                : '4px 0 24px rgba(0,0,0,0.3)',
+              '&::-webkit-scrollbar': { width: '4px' },
+              '&::-webkit-scrollbar-thumb': {
+                background: theme.palette.mode === 'light' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)',
+                borderRadius: '10px',
+              },
             },
           }}
           open
