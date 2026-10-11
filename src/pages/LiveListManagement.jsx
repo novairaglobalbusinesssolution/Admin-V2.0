@@ -3,13 +3,15 @@ import {
   Box, Typography, Paper, TextField, Button, Grid, 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Checkbox, Chip, IconButton, useTheme, Snackbar, Alert, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Tabs, Tab
+  Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Tabs, Tab,
+  Tooltip
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PersonIcon from '@mui/icons-material/Person';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import EditIcon from '@mui/icons-material/Edit';
 import Swal from 'sweetalert2';
 import { supabase } from '../supabaseClient';
 
@@ -776,6 +778,54 @@ export default function LiveListManagement() {
     }
   };
 
+  // Edit Username Dialog State & Handler
+  const [editUsernameDialog, setEditUsernameDialog] = useState({
+    open: false,
+    member: null,
+    newUsername: '',
+    saving: false
+  });
+
+  const handleOpenEditUsername = (member) => {
+    setEditUsernameDialog({
+      open: true,
+      member: member,
+      newUsername: member.submitted_username || '',
+      saving: false
+    });
+  };
+
+  const handleSaveUsername = async () => {
+    if (!editUsernameDialog.member || !editUsernameDialog.newUsername.trim()) {
+      setSnack({ open: true, message: 'Please enter a valid username', severity: 'warning' });
+      return;
+    }
+
+    const updatedName = editUsernameDialog.newUsername.trim();
+    const targetId = editUsernameDialog.member.id;
+
+    setEditUsernameDialog(prev => ({ ...prev, saving: true }));
+
+    try {
+      const { error } = await supabase
+        .from('review_submit_data')
+        .update({ submitted_username: updatedName })
+        .eq('id', targetId);
+
+      if (error) throw error;
+
+      // Update local state immediately so UI refreshes without refetch
+      setMembers(prev => prev.map(m => m.id === targetId ? { ...m, submitted_username: updatedName } : m));
+
+      setSnack({ open: true, message: `Username updated to "${updatedName}"`, severity: 'success' });
+      setEditUsernameDialog({ open: false, member: null, newUsername: '', saving: false });
+    } catch (err) {
+      console.error('Error updating username:', err);
+      setSnack({ open: true, message: 'Failed to update username: ' + err.message, severity: 'error' });
+      setEditUsernameDialog(prev => ({ ...prev, saving: false }));
+    }
+  };
+
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', mt: 1, pb: 10 }}>
       
@@ -1006,23 +1056,54 @@ export default function LiveListManagement() {
                           gap: 1
                         }}
                       >
-                        {/* Top Row: Checkbox, Name, Status Chip */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        {/* Top Row: Checkbox, Name, Edit Button, Status Chip */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 0.8 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
                             <Checkbox 
                               checked={isSelected} 
                               onChange={(e) => { e.stopPropagation(); handleSelectOne(u.id); }} 
                               sx={{ p: 0, '& .MuiSvgIcon-root': { fontSize: 20, color: isSelected ? 'primary.main' : 'text.disabled' } }}
                             />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.1, color: 'text.primary', ml: 0.5 }}>
+                            <Typography 
+                              variant="subtitle2" 
+                              sx={{ 
+                                fontWeight: 700, 
+                                lineHeight: 1.1, 
+                                color: 'text.primary', 
+                                ml: 0.5,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={u.submitted_username}
+                            >
                               {u.submitted_username.toUpperCase()}
                             </Typography>
+                            <Tooltip title="Edit Username">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEditUsername(u);
+                                }}
+                                sx={{
+                                  p: 0.3,
+                                  color: 'text.secondary',
+                                  '&:hover': {
+                                    color: 'primary.main',
+                                    bgcolor: 'rgba(37,99,235,0.1)'
+                                  }
+                                }}
+                              >
+                                <EditIcon sx={{ fontSize: 13 }} />
+                              </IconButton>
+                            </Tooltip>
                           </Box>
                           <Chip 
                             size="small" 
                             label={u.status} 
                             color={u.status === 'Live' ? 'success' : u.status === 'Under Review' ? 'warning' : 'default'} 
-                            sx={{ borderRadius: '6px', fontWeight: 700, height: 18, fontSize: '0.6rem', textTransform: 'uppercase' }} 
+                            sx={{ borderRadius: '6px', fontWeight: 700, height: 18, fontSize: '0.6rem', textTransform: 'uppercase', flexShrink: 0 }} 
                           />
                         </Box>
                         
@@ -1183,6 +1264,65 @@ export default function LiveListManagement() {
             disabled={addingMissing} sx={{ borderRadius: '10px' }}
           >
             {addingMissing ? 'Adding...' : 'Add Member'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Submitted Username Dialog */}
+      <Dialog
+        open={editUsernameDialog.open}
+        onClose={() => !editUsernameDialog.saving && setEditUsernameDialog(prev => ({ ...prev, open: false }))}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: '20px', p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <EditIcon color="primary" fontSize="small" /> Edit Submitted Username
+        </DialogTitle>
+        <DialogContent dividers>
+          {editUsernameDialog.member && (
+            <Box sx={{ mb: 2, p: 1.5, borderRadius: '12px', bgcolor: theme.palette.mode === 'light' ? '#f8fafc' : 'rgba(255,255,255,0.04)', border: `1px solid ${theme.palette.divider}` }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                <b>Earner:</b> {editUsernameDialog.member.formatted_earner}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3 }}>
+                <b>Bulker:</b> {editUsernameDialog.member.formatted_bulker}
+              </Typography>
+            </Box>
+          )}
+          <TextField
+            fullWidth
+            autoFocus
+            label="Submitted Username"
+            size="small"
+            value={editUsernameDialog.newUsername}
+            onChange={(e) => setEditUsernameDialog(prev => ({ ...prev, newUsername: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSaveUsername();
+              }
+            }}
+            placeholder="Enter corrected username..."
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' }, mt: 0.5 }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setEditUsernameDialog(prev => ({ ...prev, open: false }))}
+            disabled={editUsernameDialog.saving}
+            sx={{ borderRadius: '10px' }}
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveUsername}
+            variant="contained"
+            disabled={editUsernameDialog.saving || !editUsernameDialog.newUsername.trim()}
+            sx={{ borderRadius: '10px', px: 2.5 }}
+          >
+            {editUsernameDialog.saving ? 'Saving...' : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>

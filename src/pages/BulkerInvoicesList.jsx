@@ -494,17 +494,18 @@ export default function BulkerInvoicesList() {
                         variant="contained"
                         size="small"
                         color="primary"
-                        startIcon={<AddCircleIcon fontSize="small" />}
-                        onClick={() => handleOpenCreateModal(b.bulker_id)}
+                        startIcon={<VisibilityIcon fontSize="small" />}
+                        onClick={() => navigate(`/payments/bulkers/invoices/${b.id || b.bulker_id}`)}
                         sx={{
                           borderRadius: '100px',
                           textTransform: 'none',
                           fontWeight: 750,
                           fontSize: '0.78rem',
-                          px: 2
+                          px: 2.2,
+                          boxShadow: '0 4px 14px rgba(37,99,235,0.25)'
                         }}
                       >
-                        New Invoice
+                        View
                       </Button>
                     </TableCell>
                   </TableRow>
