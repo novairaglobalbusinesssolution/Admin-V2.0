@@ -6,7 +6,7 @@ import {
   TextField, InputAdornment, Button, IconButton, Chip, Avatar,
   Stack, MenuItem, CircularProgress, Dialog, DialogTitle,
   DialogContent, DialogActions, Divider, Tooltip, useTheme, Alert,
-  Checkbox, FormControlLabel
+  Checkbox, FormControlLabel, Snackbar
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
@@ -54,6 +54,7 @@ export default function BulkerWalletDetails() {
   const [referenceId, setReferenceId] = useState('');
   const [syncToFund, setSyncToFund] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
 
   const fetchBulkerData = async () => {
     if (!identifier) return;
@@ -237,22 +238,88 @@ export default function BulkerWalletDetails() {
     setTrxModalOpen(true);
   };
 
+  // Modern Theme-Aware SweetAlert2 Helpers
+  const getModernSwalConfig = () => {
+    const isDark = theme.palette.mode === 'dark';
+    return {
+      background: isDark ? '#0f172a' : '#ffffff',
+      color: isDark ? '#f8fafc' : '#0f172a',
+      backdrop: 'rgba(15, 23, 42, 0.65)',
+      customClass: {
+        popup: 'modern-swal-modal',
+        title: 'modern-swal-title',
+        htmlContainer: 'modern-swal-content',
+        confirmButton: 'modern-swal-confirm-btn',
+        cancelButton: 'modern-swal-cancel-btn',
+      },
+      buttonsStyling: false,
+    };
+  };
+
+  const showModernSuccess = (title, text) => {
+    const isDark = theme.palette.mode === 'dark';
+    return Swal.fire({
+      ...getModernSwalConfig(),
+      icon: 'success',
+      iconColor: '#10b981',
+      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
+      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
+      timer: 2400,
+      showConfirmButton: false,
+    });
+  };
+
+  const showModernWarning = (title, text) => {
+    const isDark = theme.palette.mode === 'dark';
+    return Swal.fire({
+      ...getModernSwalConfig(),
+      icon: 'warning',
+      iconColor: '#f59e0b',
+      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
+      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
+      confirmButtonText: 'Understood',
+    });
+  };
+
+  const showModernError = (title, text) => {
+    const isDark = theme.palette.mode === 'dark';
+    return Swal.fire({
+      ...getModernSwalConfig(),
+      icon: 'error',
+      iconColor: '#ef4444',
+      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
+      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
+      confirmButtonText: 'Close',
+    });
+  };
+
+  const showModernConfirm = (title, text, confirmBtnText = 'Yes, Proceed') => {
+    const isDark = theme.palette.mode === 'dark';
+    return Swal.fire({
+      ...getModernSwalConfig(),
+      icon: 'warning',
+      iconColor: '#f59e0b',
+      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
+      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
+      showCancelButton: true,
+      confirmButtonText: confirmBtnText,
+      cancelButtonText: 'Cancel',
+    });
+  };
+
   const handleProcessTransaction = async () => {
     const numAmount = parseFloat(amount);
     if (!amount || isNaN(numAmount) || numAmount <= 0) {
-      Swal.fire({ icon: 'warning', title: 'Invalid Amount', text: 'Please enter a valid amount greater than 0.' });
+      showModernWarning('Invalid Amount', 'Please enter a valid amount greater than 0.');
       return;
     }
 
     if (trxType === 'Debit' && numAmount > currentBalance) {
-      const isConfirmed = await Swal.fire({
-        title: 'Negative Balance Warning',
-        text: `This debit of ₹${numAmount} exceeds the current wallet balance of ₹${currentBalance}. Do you still want to proceed?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, proceed',
-        confirmButtonColor: '#f59e0b'
-      });
+      const isConfirmed = await showModernConfirm(
+        'Negative Balance Warning',
+        `This debit of ₹${numAmount} exceeds the current wallet balance of ₹${currentBalance}. Do you still want to proceed?`,
+        'Yes, Proceed'
+      );
       if (!isConfirmed.isConfirmed) return;
     }
 
@@ -328,39 +395,34 @@ export default function BulkerWalletDetails() {
       }
 
       setTrxModalOpen(false);
-      Swal.fire({
-        icon: 'success',
-        title: `${trxType} Processed!`,
-        text: `₹${numAmount.toFixed(2)} successfully ${trxType.toLowerCase()}ed to ${bulker?.full_name || bulkerCode}.`,
-        timer: 2000,
-        showConfirmButton: false
-      });
+      showModernSuccess(
+        `${trxType} Processed!`,
+        `₹${numAmount.toFixed(2)} successfully ${trxType.toLowerCase()}ed to ${bulker?.full_name || bulkerCode}.`
+      );
 
       // Refresh data
       await fetchBulkerData();
     } catch (err) {
       console.error('Transaction error:', err);
-      Swal.fire({ icon: 'error', title: 'Transaction Failed', text: err.message || 'Failed to process transaction.' });
+      showModernError('Transaction Failed', err.message || 'Failed to process transaction.');
     } finally {
       setProcessing(false);
     }
   };
 
   const copyToClipboard = (text) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Copied to clipboard!',
-      showConfirmButton: false,
-      timer: 1500
+    setSnack({
+      open: true,
+      message: `Copied to clipboard: ${text}`,
+      severity: 'success'
     });
   };
 
   const exportCSVStatement = () => {
     if (!transactions.length) {
-      Swal.fire({ icon: 'info', title: 'No Transactions', text: 'No transaction data available to export.' });
+      showModernWarning('No Transactions', 'No transaction data available to export.');
       return;
     }
 
@@ -1057,6 +1119,85 @@ export default function BulkerWalletDetails() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Modern Bottom Floating Toast Notification for Copy & Quick alerts */}
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={2200}
+        onClose={() => setSnack(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnack(s => ({ ...s, open: false }))}
+          severity={snack.severity}
+          variant="filled"
+          icon={<CheckCircleIcon sx={{ fontSize: 18 }} />}
+          sx={{
+            borderRadius: '16px',
+            fontWeight: 750,
+            fontSize: '0.86rem',
+            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.28)',
+            bgcolor: snack.severity === 'success' ? '#10b981' : undefined,
+            color: '#fff',
+            px: 2.5,
+            py: 0.8,
+            display: 'flex',
+            alignItems: 'center',
+            '& .MuiAlert-icon': { mr: 1 }
+          }}
+        >
+          {snack.message}
+        </Alert>
+      </Snackbar>
+
+      {/* Global CSS for Modern Theme-Adaptive Modals */}
+      <style>{`
+        .modern-swal-modal {
+          border-radius: 28px !important;
+          padding: 28px 24px !important;
+          box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45) !important;
+          border: 1px solid rgba(255, 255, 255, 0.12) !important;
+          animation: swalModernPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        @keyframes swalModernPop {
+          0% { transform: scale(0.92); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .modern-swal-confirm-btn {
+          background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+          color: #ffffff !important;
+          font-weight: 750 !important;
+          font-size: 0.88rem !important;
+          border-radius: 12px !important;
+          padding: 10px 24px !important;
+          border: none !important;
+          cursor: pointer !important;
+          box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+          transition: all 0.2s ease !important;
+          margin: 6px !important;
+        }
+        .modern-swal-confirm-btn:hover {
+          background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+          transform: translateY(-1px) !important;
+          box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45) !important;
+        }
+        .modern-swal-cancel-btn {
+          background-color: transparent !important;
+          color: #94a3b8 !important;
+          font-weight: 700 !important;
+          font-size: 0.88rem !important;
+          border-radius: 12px !important;
+          padding: 10px 20px !important;
+          border: 1px solid rgba(148, 163, 184, 0.3) !important;
+          cursor: pointer !important;
+          margin: 6px !important;
+          transition: all 0.2s ease !important;
+        }
+        .modern-swal-cancel-btn:hover {
+          background-color: rgba(148, 163, 184, 0.1) !important;
+          color: #f8fafc !important;
+        }
+      `}</style>
     </Box>
   );
 }
