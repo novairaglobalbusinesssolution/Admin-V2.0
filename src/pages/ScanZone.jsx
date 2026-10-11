@@ -26,53 +26,166 @@ const getISTDate = () => {
 const normalizeName = (value = '') =>
   value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
-const extractUsernameFromOCR = (text) => {
-  if (!text) return null;
-  
-  // 1. Try original review match
-  const match = text.match(/Your review\s+([A-Za-z0-9\s]+?)\s*[\.\*]/i);
-  if (match) return match[1].trim();
+const NOISE_PATTERNS = [
+  /.*\d{1,2}[/\-. ]\d{1,2}[/\-. ]\d{2,4}.*/, // Date e.g. 11/10/2026
+  /.*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec).*\d{2,4}.*/i, // Date
+  /^[0-9\s/.:,@#$+%-]+$/, // Only numbers or symbols
+  /^(kb\/s|mb\/s|vo\s*lte|5g|4g|3g|wifi|am|pm)$/i, // Network / status bar
+  /.*\b(am|pm)\b.*/i, // Time
+  /^(top charts|games|apps|search|books|education|for you|you)$/i,
+  /.*(ask play|what's new|events and offers|app support).*/i,
+  /.*(ratings and reviews|about this game|about this app).*/i,
+  /.*(no data shared|see details|data is encrypted|learn more|users are saving|account deletion).*/i,
+  /.*(edit your review|delete|was this review helpful|out of 5).*/i,
+  /.*(your review|yours review).*/i,
+  /^(open|uninstall|update|install|see details|more|reviews|google play)$/i
+];
 
-  // 2. Try ID card parsing
-  const idCardKeywords = ['branch', 'jranch', 'session', 'guardian', 'address', 'blood group', 'emergency', 'principal'];
-  let cleaned = text;
-  for (const kw of idCardKeywords) {
-    const idx = cleaned.toLowerCase().indexOf(kw);
-    if (idx !== -1) {
-      cleaned = cleaned.substring(0, idx);
+const extractUsernameFromOCR = (ocrData) => {
+  const rawText = typeof ocrData === 'string' ? ocrData : (ocrData?.text || '');
+  if (!rawText) return null;
+
+  // Split lines and trim
+  const rawLines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!rawLines.length) return null;
+
+  // Anchors to look for (equivalent to Android TakeCommentScreen)
+  const isAnchor = (str) => {
+    const s = str.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+    return s === 'your review' || s === 'yours review' || s === 'review' ||
+           s === 'username' || s === 'user name' || s === 'handle' ||
+           s === 'profile' || s === 'account' || s === 'posted by' || s === 'author';
+  };
+
+  const isNoise = (str) => {
+    const trimmed = str.trim();
+    if (trimmed.length <= 1) return true;
+    for (const rx of NOISE_PATTERNS) {
+      if (rx.test(trimmed)) return true;
+    }
+    return false;
+  };
+
+  const cleanNameText = (str) => {
+    return str
+      .replace(/^[^a-zA-Z0-9@_]+/, '')
+      .replace(/[^a-zA-Z0-9_]+$/, '')
+      .trim();
+  };
+
+  // Find anchor index
+  let anchorIndex = -1;
+  for (let i = 0; i < rawLines.length; i++) {
+    if (isAnchor(rawLines[i])) {
+      anchorIndex = i;
+      break;
     }
   }
-  
-  // Extract just the alphabetic characters and spaces from the first valid line
-  const lines = cleaned.split('\n').map(l => l.replace(/[^a-zA-Z\s]/g, '').trim()).filter(Boolean);
-  if (lines.length > 0) {
-    return lines[0].substring(0, 50); // Max length safeguard
+
+  const candidates = [];
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const lineText = rawLines[i];
+    const cleaned = cleanNameText(lineText);
+    if (cleaned.length < 2) continue;
+    if (isNoise(lineText)) continue;
+
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    // Ignore long sentences / review bodies (max 4 words, max 35 chars)
+    if (cleaned.length > 35 || words.length > 4) continue;
+
+    let score = 50;
+
+    // Handle @username
+    if (cleaned.startsWith('@')) {
+      score += 100;
+    }
+
+    // Anchor proximity: if right after "your review"
+    if (anchorIndex !== -1 && i > anchorIndex) {
+      const dist = i - anchorIndex;
+      if (dist === 1) {
+        score += 150; // Directly next line below "Your review"
+      } else if (dist === 2) {
+        score += 80;
+      } else if (dist <= 4) {
+        score += 40;
+      }
+    }
+
+    // Looks like human name (2-3 words, no numbers)
+    if (words.length >= 2 && words.length <= 3 && !/\d/.test(cleaned)) {
+      score += 30;
+    }
+
+    candidates.push({ text: cleaned, score, index: i });
   }
-  
+
+  if (candidates.length > 0) {
+    // Sort highest score first
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].text;
+  }
+
+  // Fallback: check regex for "Your review <name>"
+  const inlineMatch = rawText.match(/Your review\s+([A-Za-z0-9\s]{2,30})/i);
+  if (inlineMatch && inlineMatch[1]) {
+    const fallbackClean = cleanNameText(inlineMatch[1]);
+    if (!isNoise(fallbackClean)) return fallbackClean;
+  }
+
   return null;
 };
 
+const getBestProfileMatch = (extractedName, profiles = []) => {
+  if (!extractedName || !profiles || !profiles.length) return null;
+  const textToMatch = normalizeName(extractedName);
+  if (!textToMatch || textToMatch.length < 2) return null;
 
-const getBestProfileMatch = (ocrText, profiles) => {
-  const extracted = extractUsernameFromOCR(ocrText);
-  const textToMatch = normalizeName(extracted || ocrText || '');
-  if (!textToMatch || !profiles.length) return null;
-  let best = null;
-  profiles.forEach((profile) => {
+  const textTokens = textToMatch.split(' ').filter(Boolean);
+
+  for (const profile of profiles) {
     const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
     const normalizedFullName = normalizeName(fullName);
-    const candidate = { profile, fullName, score: 0 };
-    if (!normalizedFullName) return;
-    if (textToMatch === normalizedFullName) candidate.score = 100;
-    else if (textToMatch.includes(normalizedFullName) || normalizedFullName.includes(textToMatch)) candidate.score = 90;
-    else {
-      const textTokens = new Set(textToMatch.split(' '));
-      const nameTokens = normalizedFullName.split(' ');
-      candidate.score = nameTokens.filter((t) => textTokens.has(t)).length * 25;
+    if (!normalizedFullName) continue;
+
+    // Check exact match on full name or earner_id or phone
+    if (
+      textToMatch === normalizedFullName ||
+      (profile.earner_id && textToMatch === normalizeName(profile.earner_id)) ||
+      (profile.phone && textToMatch === normalizeName(profile.phone))
+    ) {
+      return { profile, fullName, score: 100 };
     }
-    if (!best || candidate.score > best.score) best = candidate;
-  });
-  return best && best.score > 0 ? best : null;
+
+    const nameTokens = normalizedFullName.split(' ').filter(Boolean);
+
+    // Multi-word names: First Name + Last Name (e.g. "Muskan Khatun")
+    // STRICT RULE: All words must match exactly in same order!
+    // "Muskan Khatun" will NEVER match "Muskan Baby" or any other person
+    if (textTokens.length >= 2 && nameTokens.length >= 2) {
+      if (textTokens.length === nameTokens.length) {
+        const allMatch = textTokens.every((token, idx) => token === nameTokens[idx]);
+        if (allMatch) {
+          return { profile, fullName, score: 100 };
+        }
+      }
+      // If words differ, NEVER match
+      continue;
+    }
+
+    // Single-word names:
+    if (textTokens.length === 1 && nameTokens.length === 1) {
+      if (textTokens[0] === nameTokens[0] && textTokens[0].length >= 3) {
+        return { profile, fullName, score: 95 };
+      }
+      continue;
+    }
+
+    // NEVER do partial token overlap where 1 word matches and another differs!
+  }
+
+  return null;
 };
 
 export default function ScanZone() {
@@ -167,8 +280,9 @@ export default function ScanZone() {
 
   // ——— User Creation logic ———
   const openCreateUserModal = (rowsToCreate) => {
+    const isInvalidName = (t) => !t || t === 'OCR Failed' || t === 'No text detected' || t === 'No name detected';
     const initialName = rowsToCreate.length === 1 ? 
-      (rowsToCreate[0].ocrText !== 'OCR Failed' && rowsToCreate[0].ocrText !== 'No text detected' ? rowsToCreate[0].ocrText : '') 
+      (!isInvalidName(rowsToCreate[0].ocrText) ? rowsToCreate[0].ocrText : '') 
       : '';
     const initialShortId = selectedBulker ? selectedBulker.bulker_id.replace('NOVAIRA/BULKER/', '') : '';
     setCreateUserModal({ open: true, rows: rowsToCreate, name: initialName, shortBulkerId: initialShortId, loading: false });
@@ -204,7 +318,7 @@ export default function ScanZone() {
         if (rows.length === 1) {
           nameText = name.trim() || 'Unknown User';
         } else {
-          nameText = row.ocrText && row.ocrText !== 'OCR Failed' && row.ocrText !== 'No text detected' ? row.ocrText : 'Unknown User';
+          nameText = row.ocrText && row.ocrText !== 'OCR Failed' && row.ocrText !== 'No text detected' && row.ocrText !== 'No name detected' ? row.ocrText : 'Unknown User';
         }
         
         const nameParts = nameText.split(' ').filter(Boolean);
@@ -278,21 +392,38 @@ export default function ScanZone() {
         setMessage({ type: 'info', text: `Scanning image ${i + 1} of ${filesList.length}...` });
         try {
           const { data } = await worker.recognize(file);
-          const text = data.text || '';
-          const extractedName = extractUsernameFromOCR(text);
-          const match = getBestProfileMatch(text, profiles);
+          const rawText = data?.text || '';
+          const extractedName = extractUsernameFromOCR(data);
+
+          // 1. Check against selected bulker's members first
+          let match = getBestProfileMatch(extractedName, bulkerMembers);
+          // 2. If not found, check across all active profiles
+          if (!match && profiles && profiles.length > 0) {
+            match = getBestProfileMatch(extractedName, profiles);
+          }
+
           rows.push({
-            id: `${Date.now()}-${Math.random()}`, file, preview: URL.createObjectURL(file),
-            ocrText: extractedName || text,
+            id: `${Date.now()}-${Math.random()}`,
+            file,
+            preview: URL.createObjectURL(file),
+            ocrText: extractedName || (rawText.trim() ? 'No name detected' : 'No text detected'),
             bestMatch: match,
-            matchedName: match ? `${match.profile.first_name || ''} ${match.profile.last_name || ''}`.trim() || match.profile.earner_id : 'No match',
+            matchedName: match
+              ? `${match.profile.first_name || ''} ${match.profile.last_name || ''}`.trim() || match.profile.earner_id
+              : 'No match',
             earnerId: match ? match.profile.earner_id : 'No match',
             status: match ? 'Matched' : 'Unmatched',
           });
         } catch {
           rows.push({
-            id: `${Date.now()}-${Math.random()}`, file, preview: URL.createObjectURL(file),
-            ocrText: 'OCR Failed', bestMatch: null, matchedName: 'No match', earnerId: 'No match', status: 'Unmatched',
+            id: `${Date.now()}-${Math.random()}`,
+            file,
+            preview: URL.createObjectURL(file),
+            ocrText: 'OCR Failed',
+            bestMatch: null,
+            matchedName: 'No match',
+            earnerId: 'No match',
+            status: 'Unmatched',
           });
         }
       }
@@ -781,7 +912,7 @@ export default function ScanZone() {
                 <Stack spacing={2}>
                   <Typography variant="h6" sx={{ fontWeight: 700 }}>Edit Scan Match</Typography>
                   <Autocomplete
-                    options={bulkerMembers}
+                    options={bulkerMembers.length > 0 ? bulkerMembers : profiles}
                     getOptionLabel={(o) => { const fn = `${o.first_name || ''} ${o.last_name || ''}`.trim(); return fn ? `${fn} (${o.earner_id || 'No ID'})` : o.earner_id || 'No ID'; }}
                     value={editRow.selectedProfile || null}
                     onChange={(e, v) => setEditRow((p) => ({ ...p, selectedProfile: v }))}
