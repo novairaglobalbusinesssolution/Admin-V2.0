@@ -104,35 +104,44 @@ export default function BulkerWalletDetails() {
         new Set([identifier, bData?.bulker_id, bData?.id].filter(Boolean))
       );
 
-      const { data: cData, error: cErr } = await supabase
-        .from('company_fund_transactions')
-        .select('*')
-        .in('party_id', searchKeys)
-        .order('created_at', { ascending: false });
-
-      let list = cData || [];
-
-      // 3. Also check bulker_wallet_transactions table if exists
+      // A. Fetch from dedicated bulker_wallet_transactions table
+      let bwList = [];
       try {
         const { data: bwData, error: bwErr } = await supabase
           .from('bulker_wallet_transactions')
           .select('*')
           .in('bulker_id', searchKeys)
           .order('created_at', { ascending: false });
-
-        if (!bwErr && bwData && bwData.length > 0) {
-          const ids = new Set(list.map(t => t.transaction_id));
-          bwData.forEach(t => {
-            if (!ids.has(t.transaction_id)) {
-              list.push(t);
-            }
-          });
-        }
-      } catch (err) {
-        // Table doesn't exist, ignore
+        if (!bwErr && bwData) bwList = bwData;
+      } catch (e) {
+        console.error('Error querying bulker_wallet_transactions:', e);
       }
 
-      // Sort by created_at desc
+      // B. Fetch from company_fund_transactions
+      let cfList = [];
+      try {
+        const { data: cData, error: cErr } = await supabase
+          .from('company_fund_transactions')
+          .select('*')
+          .in('party_id', searchKeys)
+          .order('created_at', { ascending: false });
+        if (!cErr && cData) cfList = cData;
+      } catch (e) {
+        console.error('Error querying company_fund_transactions:', e);
+      }
+
+      // Merge by unique transaction_id with bulker_wallet_transactions prioritized
+      const txMap = new Map();
+      bwList.forEach(tx => {
+        if (tx.transaction_id) txMap.set(tx.transaction_id, tx);
+      });
+      cfList.forEach(tx => {
+        if (tx.transaction_id && !txMap.has(tx.transaction_id)) {
+          txMap.set(tx.transaction_id, tx);
+        }
+      });
+
+      const list = Array.from(txMap.values());
       list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       setTransactions(list);
     } catch (err) {
@@ -260,48 +269,62 @@ export default function BulkerWalletDetails() {
       const bulkerCode = bulker?.bulker_id || identifier;
       const bulkerUuid = bulker?.id;
 
-      const payload = {
+      // 1. ALWAYS insert into dedicated bulker_wallet_transactions ledger
+      const bulkerWalletPayload = {
         transaction_id: generatedTrxId,
+        bulker_id: bulkerCode,
         transaction_type: trxType,
         amount: numAmount,
-        reference_type: 'bulker_wallet',
-        reference_id: bulkerUuid || bulkerCode,
-        party_type: 'bulker',
-        party_id: bulkerCode,
         description: finalDescription,
         status: 'Completed',
+        balance_after: trxType === 'Credit' ? currentBalance + numAmount : currentBalance - numAmount,
+        sync_to_company_fund: Boolean(syncToFund),
         metadata: {
           bulker_id: bulkerCode,
           bulker_uuid: bulkerUuid,
           bulker_name: bulker?.full_name,
           category,
           reference_no: referenceId.trim() || null,
-          processed_by: adminSession.name || 'Admin'
+          processed_by: adminSession.name || 'Admin',
+          synced_to_company_fund: Boolean(syncToFund)
         }
       };
 
-      // 1. Insert into company_fund_transactions
-      const { error: fundErr } = await supabase
-        .from('company_fund_transactions')
-        .insert(payload);
+      const { error: bwErr } = await supabase
+        .from('bulker_wallet_transactions')
+        .insert(bulkerWalletPayload);
 
-      if (fundErr) throw fundErr;
+      if (bwErr) {
+        console.error('Error inserting into bulker_wallet_transactions:', bwErr);
+        throw bwErr;
+      }
 
-      // 2. Also attempt to insert into bulker_wallet_transactions if table exists
-      try {
-        await supabase.from('bulker_wallet_transactions').insert({
+      // 2. ONLY sync to company_fund_transactions if syncToFund checkbox is CHECKED!
+      if (syncToFund) {
+        const companyFundPayload = {
           transaction_id: generatedTrxId,
-          bulker_id: bulkerCode,
           transaction_type: trxType,
           amount: numAmount,
+          reference_type: 'bulker_wallet',
+          reference_id: bulkerUuid || bulkerCode,
+          party_type: 'bulker',
+          party_id: bulkerCode,
           description: finalDescription,
           status: 'Completed',
-          balance_after: trxType === 'Credit' ? currentBalance + numAmount : currentBalance - numAmount,
-          sync_to_company_fund: syncToFund,
-          metadata: payload.metadata
-        });
-      } catch (err) {
-        // Table might not exist yet, ignored
+          metadata: {
+            ...bulkerWalletPayload.metadata,
+            synced_from_bulker_wallet: true
+          }
+        };
+
+        const { error: fundErr } = await supabase
+          .from('company_fund_transactions')
+          .insert(companyFundPayload);
+
+        if (fundErr) {
+          console.error('Error inserting into company_fund_transactions:', fundErr);
+          throw fundErr;
+        }
       }
 
       setTrxModalOpen(false);
@@ -830,11 +853,40 @@ export default function BulkerWalletDetails() {
                         <Typography variant="body2" sx={{ fontSize: '0.84rem', fontWeight: 550, wordBreak: 'break-word' }}>
                           {tx.description || 'Bulker Wallet Transaction'}
                         </Typography>
-                        {tx.metadata?.reference_no && (
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Ref: {tx.metadata.reference_no}
-                          </Typography>
-                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mt: 0.4, flexWrap: 'wrap' }}>
+                          {tx.sync_to_company_fund !== false && tx.sync_to_company_fund !== undefined ? (
+                            <Chip
+                              label="Synced to Fund"
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.62rem',
+                                fontWeight: 750,
+                                bgcolor: 'rgba(22,163,74,0.1)',
+                                color: '#16a34a',
+                                borderRadius: '6px'
+                              }}
+                            />
+                          ) : (
+                            <Chip
+                              label="Bulker Only"
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.62rem',
+                                fontWeight: 750,
+                                bgcolor: 'rgba(245,158,11,0.12)',
+                                color: '#d97706',
+                                borderRadius: '6px'
+                              }}
+                            />
+                          )}
+                          {tx.metadata?.reference_no && (
+                            <Typography variant="caption" color="text.secondary">
+                              Ref: {tx.metadata.reference_no}
+                            </Typography>
+                          )}
+                        </Box>
                       </TableCell>
 
                       {/* Balance After */}
