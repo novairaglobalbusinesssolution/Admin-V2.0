@@ -86,8 +86,10 @@ export default function LiveListManagement() {
     return new Date(dateString).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
   };
 
-  const fetchAppDetails = async (e) => {
-    e.preventDefault();
+  const fetchAppDetails = async (e, preserveSelected = false, additionalIdToSelect = null) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     if (!taskIdInput.trim()) return;
     setLoading(true);
     try {
@@ -216,8 +218,20 @@ export default function LiveListManagement() {
       }
 
       setMembers(finalMembers);
-      // Select only those who are already Live
-      setSelectedIds(finalMembers.filter(r => r.status === 'Live').map(r => r.id));
+      
+      if (preserveSelected) {
+        setSelectedIds(prev => {
+          const combined = [...prev];
+          if (additionalIdToSelect) {
+            combined.push(additionalIdToSelect);
+          }
+          const validIds = combined.filter(id => finalMembers.some(m => m.id === id));
+          return [...new Set(validIds)];
+        });
+      } else {
+        // Initial check: Select only those who are already Live
+        setSelectedIds(finalMembers.filter(r => r.status === 'Live').map(r => r.id));
+      }
 
       setSnack({ open: true, message: 'App and submissions loaded!', severity: 'success' });
     } catch (error) {
@@ -751,7 +765,7 @@ export default function LiveListManagement() {
       }
 
       // Insert into review_submit_data
-      const { error: insertErr } = await supabase
+      const { data: insertedData, error: insertErr } = await supabase
         .from('review_submit_data')
         .insert({
           app_id: appDetails.id,
@@ -761,7 +775,9 @@ export default function LiveListManagement() {
           submitted_username: missingData.username,
           screenshot_url: 'MANUAL_ENTRY',
           status: 'Under Review'
-        });
+        })
+        .select()
+        .single();
 
       if (insertErr) throw insertErr;
 
@@ -769,8 +785,9 @@ export default function LiveListManagement() {
       setAddMissingOpen(false);
       setMissingData({ username: '', earnerId: '', bulkerId: '' });
       
-      // Refresh the list
-      fetchAppDetails({ preventDefault: () => {} });
+      // Refresh the list while PRESERVING existing selections and selecting the newly added member
+      const newMemberId = insertedData?.id;
+      await fetchAppDetails(null, true, newMemberId);
     } catch (error) {
       setSnack({ open: true, message: error.message, severity: 'error' });
     } finally {
