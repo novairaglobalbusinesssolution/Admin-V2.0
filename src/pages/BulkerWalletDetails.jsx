@@ -28,8 +28,9 @@ import { supabase } from '../supabaseClient';
 export default function BulkerWalletDetails() {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { bulkerId: rawBulkerId } = useParams();
-  const bulkerId = decodeURIComponent(rawBulkerId || '');
+  const { bulkerId: rawBulkerId, id: rawId } = useParams();
+  const identifier = decodeURIComponent(rawBulkerId || rawId || '');
+  const bulkerId = identifier;
 
   const [loading, setLoading] = useState(true);
   const [bulker, setBulker] = useState(null);
@@ -55,24 +56,58 @@ export default function BulkerWalletDetails() {
   const [processing, setProcessing] = useState(false);
 
   const fetchBulkerData = async () => {
-    if (!bulkerId) return;
+    if (!identifier) return;
     setLoading(true);
     try {
-      // 1. Fetch Bulker Profile from bulker_desks
-      const { data: bData, error: bErr } = await supabase
-        .from('bulker_desks')
-        .select('*')
-        .eq('bulker_id', bulkerId)
-        .maybeSingle();
+      // 1. Fetch Bulker Profile from bulker_desks: check 'id' column first or 'bulker_id'
+      let bData = null;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
 
-      if (bErr) throw bErr;
+      if (isUuid) {
+        const { data: byId } = await supabase
+          .from('bulker_desks')
+          .select('*')
+          .eq('id', identifier)
+          .maybeSingle();
+        bData = byId;
+      }
+
+      if (!bData) {
+        // Try bulker_id
+        const { data: byBulkerId } = await supabase
+          .from('bulker_desks')
+          .select('*')
+          .eq('bulker_id', identifier)
+          .maybeSingle();
+        bData = byBulkerId;
+      }
+
+      if (!bData && !isUuid) {
+        // Fallback: in case id is numeric or other string format
+        const { data: fallbackById } = await supabase
+          .from('bulker_desks')
+          .select('*')
+          .eq('id', identifier)
+          .maybeSingle();
+        bData = fallbackById;
+      }
+
       setBulker(bData);
 
-      // 2. Fetch all transactions for this bulker
+      // If user landed here using bulker_id with slashes (%2F), replace URL with clean 'id' column
+      if (bData && bData.id && identifier !== bData.id) {
+        navigate(`/payments/bulkers/wallet/${bData.id}`, { replace: true });
+      }
+
+      // 2. Fetch all transactions for this bulker (checking both bulker_id and id)
+      const searchKeys = Array.from(
+        new Set([identifier, bData?.bulker_id, bData?.id].filter(Boolean))
+      );
+
       const { data: cData, error: cErr } = await supabase
         .from('company_fund_transactions')
         .select('*')
-        .eq('party_id', bulkerId)
+        .in('party_id', searchKeys)
         .order('created_at', { ascending: false });
 
       let list = cData || [];
@@ -82,7 +117,7 @@ export default function BulkerWalletDetails() {
         const { data: bwData, error: bwErr } = await supabase
           .from('bulker_wallet_transactions')
           .select('*')
-          .eq('bulker_id', bulkerId)
+          .in('bulker_id', searchKeys)
           .order('created_at', { ascending: false });
 
         if (!bwErr && bwData && bwData.length > 0) {
@@ -109,7 +144,7 @@ export default function BulkerWalletDetails() {
 
   useEffect(() => {
     fetchBulkerData();
-  }, [bulkerId]);
+  }, [identifier]);
 
   // Financial metrics calculations
   let currentBalance = 0;
@@ -222,18 +257,22 @@ export default function BulkerWalletDetails() {
         ? `[${category}] ${description.trim()}`
         : `${category} processed by Admin (${adminSession.name || 'Admin'})`;
 
+      const bulkerCode = bulker?.bulker_id || identifier;
+      const bulkerUuid = bulker?.id;
+
       const payload = {
         transaction_id: generatedTrxId,
         transaction_type: trxType,
         amount: numAmount,
         reference_type: 'bulker_wallet',
-        reference_id: bulkerId,
+        reference_id: bulkerUuid || bulkerCode,
         party_type: 'bulker',
-        party_id: bulkerId,
+        party_id: bulkerCode,
         description: finalDescription,
         status: 'Completed',
         metadata: {
-          bulker_id: bulkerId,
+          bulker_id: bulkerCode,
+          bulker_uuid: bulkerUuid,
           bulker_name: bulker?.full_name,
           category,
           reference_no: referenceId.trim() || null,
@@ -252,7 +291,7 @@ export default function BulkerWalletDetails() {
       try {
         await supabase.from('bulker_wallet_transactions').insert({
           transaction_id: generatedTrxId,
-          bulker_id: bulkerId,
+          bulker_id: bulkerCode,
           transaction_type: trxType,
           amount: numAmount,
           description: finalDescription,
@@ -269,7 +308,7 @@ export default function BulkerWalletDetails() {
       Swal.fire({
         icon: 'success',
         title: `${trxType} Processed!`,
-        text: `₹${numAmount.toFixed(2)} successfully ${trxType.toLowerCase()}ed to ${bulker?.full_name || bulkerId}.`,
+        text: `₹${numAmount.toFixed(2)} successfully ${trxType.toLowerCase()}ed to ${bulker?.full_name || bulkerCode}.`,
         timer: 2000,
         showConfirmButton: false
       });
@@ -316,7 +355,8 @@ export default function BulkerWalletDetails() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `statement_${bulkerId.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.csv`);
+    const exportName = (bulker?.bulker_id || bulker?.id || bulkerId || 'bulker').replace(/[^a-zA-Z0-9]/g, '_');
+    link.setAttribute('download', `statement_${exportName}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -342,7 +382,7 @@ export default function BulkerWalletDetails() {
               PAYMENTS / BULKERS / WALLET MANAGEMENT
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 800 }}>
-              {bulker?.full_name || bulkerId}
+              {bulker?.full_name || bulker?.bulker_id || bulkerId}
             </Typography>
           </Box>
         </Box>
@@ -440,13 +480,27 @@ export default function BulkerWalletDetails() {
                 </Box>
 
                 <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: '0.82rem', color: 'text.secondary' }}>
-                    <span style={{ fontWeight: 700 }}>ID:</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{bulkerId}</span>
-                    <IconButton size="small" onClick={() => copyToClipboard(bulkerId)} sx={{ p: 0.3 }}>
-                      <ContentCopyIcon sx={{ fontSize: 13 }} />
-                    </IconButton>
-                  </Box>
+                  {bulker?.bulker_id && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: '0.82rem', color: 'text.secondary' }}>
+                      <span style={{ fontWeight: 750 }}>Bulker ID:</span>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{bulker.bulker_id}</span>
+                      <IconButton size="small" onClick={() => copyToClipboard(bulker.bulker_id)} sx={{ p: 0.3 }}>
+                        <ContentCopyIcon sx={{ fontSize: 13 }} />
+                      </IconButton>
+                    </Box>
+                  )}
+
+                  {bulker?.id && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: '0.82rem', color: 'text.secondary' }}>
+                      <span style={{ fontWeight: 750 }}>UID:</span>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'primary.main' }}>
+                        {bulker.id}
+                      </span>
+                      <IconButton size="small" onClick={() => copyToClipboard(bulker.id)} sx={{ p: 0.3 }}>
+                        <ContentCopyIcon sx={{ fontSize: 13 }} />
+                      </IconButton>
+                    </Box>
+                  )}
 
                   {bulker?.phone && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.82rem', color: 'text.secondary' }}>
@@ -840,7 +894,7 @@ export default function BulkerWalletDetails() {
                 {trxType === 'Credit' ? 'Credit Bulker Wallet' : 'Debit Bulker Wallet'}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Bulker: {bulker?.full_name || bulkerId}
+                Bulker: {bulker?.full_name || bulker?.bulker_id || identifier}
               </Typography>
             </Box>
           </Box>

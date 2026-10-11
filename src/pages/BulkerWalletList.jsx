@@ -107,15 +107,17 @@ export default function BulkerWalletList() {
         }
       });
 
-      // 5. Merge with bulker records
+      // 5. Merge with bulker records (checking both bulker_id and id column)
       const mergedBulkers = (bData || []).map((b) => {
-        const stats = bulkerStats[b.bulker_id] || { balance: 0, totalCredits: 0, totalDebits: 0, txCount: 0 };
+        const statsByBulkerId = bulkerStats[b.bulker_id] || { balance: 0, totalCredits: 0, totalDebits: 0, txCount: 0 };
+        const statsById = bulkerStats[b.id] || { balance: 0, totalCredits: 0, totalDebits: 0, txCount: 0 };
+
         return {
           ...b,
-          balance: stats.balance,
-          totalCredits: stats.totalCredits,
-          totalDebits: stats.totalDebits,
-          txCount: stats.txCount
+          balance: statsByBulkerId.balance + statsById.balance,
+          totalCredits: statsByBulkerId.totalCredits + statsById.totalCredits,
+          totalDebits: statsByBulkerId.totalDebits + statsById.totalDebits,
+          txCount: statsByBulkerId.txCount + statsById.txCount
         };
       });
 
@@ -137,6 +139,7 @@ export default function BulkerWalletList() {
     const matchesSearch =
       (b.full_name || '').toLowerCase().includes(q) ||
       (b.bulker_id || '').toLowerCase().includes(q) ||
+      (b.id || '').toLowerCase().includes(q) ||
       (b.phone || '').toLowerCase().includes(q) ||
       (b.email || '').toLowerCase().includes(q);
 
@@ -163,8 +166,10 @@ export default function BulkerWalletList() {
     page * rowsPerPage + rowsPerPage
   );
 
-  const handleViewBulker = (bulkerId) => {
-    navigate(`/payments/bulkers/wallet/${encodeURIComponent(bulkerId)}`);
+  const handleViewBulker = (bulker) => {
+    // Navigate using clean primary key 'id' column for a clean, premium URL
+    const targetId = bulker?.id || bulker?.bulker_id;
+    navigate(`/payments/bulkers/wallet/${encodeURIComponent(targetId)}`);
   };
 
   return (
@@ -382,14 +387,14 @@ export default function BulkerWalletList() {
           <Table>
             <TableHead sx={{ bgcolor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.02)' : 'rgba(255,255,255,0.02)' }}>
               <TableRow>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', py: 1.8 }}>BULKER NAME</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem' }}>BULKER ID</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem' }}>ACCOUNT TYPE</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem' }}>CONTACT DETAILS</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem' }}>WALLET BALANCE</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem' }}>ALL-TIME CREDITS</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem' }}>STATUS</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.8rem' }}>ACTION</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', py: 1.8, whiteSpace: 'nowrap' }}>BULKER NAME</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>BULKER ID</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ACCOUNT TYPE</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>CONTACT DETAILS</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>WALLET BALANCE</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ALL-TIME CREDITS</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>STATUS</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ACTION</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -424,68 +429,98 @@ export default function BulkerWalletList() {
                     }}
                   >
                     {/* Bulker Name */}
-                    <TableCell sx={{ py: 1.8 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <TableCell sx={{ py: 1.5, whiteSpace: 'nowrap' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, whiteSpace: 'nowrap' }}>
                         <Avatar
                           sx={{
-                            width: 38,
-                            height: 38,
+                            width: 36,
+                            height: 36,
                             bgcolor: 'primary.main',
                             fontWeight: 800,
-                            fontSize: '0.9rem',
-                            color: '#fff'
+                            fontSize: '0.88rem',
+                            color: '#fff',
+                            flexShrink: 0
                           }}
                         >
                           {b.full_name ? b.full_name.charAt(0).toUpperCase() : 'B'}
                         </Avatar>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 750, color: 'text.primary' }}>
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, whiteSpace: 'nowrap' }}>
+                          <Typography variant="body2" sx={{ fontWeight: 750, color: 'text.primary', whiteSpace: 'nowrap' }}>
                             {b.full_name}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {b.txCount || 0} transaction(s)
-                          </Typography>
+                          <Chip
+                            label={`${b.txCount || 0} transaction(s)`}
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap',
+                              borderRadius: '100px',
+                              bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.08)' : 'rgba(59,130,246,0.14)',
+                              color: 'primary.main',
+                              border: '1px solid',
+                              borderColor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.18)' : 'rgba(59,130,246,0.25)',
+                              '& .MuiChip-label': { px: 0.8, py: 0, whiteSpace: 'nowrap' }
+                            }}
+                          />
                         </Box>
                       </Box>
                     </TableCell>
 
                     {/* Bulker ID */}
-                    <TableCell>
-                      <Chip
-                        label={b.bulker_id}
-                        size="small"
-                        sx={{
-                          fontFamily: 'monospace',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          borderRadius: '8px'
-                        }}
-                      />
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                        <Chip
+                          label={b.bulker_id}
+                          size="small"
+                          sx={{
+                            fontFamily: 'monospace',
+                            fontWeight: 700,
+                            fontSize: '0.75rem',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        {b.id && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontFamily: 'monospace',
+                              fontSize: '0.68rem',
+                              color: 'text.secondary',
+                              letterSpacing: 0.3,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            UID: {b.id.length > 13 ? `${b.id.substring(0, 8)}...` : b.id}
+                          </Typography>
+                        )}
+                      </Box>
                     </TableCell>
 
                     {/* Account Type */}
-                    <TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Chip
                         icon={<AccountBalanceWalletIcon sx={{ fontSize: '0.9rem !important' }} />}
                         label={b.account_type || 'Wallet System'}
                         size="small"
                         color={b.account_type === 'Manual' ? 'default' : 'primary'}
                         variant={b.account_type === 'Manual' ? 'outlined' : 'filled'}
-                        sx={{ fontWeight: 700, fontSize: '0.75rem', borderRadius: '8px' }}
+                        sx={{ fontWeight: 700, fontSize: '0.75rem', borderRadius: '8px', whiteSpace: 'nowrap' }}
                       />
                     </TableCell>
 
                     {/* Contact Details */}
-                    <TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
                         {b.phone && (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: '0.78rem', color: 'text.secondary' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: '0.78rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
                             <PhoneIcon sx={{ fontSize: 13 }} />
                             <span>{b.phone}</span>
                           </Box>
                         )}
                         {b.email && (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: '0.78rem', color: 'text.secondary' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, fontSize: '0.78rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
                             <EmailIcon sx={{ fontSize: 13 }} />
                             <span>{b.email}</span>
                           </Box>
@@ -494,13 +529,14 @@ export default function BulkerWalletList() {
                     </TableCell>
 
                     {/* Wallet Balance */}
-                    <TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Typography
                         variant="body2"
                         sx={{
                           fontWeight: 800,
                           fontSize: '0.95rem',
-                          color: (b.balance || 0) >= 0 ? '#16a34a' : 'error.main'
+                          color: (b.balance || 0) >= 0 ? '#16a34a' : 'error.main',
+                          whiteSpace: 'nowrap'
                         }}
                       >
                         ₹{(b.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -508,30 +544,30 @@ export default function BulkerWalletList() {
                     </TableCell>
 
                     {/* Total Credits */}
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary', whiteSpace: 'nowrap' }}>
                         ₹{(b.totalCredits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </Typography>
                     </TableCell>
 
                     {/* Status */}
-                    <TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Chip
                         label={b.status || 'Active'}
                         size="small"
                         color={b.status === 'Active' || b.status === 'Verified' ? 'success' : 'default'}
-                        sx={{ fontWeight: 700, fontSize: '0.72rem', borderRadius: '8px' }}
+                        sx={{ fontWeight: 700, fontSize: '0.72rem', borderRadius: '8px', whiteSpace: 'nowrap' }}
                       />
                     </TableCell>
 
                     {/* Action */}
-                    <TableCell align="center">
+                    <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
                       <Button
                         variant="contained"
                         size="small"
                         color="primary"
                         startIcon={<VisibilityIcon fontSize="small" />}
-                        onClick={() => handleViewBulker(b.bulker_id)}
+                        onClick={() => handleViewBulker(b)}
                         sx={{
                           borderRadius: '100px',
                           textTransform: 'none',
