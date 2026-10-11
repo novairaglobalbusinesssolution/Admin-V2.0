@@ -22,7 +22,8 @@ import EmailIcon from '@mui/icons-material/Email';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import Swal from 'sweetalert2';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import CloseIcon from '@mui/icons-material/Close';
 import { supabase } from '../supabaseClient';
 
 export default function BulkerWalletDetails() {
@@ -54,7 +55,12 @@ export default function BulkerWalletDetails() {
   const [referenceId, setReferenceId] = useState('');
   const [syncToFund, setSyncToFund] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
+  const [toast, setToast] = useState({ open: false, type: 'success', title: '', message: '' });
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '' });
+
+  const showToast = (type, title, message = '') => {
+    setToast({ open: true, type, title, message });
+  };
 
   const fetchBulkerData = async () => {
     if (!identifier) return;
@@ -238,90 +244,28 @@ export default function BulkerWalletDetails() {
     setTrxModalOpen(true);
   };
 
-  // Modern Theme-Aware SweetAlert2 Helpers
-  const getModernSwalConfig = () => {
-    const isDark = theme.palette.mode === 'dark';
-    return {
-      background: isDark ? '#0f172a' : '#ffffff',
-      color: isDark ? '#f8fafc' : '#0f172a',
-      backdrop: 'rgba(15, 23, 42, 0.65)',
-      customClass: {
-        popup: 'modern-swal-modal',
-        title: 'modern-swal-title',
-        htmlContainer: 'modern-swal-content',
-        confirmButton: 'modern-swal-confirm-btn',
-        cancelButton: 'modern-swal-cancel-btn',
-      },
-      buttonsStyling: false,
-    };
-  };
-
-  const showModernSuccess = (title, text) => {
-    const isDark = theme.palette.mode === 'dark';
-    return Swal.fire({
-      ...getModernSwalConfig(),
-      icon: 'success',
-      iconColor: '#10b981',
-      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
-      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
-      timer: 2400,
-      showConfirmButton: false,
-    });
-  };
-
-  const showModernWarning = (title, text) => {
-    const isDark = theme.palette.mode === 'dark';
-    return Swal.fire({
-      ...getModernSwalConfig(),
-      icon: 'warning',
-      iconColor: '#f59e0b',
-      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
-      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
-      confirmButtonText: 'Understood',
-    });
-  };
-
-  const showModernError = (title, text) => {
-    const isDark = theme.palette.mode === 'dark';
-    return Swal.fire({
-      ...getModernSwalConfig(),
-      icon: 'error',
-      iconColor: '#ef4444',
-      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
-      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
-      confirmButtonText: 'Close',
-    });
-  };
-
-  const showModernConfirm = (title, text, confirmBtnText = 'Yes, Proceed') => {
-    const isDark = theme.palette.mode === 'dark';
-    return Swal.fire({
-      ...getModernSwalConfig(),
-      icon: 'warning',
-      iconColor: '#f59e0b',
-      title: `<span style="font-weight: 800; font-size: 1.3rem;">${title}</span>`,
-      html: `<span style="font-size: 0.94rem; color: ${isDark ? '#94a3b8' : '#64748b'}; font-weight: 500;">${text}</span>`,
-      showCancelButton: true,
-      confirmButtonText: confirmBtnText,
-      cancelButtonText: 'Cancel',
-    });
-  };
-
   const handleProcessTransaction = async () => {
     const numAmount = parseFloat(amount);
     if (!amount || isNaN(numAmount) || numAmount <= 0) {
-      showModernWarning('Invalid Amount', 'Please enter a valid amount greater than 0.');
+      showToast('warning', 'Invalid Amount', 'Please enter a valid amount greater than 0.');
       return;
     }
 
     if (trxType === 'Debit' && numAmount > currentBalance) {
-      const isConfirmed = await showModernConfirm(
-        'Negative Balance Warning',
-        `This debit of ₹${numAmount} exceeds the current wallet balance of ₹${currentBalance}. Do you still want to proceed?`,
-        'Yes, Proceed'
-      );
-      if (!isConfirmed.isConfirmed) return;
+      setConfirmDialog({
+        open: true,
+        title: 'Negative Balance Warning',
+        message: `This debit of ₹${numAmount.toFixed(2)} exceeds current wallet balance of ₹${currentBalance.toFixed(2)}. Do you still want to proceed?`
+      });
+      return;
     }
+
+    await executeTransaction(numAmount);
+  };
+
+  const executeTransaction = async (overrideAmount) => {
+    const numAmount = overrideAmount !== undefined ? overrideAmount : parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) return;
 
     setProcessing(true);
     try {
@@ -395,16 +339,20 @@ export default function BulkerWalletDetails() {
       }
 
       setTrxModalOpen(false);
-      showModernSuccess(
+      setConfirmDialog({ open: false, title: '', message: '' });
+
+      // Immediate Top-Center Compact Toast
+      showToast(
+        'success',
         `${trxType} Processed!`,
-        `₹${numAmount.toFixed(2)} successfully ${trxType.toLowerCase()}ed to ${bulker?.full_name || bulkerCode}.`
+        `₹${numAmount.toFixed(2)} ${trxType.toLowerCase()}ed to ${bulker?.full_name || bulkerCode}.`
       );
 
       // Refresh data
       await fetchBulkerData();
     } catch (err) {
       console.error('Transaction error:', err);
-      showModernError('Transaction Failed', err.message || 'Failed to process transaction.');
+      showToast('error', 'Transaction Failed', err.message || 'Failed to process transaction.');
     } finally {
       setProcessing(false);
     }
@@ -413,16 +361,12 @@ export default function BulkerWalletDetails() {
   const copyToClipboard = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    setSnack({
-      open: true,
-      message: `Copied to clipboard: ${text}`,
-      severity: 'success'
-    });
+    showToast('success', 'Copied!', text);
   };
 
   const exportCSVStatement = () => {
     if (!transactions.length) {
-      showModernWarning('No Transactions', 'No transaction data available to export.');
+      showToast('warning', 'No Transactions', 'No transaction data available to export.');
       return;
     }
 
@@ -1120,84 +1064,156 @@ export default function BulkerWalletDetails() {
         </DialogActions>
       </Dialog>
 
-      {/* Modern Bottom Floating Toast Notification for Copy & Quick alerts */}
-      <Snackbar
-        open={snack.open}
-        autoHideDuration={2200}
-        onClose={() => setSnack(s => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      {/* Negative Balance Warning Confirmation Dialog */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => !processing && setConfirmDialog({ open: false, title: '', message: '' })}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: '20px', p: 1 } }}
       >
-        <Alert
-          onClose={() => setSnack(s => ({ ...s, open: false }))}
-          severity={snack.severity}
-          variant="filled"
-          icon={<CheckCircleIcon sx={{ fontSize: 18 }} />}
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Avatar sx={{ bgcolor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', width: 34, height: 34 }}>
+            <WarningAmberIcon sx={{ fontSize: 20 }} />
+          </Avatar>
+          <span>{confirmDialog.title}</span>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, lineHeight: 1.6 }}>
+            {confirmDialog.message}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setConfirmDialog({ open: false, title: '', message: '' })}
+            color="inherit"
+            disabled={processing}
+            sx={{ fontWeight: 700, borderRadius: '10px' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => executeTransaction()}
+            variant="contained"
+            color="warning"
+            disabled={processing}
+            sx={{ fontWeight: 800, borderRadius: '10px', px: 2.5 }}
+          >
+            {processing ? 'Processing...' : 'Yes, Proceed'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Top Center Compact Premium Toast Notification */}
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={3200}
+        onClose={() => setToast(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        sx={{
+          top: { xs: 20, sm: 28 },
+          zIndex: 99999
+        }}
+      >
+        <Paper
+          elevation={12}
           sx={{
-            borderRadius: '16px',
-            fontWeight: 750,
-            fontSize: '0.86rem',
-            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.28)',
-            bgcolor: snack.severity === 'success' ? '#10b981' : undefined,
-            color: '#fff',
-            px: 2.5,
-            py: 0.8,
             display: 'flex',
             alignItems: 'center',
-            '& .MuiAlert-icon': { mr: 1 }
+            gap: 1.4,
+            py: 0.9,
+            px: 2,
+            borderRadius: '100px',
+            bgcolor: theme.palette.mode === 'dark' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid',
+            borderColor:
+              toast.type === 'success'
+                ? 'rgba(16, 185, 129, 0.45)'
+                : toast.type === 'warning'
+                ? 'rgba(245, 158, 11, 0.45)'
+                : 'rgba(239, 68, 68, 0.45)',
+            boxShadow:
+              theme.palette.mode === 'dark'
+                ? '0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(16, 185, 129, 0.12)'
+                : '0 16px 40px rgba(0, 0, 0, 0.12), 0 0 20px rgba(16, 185, 129, 0.12)',
+            minWidth: { xs: 290, sm: 360 },
+            maxWidth: '92vw'
           }}
         >
-          {snack.message}
-        </Alert>
-      </Snackbar>
+          {/* Status Icon with pill background */}
+          <Avatar
+            sx={{
+              width: 30,
+              height: 30,
+              bgcolor:
+                toast.type === 'success'
+                  ? 'rgba(16, 185, 129, 0.15)'
+                  : toast.type === 'warning'
+                  ? 'rgba(245, 158, 11, 0.15)'
+                  : 'rgba(239, 68, 68, 0.15)',
+              color:
+                toast.type === 'success'
+                  ? '#10b981'
+                  : toast.type === 'warning'
+                  ? '#f59e0b'
+                  : '#ef4444'
+            }}
+          >
+            {toast.type === 'success' && <CheckCircleIcon sx={{ fontSize: 18 }} />}
+            {toast.type === 'warning' && <WarningAmberIcon sx={{ fontSize: 18 }} />}
+            {toast.type === 'error' && <CloseIcon sx={{ fontSize: 18 }} />}
+          </Avatar>
 
-      {/* Global CSS for Modern Theme-Adaptive Modals */}
-      <style>{`
-        .modern-swal-modal {
-          border-radius: 28px !important;
-          padding: 28px 24px !important;
-          box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45) !important;
-          border: 1px solid rgba(255, 255, 255, 0.12) !important;
-          animation: swalModernPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
-        }
-        @keyframes swalModernPop {
-          0% { transform: scale(0.92); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        .modern-swal-confirm-btn {
-          background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
-          color: #ffffff !important;
-          font-weight: 750 !important;
-          font-size: 0.88rem !important;
-          border-radius: 12px !important;
-          padding: 10px 24px !important;
-          border: none !important;
-          cursor: pointer !important;
-          box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
-          transition: all 0.2s ease !important;
-          margin: 6px !important;
-        }
-        .modern-swal-confirm-btn:hover {
-          background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
-          transform: translateY(-1px) !important;
-          box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45) !important;
-        }
-        .modern-swal-cancel-btn {
-          background-color: transparent !important;
-          color: #94a3b8 !important;
-          font-weight: 700 !important;
-          font-size: 0.88rem !important;
-          border-radius: 12px !important;
-          padding: 10px 20px !important;
-          border: 1px solid rgba(148, 163, 184, 0.3) !important;
-          cursor: pointer !important;
-          margin: 6px !important;
-          transition: all 0.2s ease !important;
-        }
-        .modern-swal-cancel-btn:hover {
-          background-color: rgba(148, 163, 184, 0.1) !important;
-          color: #f8fafc !important;
-        }
-      `}</style>
+          {/* Text Content in single horizontal line */}
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 800,
+                fontSize: '0.86rem',
+                color:
+                  toast.type === 'success'
+                    ? '#10b981'
+                    : toast.type === 'warning'
+                    ? '#f59e0b'
+                    : '#ef4444',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {toast.title}
+            </Typography>
+            {toast.message && (
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 550,
+                  fontSize: '0.82rem',
+                  color: theme.palette.mode === 'dark' ? '#cbd5e1' : '#475569',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {toast.message}
+              </Typography>
+            )}
+          </Box>
+
+          {/* Close button */}
+          <IconButton
+            size="small"
+            onClick={() => setToast(prev => ({ ...prev, open: false }))}
+            sx={{
+              p: 0.3,
+              color: 'text.secondary',
+              '&:hover': { color: 'text.primary' }
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Paper>
+      </Snackbar>
     </Box>
   );
 }
