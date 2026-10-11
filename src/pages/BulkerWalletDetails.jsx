@@ -925,23 +925,33 @@ export default function BulkerWalletDetails() {
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
+              SelectProps={{
+                MenuProps: {
+                  PaperProps: {
+                    sx: { borderRadius: '14px', maxHeight: 300 }
+                  }
+                }
+              }}
             >
-              {trxType === 'Credit' ? (
-                <>
-                  <MenuItem value="Task Settlement">Task Settlement / Rewards</MenuItem>
-                  <MenuItem value="Bulker Commission">Bulker Commission</MenuItem>
-                  <MenuItem value="Bonus & Incentive">Bonus & Incentive</MenuItem>
-                  <MenuItem value="Manual Credit Adjustment">Manual Credit Adjustment</MenuItem>
-                </>
-              ) : (
-                <>
-                  <MenuItem value="Bulker Payout">Bulker Payout / Withdrawal</MenuItem>
-                  <MenuItem value="Bank Transfer">Bank Transfer Settlement</MenuItem>
-                  <MenuItem value="UPI Settlement">UPI Settlement</MenuItem>
-                  <MenuItem value="Penalty / Deduction">Penalty / Deduction</MenuItem>
-                  <MenuItem value="Manual Debit Adjustment">Manual Debit Adjustment</MenuItem>
-                </>
-              )}
+              {(trxType === 'Credit'
+                ? [
+                    { value: 'Task Settlement', label: 'Task Settlement / Rewards' },
+                    { value: 'Bulker Commission', label: 'Bulker Commission' },
+                    { value: 'Bonus & Incentive', label: 'Bonus & Incentive' },
+                    { value: 'Manual Credit Adjustment', label: 'Manual Credit Adjustment' }
+                  ]
+                : [
+                    { value: 'Bulker Payout', label: 'Bulker Payout / Withdrawal' },
+                    { value: 'Bank Transfer', label: 'Bank Transfer Settlement' },
+                    { value: 'UPI Settlement', label: 'UPI Settlement' },
+                    { value: 'Penalty / Deduction', label: 'Penalty / Deduction' },
+                    { value: 'Manual Debit Adjustment', label: 'Manual Debit Adjustment' }
+                  ]
+              ).map((item) => (
+                <MenuItem key={item.value} value={item.value}>
+                  {item.label}
+                </MenuItem>
+              ))}
             </TextField>
 
             {/* Reference No */}
