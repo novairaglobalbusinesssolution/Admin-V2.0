@@ -3,7 +3,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar, Box, CssBaseline, Drawer, IconButton, Button,
   List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Toolbar, Typography, useTheme, useMediaQuery, Avatar, Menu, MenuItem, Divider, Skeleton
+  Toolbar, Typography, useTheme, useMediaQuery, Avatar, Menu, MenuItem, Divider, Skeleton,
+  Badge, Popover, Chip, Stack
 } from '@mui/material';
 
 // Material Icons
@@ -28,11 +29,15 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
+import GroupIcon from '@mui/icons-material/Group';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import Collapse from '@mui/material/Collapse';
+import { supabase } from '../supabaseClient';
 
 import { ColorModeContext } from '../App';
 
@@ -71,6 +76,76 @@ export default function AdminLayout() {
   const [anchorEl, setAnchorEl] = useState(null);
   const handleProfileMenuOpen = (event) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
+
+  // Notification Popover state & counts
+  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const [notifCounts, setNotifCounts] = useState({
+    newUsers: 0,
+    withdrawals: 0,
+    reviews: 0,
+    bulkers: 0
+  });
+
+  const fetchNotificationCounts = async () => {
+    try {
+      const lastRead = localStorage.getItem('admin_last_read_notifications') || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      // 1. New users since last read
+      const { count: usersCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gt('created_at', lastRead);
+
+      // 2. Pending individual withdrawals
+      const { count: withCount } = await supabase
+        .from('individual_wallet_transactions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Pending')
+        .eq('transaction_type', 'Debit')
+        .ilike('description', 'Withdrawal:%');
+
+      // 3. Pending task submissions under review
+      const { count: revCount } = await supabase
+        .from('review_submit_data')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Under Review');
+
+      // 4. Pending / latest bulkers
+      const { count: bulkerCount } = await supabase
+        .from('bulker_desks')
+        .select('*', { count: 'exact', head: true })
+        .gt('created_at', lastRead);
+
+      setNotifCounts({
+        newUsers: usersCount || 0,
+        withdrawals: withCount || 0,
+        reviews: revCount || 0,
+        bulkers: bulkerCount || 0
+      });
+    } catch (err) {
+      console.error('Error fetching notification counts:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotificationCounts();
+    const interval = setInterval(fetchNotificationCounts, 30000);
+    window.addEventListener('notifications_updated', fetchNotificationCounts);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications_updated', fetchNotificationCounts);
+    };
+  }, []);
+
+  const totalNotifications = notifCounts.newUsers + notifCounts.withdrawals + notifCounts.reviews + notifCounts.bulkers;
+
+  const handleNotifOpen = (event) => setNotifAnchorEl(event.currentTarget);
+  const handleNotifClose = () => setNotifAnchorEl(null);
+
+  const handleCategoryClick = (category) => {
+    handleNotifClose();
+    navigate(`/notifications?category=${category}`);
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -465,8 +540,19 @@ export default function AdminLayout() {
               {theme.palette.mode === 'dark' ? <LightModeIcon sx={{ color: '#fbbf24' }} /> : <DarkModeOutlinedIcon />}
             </IconButton>
 
-            <IconButton color="inherit" size="large" sx={{ backgroundColor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.03)' : 'rgba(148,163,184,0.08)', borderRadius: '12px', border: theme.palette.mode === 'light' ? '1px solid rgba(15,23,42,0.04)' : 'none' }}>
-              <NotificationsNoneIcon />
+            <IconButton
+              onClick={handleNotifOpen}
+              color="inherit"
+              size="large"
+              sx={{
+                backgroundColor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.03)' : 'rgba(148,163,184,0.08)',
+                borderRadius: '12px',
+                border: theme.palette.mode === 'light' ? '1px solid rgba(15,23,42,0.04)' : 'none'
+              }}
+            >
+              <Badge badgeContent={totalNotifications} color="error" max={99}>
+                <NotificationsNoneIcon />
+              </Badge>
             </IconButton>
 
             <IconButton onClick={handleProfileMenuOpen} sx={{ ml: 0.5, p: 0.5, backgroundColor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(148,163,184,0.08)', borderRadius: '14px', border: theme.palette.mode === 'light' ? '1px solid rgba(37,99,235,0.10)' : 'none' }}>
@@ -477,6 +563,208 @@ export default function AdminLayout() {
           </Box>
         </Toolbar>
       </AppBar>
+
+      {/* Notification Popover Modal */}
+      <Popover
+        open={Boolean(notifAnchorEl)}
+        anchorEl={notifAnchorEl}
+        onClose={handleNotifClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{
+          elevation: 6,
+          sx: {
+            mt: 1.5,
+            width: { xs: 330, sm: 380 },
+            borderRadius: '24px',
+            overflow: 'hidden',
+            border: `1px solid ${theme.palette.divider}`,
+            bgcolor: theme.palette.mode === 'light' ? '#fff' : '#1e2430',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.12)'
+          }
+        }}
+      >
+        {/* Header */}
+        <Box sx={{ p: 2.2, pb: 1.8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.03)' : 'rgba(255,255,255,0.02)' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Notifications</Typography>
+            {totalNotifications > 0 && (
+              <Chip label={`${totalNotifications} New`} size="small" color="error" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 800 }} />
+            )}
+          </Box>
+          <Button
+            size="small"
+            color="primary"
+            onClick={() => {
+              localStorage.setItem('admin_last_read_notifications', new Date().toISOString());
+              fetchNotificationCounts();
+            }}
+            sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 700 }}
+          >
+            Mark all read
+          </Button>
+        </Box>
+
+        {/* Categories List */}
+        <List sx={{ p: 1.5, pb: 1 }}>
+          {/* Category 1: New Users */}
+          <ListItemButton
+            onClick={() => handleCategoryClick('users')}
+            sx={{
+              borderRadius: '16px',
+              py: 1.2,
+              px: 1.5,
+              mb: 0.8,
+              transition: 'all 0.2s ease',
+              '&:hover': { bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(148,163,184,0.1)' }
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 42 }}>
+              <Avatar sx={{ width: 34, height: 34, bgcolor: 'rgba(59,130,246,0.12)', color: '#3b82f6', borderRadius: '10px' }}>
+                <PersonAddAlt1Icon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </ListItemIcon>
+            <ListItemText
+              primary={<Typography variant="body2" sx={{ fontWeight: 700 }}>New Users</Typography>}
+              secondary={<Typography variant="caption" color="text.secondary">Recently registered earners</Typography>}
+            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                label={notifCounts.newUsers}
+                size="small"
+                color={notifCounts.newUsers > 0 ? 'info' : 'default'}
+                sx={{ height: 22, fontWeight: 800, fontSize: '0.75rem' }}
+              />
+              <IconButton size="small" sx={{ p: 0.5, color: 'text.secondary' }}>
+                <ArrowForwardIosIcon sx={{ fontSize: 12 }} />
+              </IconButton>
+            </Stack>
+          </ListItemButton>
+
+          {/* Category 2: Individual Withdrawals */}
+          <ListItemButton
+            onClick={() => handleCategoryClick('withdrawals')}
+            sx={{
+              borderRadius: '16px',
+              py: 1.2,
+              px: 1.5,
+              mb: 0.8,
+              transition: 'all 0.2s ease',
+              '&:hover': { bgcolor: theme.palette.mode === 'light' ? 'rgba(245,158,11,0.06)' : 'rgba(148,163,184,0.1)' }
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 42 }}>
+              <Avatar sx={{ width: 34, height: 34, bgcolor: 'rgba(245,158,11,0.12)', color: '#f59e0b', borderRadius: '10px' }}>
+                <AccountBalanceWalletIcon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </ListItemIcon>
+            <ListItemText
+              primary={<Typography variant="body2" sx={{ fontWeight: 700 }}>Withdrawal Requests</Typography>}
+              secondary={<Typography variant="caption" color="text.secondary">Pending payouts to verify</Typography>}
+            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                label={notifCounts.withdrawals}
+                size="small"
+                color={notifCounts.withdrawals > 0 ? 'warning' : 'default'}
+                sx={{ height: 22, fontWeight: 800, fontSize: '0.75rem' }}
+              />
+              <IconButton size="small" sx={{ p: 0.5, color: 'text.secondary' }}>
+                <ArrowForwardIosIcon sx={{ fontSize: 12 }} />
+              </IconButton>
+            </Stack>
+          </ListItemButton>
+
+          {/* Category 3: Task Submissions Under Review */}
+          <ListItemButton
+            onClick={() => handleCategoryClick('reviews')}
+            sx={{
+              borderRadius: '16px',
+              py: 1.2,
+              px: 1.5,
+              mb: 0.8,
+              transition: 'all 0.2s ease',
+              '&:hover': { bgcolor: theme.palette.mode === 'light' ? 'rgba(139,92,246,0.06)' : 'rgba(148,163,184,0.1)' }
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 42 }}>
+              <Avatar sx={{ width: 34, height: 34, bgcolor: 'rgba(139,92,246,0.12)', color: '#8b5cf6', borderRadius: '10px' }}>
+                <RateReviewIcon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </ListItemIcon>
+            <ListItemText
+              primary={<Typography variant="body2" sx={{ fontWeight: 700 }}>Tasks Under Review</Typography>}
+              secondary={<Typography variant="caption" color="text.secondary">Screenshots awaiting check</Typography>}
+            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                label={notifCounts.reviews}
+                size="small"
+                color={notifCounts.reviews > 0 ? 'primary' : 'default'}
+                sx={{ height: 22, fontWeight: 800, fontSize: '0.75rem' }}
+              />
+              <IconButton size="small" sx={{ p: 0.5, color: 'text.secondary' }}>
+                <ArrowForwardIosIcon sx={{ fontSize: 12 }} />
+              </IconButton>
+            </Stack>
+          </ListItemButton>
+
+          {/* Category 4: Bulkers */}
+          <ListItemButton
+            onClick={() => handleCategoryClick('bulkers')}
+            sx={{
+              borderRadius: '16px',
+              py: 1.2,
+              px: 1.5,
+              mb: 0.5,
+              transition: 'all 0.2s ease',
+              '&:hover': { bgcolor: theme.palette.mode === 'light' ? 'rgba(16,185,129,0.06)' : 'rgba(148,163,184,0.1)' }
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 42 }}>
+              <Avatar sx={{ width: 34, height: 34, bgcolor: 'rgba(16,185,129,0.12)', color: '#10b981', borderRadius: '10px' }}>
+                <GroupIcon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </ListItemIcon>
+            <ListItemText
+              primary={<Typography variant="body2" sx={{ fontWeight: 700 }}>Bulker Desks</Typography>}
+              secondary={<Typography variant="caption" color="text.secondary">Desk registrations</Typography>}
+            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                label={notifCounts.bulkers}
+                size="small"
+                color={notifCounts.bulkers > 0 ? 'success' : 'default'}
+                sx={{ height: 22, fontWeight: 800, fontSize: '0.75rem' }}
+              />
+              <IconButton size="small" sx={{ p: 0.5, color: 'text.secondary' }}>
+                <ArrowForwardIosIcon sx={{ fontSize: 12 }} />
+              </IconButton>
+            </Stack>
+          </ListItemButton>
+        </List>
+
+        <Divider />
+
+        {/* Footer: View All */}
+        <Box sx={{ p: 1.5, bgcolor: theme.palette.mode === 'light' ? 'rgba(0,0,0,0.01)' : 'rgba(255,255,255,0.02)' }}>
+          <Button
+            fullWidth
+            variant="contained"
+            color="primary"
+            onClick={() => handleCategoryClick('all')}
+            sx={{
+              borderRadius: '14px',
+              fontWeight: 700,
+              textTransform: 'none',
+              py: 1,
+              boxShadow: 'none'
+            }}
+          >
+            View All Notifications
+          </Button>
+        </Box>
+      </Popover>
 
       <Menu
         anchorEl={anchorEl}

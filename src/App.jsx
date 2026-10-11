@@ -22,6 +22,7 @@ import UsersManagement from './pages/UsersManagement';
 import UserView from './pages/UserView';
 import LiveListManagement from './pages/LiveListManagement';
 import ScanZone from './pages/ScanZone';
+import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import AppReviewsView from './pages/AppReviewsView';
 import LiveListView from './pages/LiveListView';
@@ -214,6 +215,7 @@ function App() {
                 <Route path="live-checking-mails" element={<LiveCheckingMails />} />
                 <Route path="push-notifications" element={<PushNotifications />} />
                 <Route path="scan-zone" element={<ScanZone />} />
+                <Route path="notifications" element={<Notifications />} />
                 <Route path="edit-app/:id" element={<EditApp />} />
                 <Route path="app-list" element={<AppList />} />
                 <Route path="comments/:appId" element={<CommentsManagement />} />
