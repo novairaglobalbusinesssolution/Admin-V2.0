@@ -441,15 +441,49 @@ export default function ScanZone() {
   const removeScanRow = (rowId) => { setScanRows((p) => p.filter((r) => r.id !== rowId)); };
   const openImagePreview = (url) => { setPreviewImage(url); setPreviewOpen(true); };
   const openEditDialog = (row) => {
-    setEditRow({ ...row, selectedProfile: row.bestMatch?.profile || null, manualName: row.manualName || (row.matchedName === 'No match' ? '' : row.matchedName) });
+    const isInvalidOcr = !row.ocrText || row.ocrText === 'OCR Failed' || row.ocrText === 'No text detected' || row.ocrText === 'No name detected';
+    const ssUsername = !isInvalidOcr ? row.ocrText : '';
+    setEditRow({
+      ...row,
+      selectedProfile: row.bestMatch?.profile || row.selectedProfile || null,
+      manualName: row.manualName !== undefined ? row.manualName : ssUsername
+    });
   };
   const saveEditedRow = () => {
     if (!editRow) return;
     const sp = editRow.selectedProfile || null;
     const mn = (editRow.manualName || '').trim();
-    const nextName = sp ? `${sp.first_name || ''} ${sp.last_name || ''}`.trim() || sp.earner_id : mn || 'No match';
-    const nextEid = sp ? sp.earner_id : (mn ? 'MANUAL' : 'No match');
-    setScanRows((prev) => prev.map((r) => r.id === editRow.id ? { ...r, bestMatch: sp ? { profile: sp } : null, selectedProfile: sp, manualName: mn, matchedName: nextName, earnerId: nextEid, status: sp || mn ? 'Matched' : 'Unmatched' } : r));
+
+    let finalProfile = sp;
+    if (!finalProfile && mn) {
+      const autoMatch = getBestProfileMatch(mn, bulkerMembers) || getBestProfileMatch(mn, profiles);
+      if (autoMatch) {
+        finalProfile = autoMatch.profile;
+      }
+    }
+
+    const nextName = finalProfile
+      ? `${finalProfile.first_name || ''} ${finalProfile.last_name || ''}`.trim() || finalProfile.earner_id
+      : mn || 'No match';
+    const nextEid = finalProfile ? finalProfile.earner_id : (mn ? 'MANUAL' : 'No match');
+    const nextStatus = finalProfile || mn ? 'Matched' : 'Unmatched';
+
+    setScanRows((prev) =>
+      prev.map((r) =>
+        r.id === editRow.id
+          ? {
+              ...r,
+              ocrText: mn || r.ocrText,
+              manualName: mn,
+              bestMatch: finalProfile ? { profile: finalProfile } : null,
+              selectedProfile: finalProfile,
+              matchedName: nextName,
+              earnerId: nextEid,
+              status: nextStatus
+            }
+          : r
+      )
+    );
     setEditRow(null);
   };
   const ensureCommentForApp = async () => {
