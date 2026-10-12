@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody,
+  Box, Typography, Paper, Grid, Card, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TablePagination,
   TextField, InputAdornment, Button, IconButton, Chip, Avatar,
-  Stack, MenuItem, CircularProgress, Tooltip, useTheme, Alert
+  Stack, MenuItem, CircularProgress, Tooltip, useTheme
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
@@ -13,11 +13,15 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import GroupIcon from '@mui/icons-material/Group';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PhoneIcon from '@mui/icons-material/Phone';
 import EmailIcon from '@mui/icons-material/Email';
-import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { supabase } from '../supabaseClient';
+import {
+  getBulkerIdVariants,
+  calculateBulkerFinances,
+  formatINR
+} from '../utils/bulkerPaymentCalculations';
 
 export default function BulkerWalletList() {
   const theme = useTheme();
@@ -25,7 +29,6 @@ export default function BulkerWalletList() {
 
   const [loading, setLoading] = useState(true);
   const [bulkers, setBulkers] = useState([]);
-  const [transactions, setTransactions] = useState([]);
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,82 +49,113 @@ export default function BulkerWalletList() {
         .order('full_name', { ascending: true });
 
       if (bErr) throw bErr;
+      const bulkerList = bData || [];
 
-      // 2. Fetch all bulker transactions from company_fund_transactions
-      const { data: cData, error: cErr } = await supabase
-        .from('company_fund_transactions')
-        .select('*')
-        .eq('party_type', 'bulker')
-        .order('created_at', { ascending: false });
-
-      let allTx = cData || [];
-
-      // 3. Also check if dedicated bulker_wallet_transactions table exists
-      try {
-        const { data: bwData, error: bwErr } = await supabase
-          .from('bulker_wallet_transactions')
+      // 2. Fetch billing history and apps in parallel
+      const [histRes, appsRes] = await Promise.all([
+        supabase
+          .from('bulker_billing_history')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('change_date_time', { ascending: true }),
+        supabase
+          .from('apps')
+          .select('id, app_name, task_id, members_reward, assigned_bulkers')
+      ]);
 
-        if (!bwErr && bwData && bwData.length > 0) {
-          const existingIds = new Set(allTx.map(t => t.transaction_id));
-          bwData.forEach(t => {
-            if (!existingIds.has(t.transaction_id)) {
-              allTx.push({
-                ...t,
-                party_id: t.bulker_id,
-                party_type: 'bulker'
-              });
-            }
-          });
+      // 3. Fetch all individual_wallet_transactions without 1000 limit truncation
+      let allTransactions = [];
+      let txFrom = 0;
+      const txStep = 1000;
+      while (true) {
+        const { data: txPage, error: txErr } = await supabase
+          .from('individual_wallet_transactions')
+          .select('*')
+          .range(txFrom, txFrom + txStep - 1);
+
+        if (txErr) {
+          console.error('Error fetching wallet transactions page:', txErr);
+          break;
         }
-      } catch (err) {
-        // Table doesn't exist, ignore
+
+        allTransactions = allTransactions.concat(txPage || []);
+        if (!txPage || txPage.length < txStep) break;
+        txFrom += txStep;
       }
 
-      setTransactions(allTx);
+      // 3. Fetch all review_submit_data without 1000 limit truncation
+      let allReviews = [];
+      let from = 0;
+      const step = 1000;
+      while (true) {
+        const { data: revPage, error: revErr } = await supabase
+          .from('review_submit_data')
+          .select('id, app_id, bulker_id, status, submitted_at')
+          .in('status', ['Live', 'Approved'])
+          .range(from, from + step - 1);
 
-      // 4. Calculate wallet balances and stats per bulker
-      const bulkerStats = {};
-      allTx.forEach((tx) => {
-        const bId = tx.party_id || tx.reference_id || tx.metadata?.bulker_id;
-        if (!bId) return;
-
-        if (!bulkerStats[bId]) {
-          bulkerStats[bId] = { balance: 0, totalCredits: 0, totalDebits: 0, txCount: 0 };
+        if (revErr) {
+          console.error('Error fetching reviews page:', revErr);
+          break;
         }
 
-        const amt = parseFloat(tx.amount || 0);
-        const status = (tx.status || 'Completed').toLowerCase();
+        allReviews = allReviews.concat(revPage || []);
+        if (!revPage || revPage.length < step) break;
+        from += step;
+      }
 
-        if (status === 'cancelled' || status === 'rejected' || status === 'failed') return;
+      const billingHistoryAll = histRes.data || [];
+      const transactionsAll = allTransactions;
+      const reviewsAll = allReviews;
 
-        bulkerStats[bId].txCount += 1;
-
-        if (tx.transaction_type === 'Credit') {
-          bulkerStats[bId].balance += amt;
-          bulkerStats[bId].totalCredits += amt;
-        } else if (tx.transaction_type === 'Debit') {
-          bulkerStats[bId].balance -= amt;
-          bulkerStats[bId].totalDebits += amt;
-        }
+      const appsMap = {};
+      (appsRes.data || []).forEach((app) => {
+        appsMap[app.id] = app;
       });
 
-      // 5. Merge with bulker records (checking both bulker_id and id column)
-      const mergedBulkers = (bData || []).map((b) => {
-        const statsByBulkerId = bulkerStats[b.bulker_id] || { balance: 0, totalCredits: 0, totalDebits: 0, txCount: 0 };
-        const statsById = bulkerStats[b.id] || { balance: 0, totalCredits: 0, totalDebits: 0, txCount: 0 };
+      // 3. For each bulker, compute financial metrics using exact logic
+      const calculatedBulkers = bulkerList.map((b) => {
+        const variants = getBulkerIdVariants(b.bulker_id || b.id);
+        const lowerVariants = variants.map((v) => v.toLowerCase());
+
+        // Bulker's billing history
+        const bulkerHistory = billingHistoryAll.filter((h) => {
+          if (!h.bulker_id) return false;
+          return lowerVariants.includes(String(h.bulker_id).toLowerCase());
+        });
+
+        // Bulker's transactions
+        const bulkerTx = transactionsAll.filter((t) => {
+          if (!t.earner_id) return false;
+          return lowerVariants.includes(String(t.earner_id).toLowerCase());
+        });
+
+        // Bulker's live reviews
+        const bulkerReviews = reviewsAll.filter((r) => {
+          if (!r.bulker_id) return false;
+          return lowerVariants.includes(String(r.bulker_id).toLowerCase());
+        });
+
+        const finances = calculateBulkerFinances({
+          bulker: b,
+          billingHistory: bulkerHistory,
+          transactions: bulkerTx,
+          reviews: bulkerReviews,
+          appsMap
+        });
 
         return {
           ...b,
-          balance: statsByBulkerId.balance + statsById.balance,
-          totalCredits: statsByBulkerId.totalCredits + statsById.totalCredits,
-          totalDebits: statsByBulkerId.totalDebits + statsById.totalDebits,
-          txCount: statsByBulkerId.txCount + statsById.txCount
+          balance: finances.wallet.liveWalletBalance,
+          computedProfit: finances.wallet.computedProfit,
+          totalCredits: finances.wallet.creditSum,
+          totalDebits: finances.wallet.debitSum,
+          walletLiveReviews: finances.wallet.walletLiveReviews,
+          manualLiveReviews: finances.invoices.manualLiveReviews,
+          txCount: bulkerTx.length
         };
       });
 
-      setBulkers(mergedBulkers);
+      setBulkers(calculatedBulkers);
     } catch (err) {
       console.error('Error fetching bulker wallets:', err);
     } finally {
@@ -134,32 +168,34 @@ export default function BulkerWalletList() {
   }, []);
 
   // Filtered bulkers
-  const filteredBulkers = bulkers.filter((b) => {
-    const q = searchTerm.toLowerCase();
-    const matchesSearch =
-      (b.full_name || '').toLowerCase().includes(q) ||
-      (b.bulker_id || '').toLowerCase().includes(q) ||
-      (b.id || '').toLowerCase().includes(q) ||
-      (b.phone || '').toLowerCase().includes(q) ||
-      (b.email || '').toLowerCase().includes(q);
+  const filteredBulkers = useMemo(() => {
+    return bulkers.filter((b) => {
+      const q = searchTerm.toLowerCase();
+      const matchesSearch =
+        (b.full_name || '').toLowerCase().includes(q) ||
+        (b.bulker_id || '').toLowerCase().includes(q) ||
+        (b.id || '').toLowerCase().includes(q) ||
+        (b.phone || '').toLowerCase().includes(q) ||
+        (b.email || '').toLowerCase().includes(q);
 
-    const matchesAccountType =
-      accountTypeFilter === 'ALL' ||
-      (accountTypeFilter === 'WALLET' && (b.account_type === 'Wallet System' || !b.account_type)) ||
-      (accountTypeFilter === 'MANUAL' && b.account_type === 'Manual');
+      const matchesAccountType =
+        accountTypeFilter === 'ALL' ||
+        (accountTypeFilter === 'WALLET' && (b.account_type === 'Wallet System' || !b.account_type)) ||
+        (accountTypeFilter === 'MANUAL' && b.account_type === 'Manual');
 
-    const matchesStatus =
-      statusFilter === 'ALL' ||
-      (statusFilter === 'ACTIVE' && (b.status === 'Active' || b.status === 'Verified')) ||
-      (statusFilter === 'INACTIVE' && b.status !== 'Active' && b.status !== 'Verified');
+      const matchesStatus =
+        statusFilter === 'ALL' ||
+        (statusFilter === 'ACTIVE' && (b.status === 'Active' || b.status === 'Verified')) ||
+        (statusFilter === 'INACTIVE' && b.status !== 'Active' && b.status !== 'Verified');
 
-    return matchesSearch && matchesAccountType && matchesStatus;
-  });
+      return matchesSearch && matchesAccountType && matchesStatus;
+    });
+  }, [bulkers, searchTerm, accountTypeFilter, statusFilter]);
 
   // Global calculations
-  const totalBalance = bulkers.reduce((acc, b) => acc + (b.balance || 0), 0);
-  const totalCredits = bulkers.reduce((acc, b) => acc + (b.totalCredits || 0), 0);
-  const totalDebits = bulkers.reduce((acc, b) => acc + (b.totalDebits || 0), 0);
+  const totalBalance = useMemo(() => bulkers.reduce((acc, b) => acc + (b.balance || 0), 0), [bulkers]);
+  const totalCredits = useMemo(() => bulkers.reduce((acc, b) => acc + (b.totalCredits || 0), 0), [bulkers]);
+  const totalDebits = useMemo(() => bulkers.reduce((acc, b) => acc + (b.totalDebits || 0), 0), [bulkers]);
 
   const paginatedBulkers = filteredBulkers.slice(
     page * rowsPerPage,
@@ -167,7 +203,6 @@ export default function BulkerWalletList() {
   );
 
   const handleViewBulker = (bulker) => {
-    // Navigate using clean primary key 'id' column for a clean, premium URL
     const targetId = bulker?.id || bulker?.bulker_id;
     navigate(`/payments/bulkers/wallet/${encodeURIComponent(targetId)}`);
   };
@@ -186,22 +221,32 @@ export default function BulkerWalletList() {
                 Bulker Wallet System
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Centralized financial management, balances & transaction ledgers for Bulker Desks
+                Formula: (Assigned Rate - Member Rate) × Live Apps during Wallet periods
               </Typography>
             </Box>
           </Box>
         </Box>
 
-        <Button
-          variant="outlined"
-          color="primary"
-          startIcon={<RefreshIcon />}
-          onClick={fetchData}
-          disabled={loading}
-          sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700 }}
-        >
-          Refresh Data
-        </Button>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Button
+            variant="outlined"
+            startIcon={<ReceiptLongIcon />}
+            onClick={() => navigate('/payments/bulkers/invoices')}
+            sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700 }}
+          >
+            Bulker Invoices
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<RefreshIcon />}
+            onClick={fetchData}
+            disabled={loading}
+            sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700 }}
+          >
+            Refresh Data
+          </Button>
+        </Stack>
       </Box>
 
       {/* Top CRM Summary Stat Cards */}
@@ -226,7 +271,7 @@ export default function BulkerWalletList() {
                   {bulkers.length}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Active Desks
+                  Registered desks
                 </Typography>
               </Box>
               <Avatar sx={{ bgcolor: 'rgba(37,99,235,0.1)', color: '#2563eb', width: 48, height: 48, borderRadius: '16px' }}>
@@ -253,10 +298,10 @@ export default function BulkerWalletList() {
                   Total Bulker Balance
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5, color: '#16a34a' }}>
-                  ₹{totalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatINR(totalBalance)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Circulating Wallets
+                  Live calculated balances
                 </Typography>
               </Box>
               <Avatar sx={{ bgcolor: 'rgba(22,163,74,0.1)', color: '#16a34a', width: 48, height: 48, borderRadius: '16px' }}>
@@ -283,10 +328,10 @@ export default function BulkerWalletList() {
                   Total Credited
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5, color: '#2563eb' }}>
-                  ₹{totalCredits.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatINR(totalCredits)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  All-time commissions
+                  Member credits
                 </Typography>
               </Box>
               <Avatar sx={{ bgcolor: 'rgba(37,99,235,0.1)', color: '#2563eb', width: 48, height: 48, borderRadius: '16px' }}>
@@ -313,10 +358,10 @@ export default function BulkerWalletList() {
                   Total Debited
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5, color: '#f59e0b' }}>
-                  ₹{totalDebits.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatINR(totalDebits)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Payouts / Withdrawals
+                  Payouts / debited
                 </Typography>
               </Box>
               <Avatar sx={{ bgcolor: 'rgba(245,158,11,0.1)', color: '#f59e0b', width: 48, height: 48, borderRadius: '16px' }}>
@@ -392,7 +437,7 @@ export default function BulkerWalletList() {
                 <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ACCOUNT TYPE</TableCell>
                 <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>CONTACT DETAILS</TableCell>
                 <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>WALLET BALANCE</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ALL-TIME CREDITS</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>LIVE REVIEWS</TableCell>
                 <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>STATUS</TableCell>
                 <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ACTION</TableCell>
               </TableRow>
@@ -403,7 +448,7 @@ export default function BulkerWalletList() {
                   <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
                     <CircularProgress size={36} />
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-                      Loading bulker wallets...
+                      Calculating bulker wallet balances...
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -449,7 +494,7 @@ export default function BulkerWalletList() {
                             {b.full_name}
                           </Typography>
                           <Chip
-                            label={`${b.txCount || 0} transaction(s)`}
+                            label={`${b.txCount || 0} tx`}
                             size="small"
                             sx={{
                               height: 20,
@@ -458,10 +503,7 @@ export default function BulkerWalletList() {
                               whiteSpace: 'nowrap',
                               borderRadius: '100px',
                               bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.08)' : 'rgba(59,130,246,0.14)',
-                              color: 'primary.main',
-                              border: '1px solid',
-                              borderColor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.18)' : 'rgba(59,130,246,0.25)',
-                              '& .MuiChip-label': { px: 0.8, py: 0, whiteSpace: 'nowrap' }
+                              color: 'primary.main'
                             }}
                           />
                         </Box>
@@ -539,15 +581,28 @@ export default function BulkerWalletList() {
                           whiteSpace: 'nowrap'
                         }}
                       >
-                        ₹{(b.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatINR(b.balance)}
                       </Typography>
                     </TableCell>
 
-                    {/* Total Credits */}
+                    {/* Live Reviews */}
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary', whiteSpace: 'nowrap' }}>
-                        ₹{(b.totalCredits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </Typography>
+                      <Stack direction="row" spacing={0.8} alignItems="center">
+                        <Chip
+                          label={`${b.walletLiveReviews || 0} Wallet`}
+                          size="small"
+                          color="primary"
+                          sx={{ fontWeight: 700, fontSize: '0.7rem', height: 20 }}
+                        />
+                        {b.manualLiveReviews > 0 && (
+                          <Chip
+                            label={`${b.manualLiveReviews} Manual`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontWeight: 600, fontSize: '0.7rem', height: 20 }}
+                          />
+                        )}
+                      </Stack>
                     </TableCell>
 
                     {/* Status */}

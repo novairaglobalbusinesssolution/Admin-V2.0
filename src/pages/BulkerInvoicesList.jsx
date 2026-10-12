@@ -1,24 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Typography, Paper, Grid, Card, CardContent, Table, TableBody,
+  Box, Typography, Paper, Grid, Card, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TablePagination,
   TextField, InputAdornment, Button, IconButton, Chip, Avatar,
-  Stack, MenuItem, CircularProgress, Tooltip, useTheme, Alert,
-  Dialog, DialogTitle, DialogContent, DialogActions, Snackbar
+  Stack, MenuItem, CircularProgress, useTheme
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import CloseIcon from '@mui/icons-material/Close';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { supabase } from '../supabaseClient';
+import {
+  getBulkerIdVariants,
+  calculateBulkerFinances,
+  formatINR
+} from '../utils/bulkerPaymentCalculations';
 
 export default function BulkerInvoicesList() {
   const theme = useTheme();
@@ -26,7 +27,6 @@ export default function BulkerInvoicesList() {
 
   const [loading, setLoading] = useState(true);
   const [bulkers, setBulkers] = useState([]);
-  const [invoices, setInvoices] = useState([]);
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,21 +35,6 @@ export default function BulkerInvoicesList() {
   // Pagination
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-
-  // Create Invoice Modal State
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [selectedBulkerId, setSelectedBulkerId] = useState('');
-  const [invoiceAmount, setInvoiceAmount] = useState('');
-  const [invoiceDescription, setInvoiceDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [creating, setCreating] = useState(false);
-
-  // Top-center Toast state
-  const [toast, setToast] = useState({ open: false, type: 'success', title: '', message: '' });
-
-  const showToast = (type, title, message = '') => {
-    setToast({ open: true, type, title, message });
-  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -61,24 +46,144 @@ export default function BulkerInvoicesList() {
         .order('full_name', { ascending: true });
 
       if (bErr) throw bErr;
-      setBulkers(bData || []);
+      const bulkerList = bData || [];
 
-      // 2. Fetch invoices from invoices table if available
-      try {
-        const { data: invData, error: invErr } = await supabase
-          .from('invoices')
+      // 2. Fetch billing history and apps in parallel
+      const [histRes, appsRes] = await Promise.all([
+        supabase
+          .from('bulker_billing_history')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('change_date_time', { ascending: true }),
+        supabase
+          .from('apps')
+          .select('id, app_name, task_id, members_reward, assigned_bulkers')
+      ]);
 
-        if (!invErr && invData) {
-          setInvoices(invData);
+      // 3. Fetch ALL individual_wallet_transactions without 1000 row truncation limit
+      let allTransactions = [];
+      let txFrom = 0;
+      const txStep = 1000;
+      while (true) {
+        const { data: txPage, error: txErr } = await supabase
+          .from('individual_wallet_transactions')
+          .select('*')
+          .range(txFrom, txFrom + txStep - 1);
+
+        if (txErr) {
+          console.error('Error fetching transactions page:', txErr);
+          break;
         }
-      } catch (e) {
-        console.error('Error fetching invoices:', e);
+
+        allTransactions = allTransactions.concat(txPage || []);
+        if (!txPage || txPage.length < txStep) break;
+        txFrom += txStep;
       }
+
+      // 3. Fetch ALL review_submit_data without 1000 row truncation limit
+      let allReviews = [];
+      let from = 0;
+      const step = 1000;
+      while (true) {
+        const { data: revPage, error: revErr } = await supabase
+          .from('review_submit_data')
+          .select('id, app_id, bulker_id, status, submitted_at')
+          .in('status', ['Live', 'Approved'])
+          .range(from, from + step - 1);
+
+        if (revErr) {
+          console.error('Error fetching reviews page:', revErr);
+          break;
+        }
+
+        allReviews = allReviews.concat(revPage || []);
+        if (!revPage || revPage.length < step) break;
+        from += step;
+      }
+
+      const billingHistoryAll = histRes.data || [];
+      const transactionsAll = allTransactions;
+      const reviewsAll = allReviews;
+
+      const appsMap = {};
+      (appsRes.data || []).forEach((app) => {
+        appsMap[app.id] = app;
+      });
+
+      // 3. Compute manual invoice gross totals per bulker
+      const calculatedBulkers = bulkerList.map((b) => {
+        const variants = getBulkerIdVariants(b.bulker_id || b.id);
+        const lowerVariants = variants.map((v) => v.toLowerCase());
+
+        const bulkerHistory = billingHistoryAll.filter((h) => {
+          if (!h.bulker_id) return false;
+          return lowerVariants.includes(String(h.bulker_id).toLowerCase());
+        });
+
+        const bulkerTx = transactionsAll.filter((t) => {
+          if (!t.earner_id) return false;
+          return lowerVariants.includes(String(t.earner_id).toLowerCase());
+        });
+
+        const bulkerReviews = reviewsAll.filter((r) => {
+          if (!r.bulker_id) return false;
+          return lowerVariants.includes(String(r.bulker_id).toLowerCase());
+        });
+
+        const finances = calculateBulkerFinances({
+          bulker: b,
+          billingHistory: bulkerHistory,
+          transactions: bulkerTx,
+          reviews: bulkerReviews,
+          appsMap
+        });
+
+        // Compute total disbursed across all invoice months for this bulker
+        const cleanCode = (b.bulker_id || b.id || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        let totalPaid = 0;
+        const monthKeys = finances.invoices.monthKeys;
+
+        monthKeys.forEach((mk) => {
+          const invNum = `nv-blk-inv-${mk.replace('-', '')}-${cleanCode}`;
+          const monthLower = String(mk).toLowerCase();
+
+          const paidForMonth = bulkerTx
+            .filter((tx) => {
+              if (tx.transaction_type !== 'Debit') return false;
+              const st = (tx.status || 'Completed').toLowerCase();
+              if (st === 'cancelled' || st === 'rejected' || st === 'failed') return false;
+
+              const payout = tx.payout_details || tx.metadata || {};
+              const desc = String(tx.description || '').toLowerCase();
+
+              return (
+                String(payout.invoice_number || '').toLowerCase() === invNum ||
+                payout.billing_month === mk ||
+                desc.includes(invNum) ||
+                (desc.includes('invoice') && desc.includes(monthLower))
+              );
+            })
+            .reduce((acc, tx) => acc + (parseFloat(tx.amount) || 0), 0);
+
+          totalPaid += paidForMonth;
+        });
+
+        const totalManualGross = finances.invoices.totalManualGross || 0;
+        const pendingBalance = Math.max(0, totalManualGross - totalPaid);
+
+        return {
+          ...b,
+          manualLiveReviews: finances.invoices.manualLiveReviews,
+          totalManualGross,
+          totalPaid,
+          pendingBalance,
+          monthKeysCount: finances.invoices.monthKeys.length,
+          walletBalance: finances.wallet.liveWalletBalance
+        };
+      });
+
+      setBulkers(calculatedBulkers);
     } catch (err) {
       console.error('Error fetching bulker invoices data:', err);
-      showToast('error', 'Failed to Load', err.message || 'Could not fetch bulker invoice records.');
     } finally {
       setLoading(false);
     }
@@ -88,89 +193,44 @@ export default function BulkerInvoicesList() {
     fetchData();
   }, []);
 
-  const copyToClipboard = (text) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    showToast('success', 'Copied!', text);
-  };
+  const filteredBulkers = useMemo(() => {
+    return bulkers.filter((b) => {
+      const q = searchTerm.toLowerCase();
+      const matchesSearch =
+        (b.full_name || '').toLowerCase().includes(q) ||
+        (b.bulker_id || '').toLowerCase().includes(q) ||
+        (b.phone || '').toLowerCase().includes(q) ||
+        (b.email || '').toLowerCase().includes(q);
 
-  const handleOpenCreateModal = (bulkerId = '') => {
-    setSelectedBulkerId(bulkerId);
-    setInvoiceAmount('');
-    setInvoiceDescription('');
-    setDueDate('');
-    setCreateModalOpen(true);
-  };
+      const matchesStatus =
+        statusFilter === 'ALL' ||
+        (statusFilter === 'ACTIVE' && (b.status === 'Active' || b.status === 'Verified')) ||
+        (statusFilter === 'INACTIVE' && b.status !== 'Active' && b.status !== 'Verified');
 
-  const handleCreateInvoice = async () => {
-    const numAmt = parseFloat(invoiceAmount);
-    if (!selectedBulkerId) {
-      showToast('warning', 'Missing Bulker', 'Please select a bulker desk.');
-      return;
-    }
-    if (!invoiceAmount || isNaN(numAmt) || numAmt <= 0) {
-      showToast('warning', 'Invalid Amount', 'Please enter a valid invoice amount.');
-      return;
-    }
-
-    setCreating(true);
-    try {
-      const targetBulker = bulkers.find(b => b.bulker_id === selectedBulkerId || b.id === selectedBulkerId);
-      const generatedInvNo = `INV-BLK-${Date.now().toString().slice(-6)}`;
-
-      const payload = {
-        invoice_number: generatedInvNo,
-        party_type: 'bulker',
-        party_id: targetBulker?.bulker_id || selectedBulkerId,
-        client_id: null,
-        total_amount: numAmt,
-        due_date: dueDate || null,
-        status: 'Pending',
-        notes: invoiceDescription || 'Bulker Settlement Invoice',
-        metadata: {
-          bulker_id: targetBulker?.bulker_id,
-          bulker_name: targetBulker?.full_name,
-          bulker_uuid: targetBulker?.id
-        }
-      };
-
-      const { error: insErr } = await supabase.from('invoices').insert([payload]);
-      if (insErr) {
-        console.warn('Invoices table insert error:', insErr);
-      }
-
-      setCreateModalOpen(false);
-      showToast('success', 'Invoice Created!', `Invoice ${generatedInvNo} for ₹${numAmt.toFixed(2)} generated successfully.`);
-      await fetchData();
-    } catch (err) {
-      console.error('Error generating invoice:', err);
-      showToast('error', 'Error', err.message || 'Failed to generate invoice.');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  // Filtered bulkers
-  const filteredBulkers = bulkers.filter((b) => {
-    const q = searchTerm.toLowerCase();
-    const matchesSearch =
-      (b.full_name || '').toLowerCase().includes(q) ||
-      (b.bulker_id || '').toLowerCase().includes(q) ||
-      (b.phone || '').toLowerCase().includes(q) ||
-      (b.email || '').toLowerCase().includes(q);
-
-    const matchesStatus =
-      statusFilter === 'ALL' ||
-      (statusFilter === 'ACTIVE' && (b.status === 'Active' || b.status === 'Verified')) ||
-      (statusFilter === 'INACTIVE' && b.status !== 'Active' && b.status !== 'Verified');
-
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [bulkers, searchTerm, statusFilter]);
 
   const paginatedBulkers = filteredBulkers.slice(
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage
   );
+
+  const totalInvoicedGross = useMemo(() => {
+    return bulkers.reduce((sum, b) => sum + (b.totalManualGross || 0), 0);
+  }, [bulkers]);
+
+  const totalPaidInvoices = useMemo(() => {
+    return bulkers.reduce((sum, b) => sum + (b.totalPaid || 0), 0);
+  }, [bulkers]);
+
+  const totalPendingBalance = useMemo(() => {
+    return bulkers.reduce((sum, b) => sum + (b.pendingBalance || 0), 0);
+  }, [bulkers]);
+
+  const totalManualReviews = useMemo(() => {
+    return bulkers.reduce((sum, b) => sum + (b.manualLiveReviews || 0), 0);
+  }, [bulkers]);
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', py: 2 }}>
@@ -178,21 +238,29 @@ export default function BulkerInvoicesList() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Avatar sx={{ bgcolor: 'primary.main', width: 44, height: 44, borderRadius: '14px' }}>
+            <Avatar sx={{ bgcolor: '#0f9d72', width: 44, height: 44, borderRadius: '14px', color: '#fff' }}>
               <ReceiptLongIcon />
             </Avatar>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                Bulker Invoices & Billing
+                Bulker Monthly Invoices & Billing
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Manage billing invoices, settlement statements & payout accounts for Bulker Desks
+                Formula: Live Reviews × Bulker Rate = Gross Invoice during Manual Billing periods
               </Typography>
             </Box>
           </Box>
         </Box>
 
         <Stack direction="row" spacing={1.5}>
+          <Button
+            variant="outlined"
+            startIcon={<AccountBalanceWalletIcon />}
+            onClick={() => navigate('/payments/bulkers/wallet')}
+            sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700 }}
+          >
+            Bulker Wallets
+          </Button>
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
@@ -202,21 +270,12 @@ export default function BulkerInvoicesList() {
           >
             Refresh
           </Button>
-
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddCircleIcon />}
-            onClick={() => handleOpenCreateModal()}
-            sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 750, px: 2.2 }}
-          >
-            Create Invoice
-          </Button>
         </Stack>
       </Box>
 
       {/* Top 4 Stat Cards */}
       <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
+        {/* Card 1: Total Gross Billed */}
         <Grid item xs={12} sm={6} md={3}>
           <Card
             elevation={0}
@@ -230,80 +289,83 @@ export default function BulkerInvoicesList() {
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}>
-                  Total Bulkers
+                  Total Invoiced Gross
                 </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>
-                  {bulkers.length}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Registered desks
-                </Typography>
-              </Box>
-              <Avatar sx={{ bgcolor: 'rgba(37,99,235,0.1)', color: '#2563eb', borderRadius: '14px' }}>
-                <ReceiptLongIcon />
-              </Avatar>
-            </Stack>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Card
-            elevation={0}
-            sx={{
-              p: 2.5,
-              borderRadius: '20px',
-              border: `1px solid ${theme.palette.divider}`,
-              bgcolor: theme.palette.mode === 'light' ? '#fff' : 'rgba(15,23,42,0.6)'
-            }}
-          >
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}>
-                  Active Invoices
-                </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#16a34a' }}>
-                  {invoices.length}
+                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#0f9d72' }}>
+                  {formatINR(totalInvoicedGross)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Billing records
+                  Cumulative Gross Tally
                 </Typography>
               </Box>
-              <Avatar sx={{ bgcolor: 'rgba(22,163,74,0.1)', color: '#16a34a', borderRadius: '14px' }}>
+              <Avatar sx={{ bgcolor: 'rgba(15,157,114,0.1)', color: '#0f9d72', borderRadius: '14px' }}>
                 <MonetizationOnIcon />
               </Avatar>
             </Stack>
           </Card>
         </Grid>
 
+        {/* Card 2: Total Settled / Paid */}
         <Grid item xs={12} sm={6} md={3}>
           <Card
             elevation={0}
             sx={{
               p: 2.5,
               borderRadius: '20px',
-              border: `1px solid ${theme.palette.divider}`,
-              bgcolor: theme.palette.mode === 'light' ? '#fff' : 'rgba(15,23,42,0.6)'
+              border: '1.5px solid rgba(16,185,129,0.3)',
+              bgcolor: 'rgba(16,185,129,0.04)'
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}>
-                  Settled Invoices
+                <Typography variant="caption" sx={{ fontWeight: 700, color: '#059669', textTransform: 'uppercase' }}>
+                  Total Paid / Settled
                 </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#2563eb' }}>
-                  {invoices.filter(i => (i.status || '').toLowerCase() === 'paid').length}
+                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#059669' }}>
+                  {formatINR(totalPaidInvoices)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Payment confirmed
+                  Disbursed via Database Payouts
                 </Typography>
               </Box>
-              <Avatar sx={{ bgcolor: 'rgba(37,99,235,0.1)', color: '#2563eb', borderRadius: '14px' }}>
-                <CheckCircleIcon />
+              <Avatar sx={{ bgcolor: 'rgba(16,185,129,0.15)', color: '#059669', borderRadius: '14px' }}>
+                <ReceiptLongIcon />
               </Avatar>
             </Stack>
           </Card>
         </Grid>
 
+        {/* Card 3: Total Pending Balance */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Card
+            elevation={0}
+            sx={{
+              p: 2.5,
+              borderRadius: '20px',
+              border: totalPendingBalance > 0 ? '1.5px solid rgba(239,68,68,0.35)' : `1px solid ${theme.palette.divider}`,
+              bgcolor: totalPendingBalance > 0 ? 'rgba(239,68,68,0.04)' : theme.palette.mode === 'light' ? '#fff' : 'rgba(15,23,42,0.6)'
+            }}
+          >
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: totalPendingBalance > 0 ? '#dc2626' : 'text.secondary', textTransform: 'uppercase' }}>
+                  Total Pending Balance
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: totalPendingBalance > 0 ? '#dc2626' : '#16a34a' }}>
+                  {formatINR(totalPendingBalance)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {totalPendingBalance > 0 ? 'Awaiting Payout Settlement' : 'All Invoices Cleared'}
+                </Typography>
+              </Box>
+              <Avatar sx={{ bgcolor: totalPendingBalance > 0 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)', color: totalPendingBalance > 0 ? '#dc2626' : '#16a34a', borderRadius: '14px' }}>
+                <CalendarMonthIcon />
+              </Avatar>
+            </Stack>
+          </Card>
+        </Grid>
+
+        {/* Card 4: Total Live Reviews */}
         <Grid item xs={12} sm={6} md={3}>
           <Card
             elevation={0}
@@ -317,17 +379,17 @@ export default function BulkerInvoicesList() {
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Box>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}>
-                  Pending Invoices
+                  Manual Live Reviews
                 </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#f59e0b' }}>
-                  {invoices.filter(i => (i.status || '').toLowerCase() === 'pending').length}
+                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#2563eb' }}>
+                  {totalManualReviews}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Awaiting settlement
+                  Across {bulkers.length} Bulker Desks
                 </Typography>
               </Box>
-              <Avatar sx={{ bgcolor: 'rgba(245,158,11,0.1)', color: '#f59e0b', borderRadius: '14px' }}>
-                <CalendarMonthIcon />
+              <Avatar sx={{ bgcolor: 'rgba(37,99,235,0.1)', color: '#2563eb', borderRadius: '14px' }}>
+                <ReceiptLongIcon />
               </Avatar>
             </Stack>
           </Card>
@@ -383,25 +445,27 @@ export default function BulkerInvoicesList() {
               <TableRow>
                 <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', py: 1.8, whiteSpace: 'nowrap' }}>BULKER NAME</TableCell>
                 <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>BULKER ID</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>CONTACT DETAILS</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>STATUS</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>WALLET</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ACCOUNT MODE</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>MANUAL GROSS</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>PAID SO FAR</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>PENDING BALANCE</TableCell>
+                <TableCell sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>INVOICE STATUS</TableCell>
                 <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>ACTIONS</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
                     <CircularProgress size={36} />
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-                      Loading bulker invoice records...
+                      Loading bulker invoice statements...
                     </Typography>
                   </TableCell>
                 </TableRow>
               ) : paginatedBulkers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                       No Bulkers Found
                     </Typography>
@@ -424,7 +488,7 @@ export default function BulkerInvoicesList() {
                           sx={{
                             width: 36,
                             height: 36,
-                            bgcolor: 'primary.main',
+                            bgcolor: '#0f9d72',
                             fontWeight: 800,
                             fontSize: '0.88rem',
                             color: '#fff',
@@ -441,51 +505,77 @@ export default function BulkerInvoicesList() {
 
                     {/* Bulker ID */}
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                        <Chip
-                          label={b.bulker_id}
-                          size="small"
-                          sx={{
-                            fontFamily: 'monospace',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                            borderRadius: '8px'
-                          }}
-                        />
-                        <IconButton size="small" onClick={() => copyToClipboard(b.bulker_id)} sx={{ p: 0.3 }}>
-                          <ContentCopyIcon sx={{ fontSize: 13 }} />
-                        </IconButton>
-                      </Box>
+                      <Chip
+                        label={b.bulker_id}
+                        size="small"
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          borderRadius: '8px'
+                        }}
+                      />
                     </TableCell>
 
-                    {/* Contact Details */}
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.2 }}>
-                        {b.phone && <Typography variant="caption" sx={{ fontWeight: 600 }}>{b.phone}</Typography>}
-                        {b.email && <Typography variant="caption" color="text.secondary">{b.email}</Typography>}
-                      </Box>
-                    </TableCell>
-
-                    {/* Status */}
+                    {/* Account Mode */}
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Chip
-                        label={b.status || 'Active'}
+                        label={b.account_type || 'Wallet System'}
                         size="small"
-                        color={b.status === 'Active' || b.status === 'Verified' ? 'success' : 'default'}
+                        color={b.account_type === 'Manual' ? 'warning' : 'primary'}
+                        variant={b.account_type === 'Manual' ? 'filled' : 'outlined'}
                         sx={{ fontWeight: 700, fontSize: '0.72rem', borderRadius: '8px' }}
                       />
                     </TableCell>
 
-                    {/* Wallet Link */}
+                    {/* Manual Gross Total */}
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => navigate(`/payments/bulkers/wallet/${b.id || b.bulker_id}`)}
-                        sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, fontSize: '0.75rem' }}
+                      <Typography variant="body2" sx={{ fontWeight: 800, color: '#0f172a', fontSize: '0.92rem' }}>
+                        {formatINR(b.totalManualGross)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {b.monthKeysCount} cycle(s) &bull; {b.manualLiveReviews || 0} reviews
+                      </Typography>
+                    </TableCell>
+
+                    {/* Paid So Far */}
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 800, color: b.totalPaid > 0 ? '#16a34a' : 'text.secondary', fontSize: '0.92rem' }}>
+                        {formatINR(b.totalPaid)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {b.totalPaid > 0 ? 'Disbursed' : 'No payout yet'}
+                      </Typography>
+                    </TableCell>
+
+                    {/* Pending Balance */}
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 900,
+                          color: b.pendingBalance > 0.01 ? '#dc2626' : '#16a34a',
+                          fontSize: '0.95rem'
+                        }}
                       >
-                        View Wallet
-                      </Button>
+                        {formatINR(b.pendingBalance)}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: b.pendingBalance > 0.01 ? '#dc2626' : 'text.secondary', fontWeight: 650 }}>
+                        {b.pendingBalance > 0.01 ? 'Still Pending' : 'All Cleared'}
+                      </Typography>
+                    </TableCell>
+
+                    {/* Invoice Status */}
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      {b.totalManualGross === 0 ? (
+                        <Chip label="No Invoices" size="small" sx={{ fontWeight: 700, fontSize: '0.72rem' }} />
+                      ) : b.pendingBalance <= 0.01 ? (
+                        <Chip label="FULLY PAID" size="small" color="success" sx={{ fontWeight: 800, fontSize: '0.72rem' }} />
+                      ) : b.totalPaid > 0 ? (
+                        <Chip label="PARTIALLY PAID" size="small" color="warning" sx={{ fontWeight: 800, fontSize: '0.72rem' }} />
+                      ) : (
+                        <Chip label="PENDING" size="small" color="error" variant="outlined" sx={{ fontWeight: 800, fontSize: '0.72rem' }} />
+                      )}
                     </TableCell>
 
                     {/* Action */}
@@ -493,19 +583,20 @@ export default function BulkerInvoicesList() {
                       <Button
                         variant="contained"
                         size="small"
-                        color="primary"
                         startIcon={<VisibilityIcon fontSize="small" />}
-                        onClick={() => navigate(`/payments/bulkers/invoices/${b.id || b.bulker_id}`)}
+                        onClick={() => navigate(`/payments/bulkers/invoices/${encodeURIComponent(b.id || b.bulker_id)}`)}
                         sx={{
                           borderRadius: '100px',
                           textTransform: 'none',
                           fontWeight: 750,
                           fontSize: '0.78rem',
                           px: 2.2,
-                          boxShadow: '0 4px 14px rgba(37,99,235,0.25)'
+                          bgcolor: '#0f9d72',
+                          '&:hover': { bgcolor: '#0b7e5b' },
+                          boxShadow: '0 4px 14px rgba(15,157,114,0.25)'
                         }}
                       >
-                        View
+                        View Invoices
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -526,195 +617,6 @@ export default function BulkerInvoicesList() {
           rowsPerPageOptions={[10, 25, 50]}
         />
       </Paper>
-
-      {/* Quick Create Invoice Dialog */}
-      <Dialog
-        open={createModalOpen}
-        onClose={() => !creating && setCreateModalOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{ sx: { borderRadius: '24px', p: 1 } }}
-      >
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem' }}>
-          Create Bulker Invoice
-        </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2.5} sx={{ mt: 1 }}>
-            {/* Bulker select */}
-            <TextField
-              select
-              label="Select Bulker Desk"
-              fullWidth
-              value={selectedBulkerId}
-              onChange={(e) => setSelectedBulkerId(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
-            >
-              {bulkers.map((b) => (
-                <MenuItem key={b.id || b.bulker_id} value={b.bulker_id}>
-                  {b.full_name} ({b.bulker_id})
-                </MenuItem>
-              ))}
-            </TextField>
-
-            {/* Amount */}
-            <TextField
-              label="Invoice Amount (₹)"
-              type="number"
-              fullWidth
-              value={invoiceAmount}
-              onChange={(e) => setInvoiceAmount(e.target.value)}
-              placeholder="e.g. 1500.00"
-              InputProps={{
-                startAdornment: <InputAdornment position="start">₹</InputAdornment>
-              }}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
-            />
-
-            {/* Due Date */}
-            <TextField
-              label="Due Date"
-              type="date"
-              fullWidth
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
-            />
-
-            {/* Description / Notes */}
-            <TextField
-              label="Notes / Items Summary"
-              multiline
-              rows={3}
-              fullWidth
-              value={invoiceDescription}
-              onChange={(e) => setInvoiceDescription(e.target.value)}
-              placeholder="Enter service details, task settlements or payout description..."
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button
-            onClick={() => setCreateModalOpen(false)}
-            color="inherit"
-            disabled={creating}
-            sx={{ fontWeight: 700, borderRadius: '12px' }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateInvoice}
-            variant="contained"
-            color="primary"
-            disabled={creating}
-            sx={{ fontWeight: 800, borderRadius: '12px', px: 3 }}
-          >
-            {creating ? 'Creating...' : 'Generate Invoice'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Top Center Compact Premium Toast Notification */}
-      <Snackbar
-        open={toast.open}
-        autoHideDuration={3200}
-        onClose={() => setToast(prev => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        sx={{ top: { xs: 20, sm: 28 }, zIndex: 99999 }}
-      >
-        <Paper
-          elevation={12}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.4,
-            py: 0.9,
-            px: 2,
-            borderRadius: '100px',
-            bgcolor: theme.palette.mode === 'dark' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.98)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid',
-            borderColor:
-              toast.type === 'success'
-                ? 'rgba(16, 185, 129, 0.45)'
-                : toast.type === 'warning'
-                ? 'rgba(245, 158, 11, 0.45)'
-                : 'rgba(239, 68, 68, 0.45)',
-            boxShadow:
-              theme.palette.mode === 'dark'
-                ? '0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(16, 185, 129, 0.12)'
-                : '0 16px 40px rgba(0, 0, 0, 0.12), 0 0 20px rgba(16, 185, 129, 0.12)',
-            minWidth: { xs: 290, sm: 360 },
-            maxWidth: '92vw'
-          }}
-        >
-          <Avatar
-            sx={{
-              width: 30,
-              height: 30,
-              bgcolor:
-                toast.type === 'success'
-                  ? 'rgba(16, 185, 129, 0.15)'
-                  : toast.type === 'warning'
-                  ? 'rgba(245, 158, 11, 0.15)'
-                  : 'rgba(239, 68, 68, 0.15)',
-              color:
-                toast.type === 'success'
-                  ? '#10b981'
-                  : toast.type === 'warning'
-                  ? '#f59e0b'
-                  : '#ef4444'
-            }}
-          >
-            {toast.type === 'success' && <CheckCircleIcon sx={{ fontSize: 18 }} />}
-            {toast.type === 'warning' && <WarningAmberIcon sx={{ fontSize: 18 }} />}
-            {toast.type === 'error' && <CloseIcon sx={{ fontSize: 18 }} />}
-          </Avatar>
-
-          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography
-              variant="subtitle2"
-              sx={{
-                fontWeight: 800,
-                fontSize: '0.86rem',
-                color:
-                  toast.type === 'success'
-                    ? '#10b981'
-                    : toast.type === 'warning'
-                    ? '#f59e0b'
-                    : '#ef4444',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {toast.title}
-            </Typography>
-            {toast.message && (
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 550,
-                  fontSize: '0.82rem',
-                  color: theme.palette.mode === 'dark' ? '#cbd5e1' : '#475569',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}
-              >
-                {toast.message}
-              </Typography>
-            )}
-          </Box>
-
-          <IconButton
-            size="small"
-            onClick={() => setToast(prev => ({ ...prev, open: false }))}
-            sx={{ p: 0.3, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
-          >
-            <CloseIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Paper>
-      </Snackbar>
     </Box>
   );
 }
