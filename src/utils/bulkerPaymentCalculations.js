@@ -90,12 +90,24 @@ export const calculateBulkerFinances = ({
   // 1. Transactions sums (credits and debits from individual_wallet_transactions)
   let creditSum = 0;
   let debitSum = 0;
+  let manualWalletCredits = 0;
+  let manualWalletDebits = 0;
+
   transactions.forEach((tx) => {
     const amt = Number(tx.amount || 0);
     const st = (tx.status || 'Success').toLowerCase();
     if (st === 'cancelled' || st === 'rejected' || st === 'failed') return;
-    if (tx.transaction_type === 'Credit') creditSum += amt;
-    else if (tx.transaction_type === 'Debit') debitSum += amt;
+
+    const txId = String(tx.transaction_id || '');
+    const isManualWalletTx = txId.startsWith('BW-') || tx.payout_details?.wallet_adjustment === true;
+
+    if (tx.transaction_type === 'Credit') {
+      creditSum += amt;
+      if (isManualWalletTx) manualWalletCredits += amt;
+    } else if (tx.transaction_type === 'Debit') {
+      debitSum += amt;
+      if (isManualWalletTx) manualWalletDebits += amt;
+    }
   });
 
   // 2. Reviews processing for Wallet Mode vs Manual Mode
@@ -168,8 +180,8 @@ export const calculateBulkerFinances = ({
   const walletBreakdownList = Object.values(walletAppBreakdown);
   const computedWalletProfit = walletBreakdownList.reduce((sum, item) => sum + item.totalEarned, 0);
 
-  // User requested: Formula Profit = Wallet Amount
-  const liveWalletBalance = computedWalletProfit;
+  // Formula Profit + Manual Wallet Credits - Manual Wallet Debits = Live Wallet Balance
+  const liveWalletBalance = Math.max(0, computedWalletProfit + manualWalletCredits - manualWalletDebits);
 
   // Month keys sorted descending
   const monthKeys = Object.keys(manualByMonth).sort().reverse();
@@ -183,6 +195,8 @@ export const calculateBulkerFinances = ({
       liveWalletBalance,
       creditSum,
       debitSum,
+      manualWalletCredits,
+      manualWalletDebits,
       netTransactions: creditSum - debitSum
     },
     invoices: {

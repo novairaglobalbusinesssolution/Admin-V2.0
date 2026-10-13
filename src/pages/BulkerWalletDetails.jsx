@@ -6,7 +6,7 @@ import {
   TextField, InputAdornment, Button, IconButton, Chip, Avatar,
   Stack, MenuItem, CircularProgress, Dialog, DialogTitle,
   DialogContent, DialogActions, Divider, Tooltip, useTheme,
-  Snackbar, FormControl, Select
+  Snackbar, FormControl, Select, Checkbox, FormControlLabel, InputLabel
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
@@ -67,6 +67,9 @@ export default function BulkerWalletDetails() {
   const [trxModalOpen, setTrxModalOpen] = useState(false);
   const [trxType, setTrxType] = useState('Credit'); // 'Credit' | 'Debit'
   const [amount, setAmount] = useState('');
+  const [utrId, setUtrId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [syncToCompanyFund, setSyncToCompanyFund] = useState(true);
   const [description, setDescription] = useState('');
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState({ open: false, type: 'success', title: '', message: '' });
@@ -118,33 +121,65 @@ export default function BulkerWalletDetails() {
 
       setBulker(bData);
 
-      // 2. Fetch billing history, transactions, reviews, and apps
+      // 2. Fetch billing history and apps in parallel
       const targetVariants = getBulkerIdVariants(bData?.bulker_id || identifier);
 
-      const [histRes, txRes, revRes, appsRes] = await Promise.all([
+      const [histRes, appsRes] = await Promise.all([
         supabase
           .from('bulker_billing_history')
           .select('*')
           .in('bulker_id', targetVariants)
           .order('change_date_time', { ascending: true }),
         supabase
-          .from('individual_wallet_transactions')
-          .select('*')
-          .in('earner_id', targetVariants)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('review_submit_data')
-          .select('id, app_id, bulker_id, status, submitted_at')
-          .in('bulker_id', targetVariants)
-          .in('status', ['Live', 'Approved']),
-        supabase
           .from('apps')
           .select('id, app_name, task_id, members_reward, assigned_bulkers')
       ]);
 
+      // 3. Fetch all individual_wallet_transactions for this bulker without 1000 row truncation
+      let allTransactions = [];
+      let txFrom = 0;
+      const txStep = 1000;
+      while (true) {
+        const { data: txPage, error: txErr } = await supabase
+          .from('individual_wallet_transactions')
+          .select('*')
+          .in('earner_id', targetVariants)
+          .order('created_at', { ascending: false })
+          .range(txFrom, txFrom + txStep - 1);
+
+        if (txErr) {
+          console.error('Error fetching wallet transactions page:', txErr);
+          break;
+        }
+        allTransactions = allTransactions.concat(txPage || []);
+        if (!txPage || txPage.length < txStep) break;
+        txFrom += txStep;
+      }
+
+      // 4. Fetch all review_submit_data for this bulker without 1000 row truncation
+      let allReviews = [];
+      let revFrom = 0;
+      const revStep = 1000;
+      while (true) {
+        const { data: revPage, error: revErr } = await supabase
+          .from('review_submit_data')
+          .select('id, app_id, bulker_id, status, submitted_at')
+          .in('bulker_id', targetVariants)
+          .in('status', ['Live', 'Approved'])
+          .range(revFrom, revFrom + revStep - 1);
+
+        if (revErr) {
+          console.error('Error fetching reviews page:', revErr);
+          break;
+        }
+        allReviews = allReviews.concat(revPage || []);
+        if (!revPage || revPage.length < revStep) break;
+        revFrom += revStep;
+      }
+
       setBillingHistory(histRes.data || []);
-      setTransactions(txRes.data || []);
-      setReviews(revRes.data || []);
+      setTransactions(allTransactions);
+      setReviews(allReviews);
 
       const aMap = {};
       (appsRes.data || []).forEach((app) => {
@@ -180,10 +215,12 @@ export default function BulkerWalletDetails() {
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
       const q = searchQuery.toLowerCase();
+      const utrStr = t.utr_id || t.payout_details?.utr_number || '';
       const matchesSearch =
         (t.transaction_id || '').toLowerCase().includes(q) ||
         (t.description || '').toLowerCase().includes(q) ||
-        (t.id || '').toLowerCase().includes(q);
+        (t.id || '').toLowerCase().includes(q) ||
+        String(utrStr).toLowerCase().includes(q);
 
       const matchesType = typeFilter === 'ALL' || t.transaction_type === typeFilter;
       return matchesSearch && matchesType;
@@ -233,7 +270,10 @@ export default function BulkerWalletDetails() {
 
   const openTrxModal = (type) => {
     setTrxType(type);
-    setAmount('');
+    setAmount(type === 'Debit' && wallet.liveWalletBalance > 0 ? String(wallet.liveWalletBalance) : '');
+    setUtrId('');
+    setPaymentMethod(type === 'Debit' ? 'UPI' : 'WALLET_ADJUSTMENT');
+    setSyncToCompanyFund(true);
     setDescription('');
     setTrxModalOpen(true);
   };
@@ -249,7 +289,9 @@ export default function BulkerWalletDetails() {
     try {
       const bulkerCode = bulker?.bulker_id || identifier;
       const generatedTrxId = `BW-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const finalUtr = utrId.trim() || null;
       const finalDesc = description.trim() || `Admin manual ${trxType.toLowerCase()} payout`;
+      const shouldSyncFund = trxType === 'Debit' ? Boolean(syncToCompanyFund) : false;
 
       const payload = {
         transaction_id: generatedTrxId,
@@ -258,19 +300,46 @@ export default function BulkerWalletDetails() {
         transaction_type: trxType,
         description: finalDesc,
         status: 'Completed',
+        utr_id: finalUtr,
+        sync_to_company_fund: shouldSyncFund,
         payout_details: {
           bulker_id: bulkerCode,
           bulker_uuid: bulker?.id,
           bulker_name: bulker?.full_name,
+          utr_number: finalUtr,
+          payment_method: paymentMethod,
+          wallet_adjustment: true,
+          synced_to_company_fund: shouldSyncFund,
           processed_by: 'Admin Portal'
         }
       };
 
-      const { error: insErr } = await supabase
+      const { data: insertedRow, error: insErr } = await supabase
         .from('individual_wallet_transactions')
-        .insert(payload);
+        .insert(payload)
+        .select('*')
+        .maybeSingle();
 
       if (insErr) throw insErr;
+
+      // Ensure no row remains in company_fund_transactions if syncToCompanyFund was unchecked on Debit
+      if (trxType === 'Debit' && !shouldSyncFund) {
+        try {
+          if (insertedRow?.id) {
+            await supabase
+              .from('company_fund_transactions')
+              .delete()
+              .or(`reference_id.eq.${generatedTrxId},reference_id.eq.${insertedRow.id},transaction_id.eq.${generatedTrxId}`);
+          } else {
+            await supabase
+              .from('company_fund_transactions')
+              .delete()
+              .ilike('description', `%${generatedTrxId}%`);
+          }
+        } catch (cleanupErr) {
+          console.warn('Company fund cleanup warning:', cleanupErr);
+        }
+      }
 
       setTrxModalOpen(false);
       showToast('success', `${trxType} Processed!`, `₹${numAmount.toFixed(2)} recorded in bulker wallet.`);
@@ -289,12 +358,14 @@ export default function BulkerWalletDetails() {
       return;
     }
 
-    const headers = ['Transaction ID', 'Date Time', 'Type', 'Amount (INR)', 'Description', 'Status'];
+    const headers = ['Transaction ID', 'Date Time', 'Type', 'Amount (INR)', 'UTR / Ref ID', 'Method', 'Description', 'Status'];
     const rows = transactions.map(t => [
       t.transaction_id || t.id,
       formatIST(t.created_at),
       t.transaction_type,
       t.amount,
+      t.utr_id || t.payout_details?.utr_number || '-',
+      t.payout_details?.payment_method || '-',
       `"${(t.description || '').replace(/"/g, '""')}"`,
       t.status || 'Success'
     ]);
@@ -952,7 +1023,30 @@ export default function BulkerWalletDetails() {
                     />
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.84rem' }}>
-                    {tx.description || 'Bulker wallet transaction'}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                      <Typography variant="body2" sx={{ fontSize: '0.84rem', fontWeight: 500 }}>
+                        {tx.description || 'Bulker wallet transaction'}
+                      </Typography>
+                      {(tx.utr_id || tx.payout_details?.utr_number || tx.payout_details?.payment_method) && (
+                        <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
+                          {(tx.utr_id || tx.payout_details?.utr_number) && (
+                            <Chip
+                              label={`UTR: ${tx.utr_id || tx.payout_details?.utr_number}`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: 19, fontSize: '0.68rem', fontFamily: 'monospace', fontWeight: 700 }}
+                            />
+                          )}
+                          {tx.payout_details?.payment_method && (
+                            <Chip
+                              label={String(tx.payout_details.payment_method).replace(/_/g, ' ')}
+                              size="small"
+                              sx={{ height: 19, fontSize: '0.66rem', fontWeight: 700 }}
+                            />
+                          )}
+                        </Stack>
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 900, fontSize: '0.9rem', color: tx.transaction_type === 'Credit' ? '#16a34a' : '#ef4444', whiteSpace: 'nowrap' }}>
                     {tx.transaction_type === 'Credit' ? '+' : '-'}{formatINR(tx.amount)}
@@ -1061,7 +1155,7 @@ export default function BulkerWalletDetails() {
           {trxType} Bulker Wallet
         </DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2.5} sx={{ mt: 1 }}>
+          <Stack spacing={2.2} sx={{ mt: 0.5 }}>
             <TextField
               label="Amount (₹)"
               type="number"
@@ -1072,16 +1166,74 @@ export default function BulkerWalletDetails() {
               InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
             />
+
+            <FormControl fullWidth size="small">
+              <InputLabel>Payment / Transfer Method</InputLabel>
+              <Select
+                label="Payment / Transfer Method"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                sx={{ borderRadius: '14px' }}
+              >
+                <MenuItem value="UPI">UPI Transfer</MenuItem>
+                <MenuItem value="DIRECT_BANK_TRANSFER">Direct Bank Transfer (IMPS/NEFT)</MenuItem>
+                <MenuItem value="WALLET_ADJUSTMENT">Wallet Adjustment</MenuItem>
+                <MenuItem value="CASH">Cash / Manual Settlement</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="UTR / Reference ID (Optional)"
+              size="small"
+              fullWidth
+              value={utrId}
+              onChange={(e) => setUtrId(e.target.value)}
+              placeholder="e.g. UTR4920184910"
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
+            />
+
             <TextField
               label="Description / Reason"
               multiline
-              rows={3}
+              rows={2}
               fullWidth
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter note or reason for this transaction..."
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
             />
+
+            {trxType === 'Debit' && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: '14px',
+                  border: `1px solid ${theme.palette.divider}`,
+                  bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.03)' : 'rgba(255,255,255,0.03)'
+                }}
+              >
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={syncToCompanyFund}
+                      onChange={(e) => setSyncToCompanyFund(e.target.checked)}
+                      color="primary"
+                      size="small"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                        Deduct from Main Company Fund
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
+                        Uncheck if you do not want this payout logged in company fund transactions.
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </Box>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
