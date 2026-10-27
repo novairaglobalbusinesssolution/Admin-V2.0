@@ -34,9 +34,13 @@ import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import GroupIcon from '@mui/icons-material/Group';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import Collapse from '@mui/material/Collapse';
+import CampaignIcon from '@mui/icons-material/Campaign';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import SecurityIcon from '@mui/icons-material/Security';
 import { supabase } from '../supabaseClient';
 
 import { ColorModeContext } from '../App';
@@ -54,6 +58,7 @@ export default function AdminLayout() {
   const location = useLocation();
 
   const isPaymentsRoute = location.pathname.startsWith('/payments');
+  const isCommunityChatRoute = location.pathname.startsWith('/community-chat');
 
   useEffect(() => {
     setSidebarLoading(true);
@@ -87,19 +92,20 @@ export default function AdminLayout() {
   });
 
   const fetchNotificationCounts = async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const lastRead = localStorage.getItem('admin_last_read_notifications') || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       // 1. New users since last read
       const { count: usersCount } = await supabase
         .from('profiles')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .gt('created_at', lastRead);
 
       // 2. Pending individual withdrawals
       const { count: withCount } = await supabase
         .from('individual_wallet_transactions')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('status', 'Pending')
         .eq('transaction_type', 'Debit')
         .ilike('description', 'Withdrawal:%');
@@ -107,13 +113,13 @@ export default function AdminLayout() {
       // 3. Pending task submissions under review
       const { count: revCount } = await supabase
         .from('review_submit_data')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('status', 'Under Review');
 
       // 4. Pending / latest bulkers
       const { count: bulkerCount } = await supabase
         .from('bulker_desks')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .gt('created_at', lastRead);
 
       setNotifCounts({
@@ -129,7 +135,7 @@ export default function AdminLayout() {
 
   useEffect(() => {
     fetchNotificationCounts();
-    const interval = setInterval(fetchNotificationCounts, 30000);
+    const interval = setInterval(fetchNotificationCounts, 180000);
     window.addEventListener('notifications_updated', fetchNotificationCounts);
     return () => {
       clearInterval(interval);
@@ -167,6 +173,8 @@ export default function AdminLayout() {
   const mainMenuItems = [
     { text: 'Dashboard', icon: <DashboardIcon fontSize="small" />, path: '/' },
     { text: 'Users', icon: <PeopleAltIcon fontSize="small" />, path: '/users' },
+    { text: '🌺 Puja 2026 Feed', icon: <PhotoLibraryIcon fontSize="small" sx={{ color: '#f59e0b' }} />, path: '/puja-feed-2026' },
+    { text: '💬 Community Group Chat', icon: <ForumIcon fontSize="small" sx={{ color: '#06b6d4' }} />, path: '/community-chat' },
     { text: 'Payments', icon: <AccountBalanceWalletIcon fontSize="small" />, path: '/payments' },
     { text: 'Notifications', icon: <NotificationsActiveIcon fontSize="small" />, path: '/notifications', badge: totalNotifications },
   ];
@@ -661,7 +669,62 @@ export default function AdminLayout() {
     </Box>
   );
 
-  const activeDrawer = isPaymentsRoute ? paymentsDrawer : drawer;
+    const communityChatSubMenuItems = [
+    { text: 'Live Chats', icon: <ForumIcon fontSize="small" sx={{ color: '#06b6d4' }} />, path: '/community-chat' },
+    { text: 'Users & Moderation', icon: <PeopleAltIcon fontSize="small" sx={{ color: '#3b82f6' }} />, path: '/community-chat/users' },
+    { text: 'Ads & Campaigns', icon: <CampaignIcon fontSize="small" sx={{ color: '#f59e0b' }} />, path: '/community-chat/ads' },
+    { text: 'Pinned Notices', icon: <PushPinIcon fontSize="small" sx={{ color: '#ec4899' }} />, path: '/community-chat/pinned' },
+    { text: 'Security & Settings', icon: <SecurityIcon fontSize="small" sx={{ color: '#10b981' }} />, path: '/community-chat/settings' },
+  ];
+
+  const communityChatDrawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+      <Box sx={{ px: 2, pt: 2.4, pb: 1.5, display: 'flex', alignItems: 'center' }}>
+        <Button
+          fullWidth
+          variant="outlined"
+          color="inherit"
+          startIcon={<ArrowBackIosNewIcon fontSize="small" />}
+          onClick={() => navigate('/')}
+          sx={{
+            borderRadius: '18px',
+            minHeight: '42px',
+            justifyContent: 'flex-start',
+            color: 'text.secondary',
+            borderColor: 'divider',
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: '0.8rem',
+            backgroundColor: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.5)' : 'rgba(15,17,23,0.35)',
+          }}
+        >
+          Back to Dashboard
+        </Button>
+      </Box>
+
+      <Box sx={{ overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, px: 0, pt: 0, pb: 2 }}>
+        <Typography variant="overline" sx={{ px: 3, mb: 0.8, mt: 1.5, fontWeight: 700, color: 'text.disabled', fontSize: '0.6rem', display: 'block', letterSpacing: 0.7 }}>
+          COMMUNITY CHAT
+        </Typography>
+
+        <List sx={{ pt: 0 }}>
+          {communityChatSubMenuItems.map(renderMenuItem)}
+        </List>
+      </Box>
+
+      <Box sx={{ p: 2, pt: 1.5, borderTop: `1px solid ${theme.palette.divider}`, background: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(15,17,23,0.5)', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Avatar sx={{ width: 32, height: 32, bgcolor: '#06b6d4', fontSize: '0.85rem', fontWeight: 700 }}>
+          💬
+        </Avatar>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 750, fontSize: '0.8rem' }}>Community Lounge</Typography>
+          <Typography variant="caption" sx={{ color: '#22c55e', fontWeight: 700, fontSize: '0.65rem' }}>● Real-time Active</Typography>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  const activeDrawer = isPaymentsRoute ? paymentsDrawer : (isCommunityChatRoute ? communityChatDrawer : drawer);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>

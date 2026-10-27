@@ -41,6 +41,12 @@ import CreateInvoice from './pages/CreateInvoice';
 import PaymentGatewayConfig from './pages/PaymentGatewayConfig';
 import ClientPaymentPage from './pages/ClientPaymentPage';
 import ViewInvoice from './pages/ViewInvoice';
+import PujaFeedAdmin from './pages/PujaFeedAdmin';
+import CommunityChatsView from './pages/community-chat/CommunityChatsView';
+import CommunityUsersView from './pages/community-chat/CommunityUsersView';
+import CommunityAdsView from './pages/community-chat/CommunityAdsView';
+import CommunityPinnedView from './pages/community-chat/CommunityPinnedView';
+import CommunitySettingsView from './pages/community-chat/CommunitySettingsView';
 
 export const ColorModeContext = createContext({ toggleColorMode: () => {} });
 
@@ -195,6 +201,13 @@ function App() {
               <Route path="/" element={<AdminLayout />}>
                 <Route index element={<Dashboard />} />
                 <Route path="users" element={<UsersManagement />} />
+                <Route path="puja-feed-2026" element={<PujaFeedAdmin />} />
+                <Route path="puja-zone" element={<PujaFeedAdmin />} />
+                <Route path="community-chat" element={<CommunityChatsView />} />
+                <Route path="community-chat/users" element={<CommunityUsersView />} />
+                <Route path="community-chat/ads" element={<CommunityAdsView />} />
+                <Route path="community-chat/pinned" element={<CommunityPinnedView />} />
+                <Route path="community-chat/settings" element={<CommunitySettingsView />} />
                 <Route path="user-view/:type/:id" element={<UserView />} />
                 <Route path="payments" element={<PaymentDashboard />} />
                 <Route path="payments/individuals/wallet" element={<IndividualWallet />} />
