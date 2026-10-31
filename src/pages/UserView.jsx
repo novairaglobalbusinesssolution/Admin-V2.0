@@ -176,23 +176,40 @@ export default function UserView() {
     }
 
     try {
-      const { data: result, error } = await supabase.from(table).select('*').eq('id', id).single();
+      const { data: result, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
       if (error) throw error;
+      if (!result) {
+        throw new Error('User record not found in ' + table);
+      }
       
-      let finalData = result;
+      let finalData = { ...result };
       setAccountStatus(result.status || 'Active');
 
       if (type === 'individual' || type === 'bulker') {
-        // Fetch specific bulker name
+        // Fetch specific bulker name safely
         if (type === 'individual' && result.bulker_id) {
-          const bid = result.bulker_id.includes('NOVAIRA/BULKER/') ? result.bulker_id : `NOVAIRA/BULKER/${result.bulker_id}`;
-          const { data: b } = await supabase.from('bulker_desks').select('full_name').eq('bulker_id', bid).single();
-          if (b) finalData.bulker_name = b.full_name;
+          try {
+            const rawBid = result.bulker_id;
+            const fullBid = rawBid.includes('NOVAIRA/BULKER/') ? rawBid : `NOVAIRA/BULKER/${rawBid}`;
+            const { data: b } = await supabase
+              .from('bulker_desks')
+              .select('full_name')
+              .or(`bulker_id.eq.${rawBid},bulker_id.eq.${fullBid}`)
+              .limit(1)
+              .maybeSingle();
+            if (b) finalData.bulker_name = b.full_name;
+          } catch (_) {}
         }
 
-        // Fetch active bulkers for transfer dropdown
-        const { data: allB } = await supabase.from('bulker_desks').select('bulker_id, full_name').eq('status', 'Active');
-        if (allB) setActiveBulkers(allB);
+        // Fetch active bulkers for transfer dropdown safely
+        try {
+          const { data: allB } = await supabase
+            .from('bulker_desks')
+            .select('bulker_id, full_name')
+            .eq('status', 'Active')
+            .limit(50);
+          if (allB) setActiveBulkers(allB);
+        } catch (_) {}
 
         if (type === 'individual') {
           setEditForm({ 
@@ -213,9 +230,10 @@ export default function UserView() {
       }
 
       setData(finalData);
+      fetchUserRecords(finalData);
     } catch (e) {
-      console.error(e);
-      setSnack({ open: true, message: 'Failed to load user data', severity: 'error' });
+      console.error('Fetch user details error:', e);
+      setSnack({ open: true, message: 'Failed to load user data: ' + (e.message || 'Unknown error'), severity: 'error' });
     } finally {
       setLoading(false);
     }
@@ -227,21 +245,57 @@ export default function UserView() {
     }
   }, [type, data?.earner_id, data?.bulker_id]);
 
-  const fetchUserRecords = async () => {
+  const fetchUserRecords = async (passedData = null) => {
+    const currentData = passedData || data;
+    const currentEarnerId = currentData?.earner_id;
+    const currentBulkerId = currentData?.bulker_id;
+
     setLoadingRecords(true);
     try {
-      // 1. Fetch Reviews
+      // 1. Fetch Reviews with safe fallback to prevent schema cache / relation issues
       let revsData = [];
-      if (type === 'individual') {
-          const { data: revs, error: revErr } = await supabase
+      if (type === 'individual' && currentEarnerId) {
+        try {
+          let { data: revs, error: revErr } = await supabase
             .from('review_submit_data')
-            .select('id, submitted_username, status, submitted_at, apps(task_id, app_name)')
-            .eq('earner_id', data.earner_id)
-            .order('submitted_at', { ascending: false });
-          if (revErr) throw revErr;
+            .select('id, app_id, submitted_username, status, submitted_at, apps(task_id, app_name)')
+            .eq('earner_id', currentEarnerId)
+            .order('submitted_at', { ascending: false })
+            .limit(150);
+
+          if (revErr) {
+            const { data: fallbackRevs } = await supabase
+              .from('review_submit_data')
+              .select('id, app_id, submitted_username, status, submitted_at')
+              .eq('earner_id', currentEarnerId)
+              .order('submitted_at', { ascending: false })
+              .limit(150);
+
+            if (fallbackRevs && fallbackRevs.length > 0) {
+              const appIds = [...new Set(fallbackRevs.map(r => r.app_id).filter(Boolean))];
+              let appsMap = {};
+              if (appIds.length > 0) {
+                const { data: appsList } = await supabase
+                  .from('apps')
+                  .select('id, task_id, app_name')
+                  .in('id', appIds);
+                if (appsList) {
+                  appsList.forEach(a => { appsMap[a.id] = a; });
+                }
+              }
+              revs = fallbackRevs.map(r => ({
+                ...r,
+                apps: appsMap[r.app_id] || { task_id: 'N/A', app_name: 'Task App' }
+              }));
+            } else {
+              revs = [];
+            }
+          }
           if (revs) revsData = revs;
+        } catch (err) {
+          console.warn('Reviews fetch fallback error:', err);
+        }
       } else if (type === 'bulker') {
-          // Handle bulker_id variations (e.g. PRATIK1 vs NOVAIRA/BULKER/PRATIK1)
           let shortBulkerId = data.bulker_id;
           if (shortBulkerId && shortBulkerId.includes('/')) {
               const parts = shortBulkerId.split('/');
@@ -249,20 +303,19 @@ export default function UserView() {
           }
           const longBulkerId = `NOVAIRA/BULKER/${shortBulkerId}`;
           
-          // Fetch apps assigned to this bulker
-          const { data: allApps } = await supabase.from('apps').select('*').order('app_date', { ascending: false });
-            const appsAssigned = allApps?.filter(app => {
-                let assigned = app.assigned_bulkers || [];
-                while (typeof assigned === 'string') {
-                    try { assigned = JSON.parse(assigned); } catch (e) { break; }
-                }
-                if (!Array.isArray(assigned)) assigned = [];
-                
-                return assigned.some(b => {
-                    const bId = typeof b === 'string' ? b : b.bulker_id;
-                    return [data.bulker_id, shortBulkerId, longBulkerId].includes(bId);
-                });
-            });
+          const { data: allApps } = await supabase.from('apps').select('*').order('app_date', { ascending: false }).limit(200);
+          const appsAssigned = allApps?.filter(app => {
+              let assigned = app.assigned_bulkers || [];
+              while (typeof assigned === 'string') {
+                  try { assigned = JSON.parse(assigned); } catch (e) { break; }
+              }
+              if (!Array.isArray(assigned)) assigned = [];
+              
+              return assigned.some(b => {
+                  const bId = typeof b === 'string' ? b : b.bulker_id;
+                  return [data.bulker_id, shortBulkerId, longBulkerId].includes(bId);
+              });
+          });
           if (appsAssigned) {
             const sortedAssigned = [...appsAssigned].sort((a, b) => {
               const timeA = a.app_date ? new Date(a.app_date).getTime() : 0;
@@ -273,32 +326,52 @@ export default function UserView() {
             setBulkerApps(sortedAssigned);
           }
 
-          const { data: profiles } = await supabase.from('profiles').select('*').in('bulker_id', [data.bulker_id, shortBulkerId, longBulkerId]).order('created_at', { ascending: false });
+          const { data: profiles } = await supabase.from('profiles').select('*').in('bulker_id', [data.bulker_id, shortBulkerId, longBulkerId]).order('created_at', { ascending: false }).limit(200);
           if (profiles) setReferrals(profiles);
 
-          
-          // Fetch billing history for bulker
           const { data: hist } = await supabase
             .from('bulker_billing_history')
             .select('*')
             .in('bulker_id', [data.bulker_id, shortBulkerId, longBulkerId])
-            .order('change_date_time', { ascending: true });
+            .order('change_date_time', { ascending: true })
+            .limit(100);
           if (hist) setBillingHistory(hist);
 
-          // Fetch wallet transactions for bulker
-          const { data: txns, error: txnErr } = await supabase
+          const { data: txns } = await supabase
             .from('individual_wallet_transactions')
-            .select('*')
+            .select('id, transaction_id, amount, transaction_type, description, status, created_at, utr_id')
             .in('earner_id', [data.bulker_id, shortBulkerId, longBulkerId])
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .limit(150);
           if (txns) setTransactions(txns);
           
-          const { data: revs, error: revErr } = await supabase
+          let { data: revs, error: revErr } = await supabase
             .from('review_submit_data')
-            .select('id, submitted_username, status, submitted_at, earner_id, bulker_id, apps(task_id, app_name)')
+            .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id, apps(task_id, app_name)')
             .in('bulker_id', [data.bulker_id, shortBulkerId, longBulkerId])
-            .order('submitted_at', { ascending: false });
-          if (revErr) throw revErr;
+            .order('submitted_at', { ascending: false })
+            .limit(200);
+
+          if (revErr) {
+            const { data: fallbackRevs } = await supabase
+              .from('review_submit_data')
+              .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id')
+              .in('bulker_id', [data.bulker_id, shortBulkerId, longBulkerId])
+              .order('submitted_at', { ascending: false })
+              .limit(200);
+            if (fallbackRevs && fallbackRevs.length > 0) {
+              const appIds = [...new Set(fallbackRevs.map(r => r.app_id).filter(Boolean))];
+              let appsMap = {};
+              if (appIds.length > 0) {
+                const { data: appsList } = await supabase.from('apps').select('id, task_id, app_name').in('id', appIds);
+                if (appsList) appsList.forEach(a => { appsMap[a.id] = a; });
+              }
+              revs = fallbackRevs.map(r => ({
+                ...r,
+                apps: appsMap[r.app_id] || { task_id: 'N/A', app_name: 'Task App' }
+              }));
+            }
+          }
           
           if (revs) {
               revsData = revs.map(r => {
@@ -312,29 +385,36 @@ export default function UserView() {
       }
       setReviews(revsData);
 
-      // 2. Fetch Wallet Transactions
-      if (type === 'individual') {
-        const { data: txns, error: txnErr } = await supabase
-          .from('individual_wallet_transactions')
-          .select('*')
-          .eq('earner_id', data.earner_id)
-          .order('created_at', { ascending: false });
+      // 2. Fetch Wallet Transactions (limited to 150 records to save egress & prevent UI lag)
+      if (type === 'individual' && currentEarnerId) {
+        try {
+          const { data: txns, error: txErr } = await supabase
+            .from('individual_wallet_transactions')
+            .select('id, transaction_id, amount, transaction_type, description, status, created_at, utr_id')
+            .eq('earner_id', currentEarnerId)
+            .order('created_at', { ascending: false })
+            .limit(150);
 
-        if (txnErr) throw txnErr;
-        if (txns) setTransactions(txns);
+          if (txErr) console.error('Wallet fetch error:', txErr);
+          if (txns) setTransactions(txns);
+        } catch (txnEx) {
+          console.error('Wallet fetch exception:', txnEx);
+        }
           
-          const { data: refData, error: refErr } = await supabase
+        try {
+          const { data: refData } = await supabase
             .from('profiles')
-            .select('*')
-            .eq('referral_code', data.earner_id)
-            .order('created_at', { ascending: false });
-          if (!refErr && refData) {
+            .select('id, earner_id, first_name, last_name, phone, status, created_at')
+            .eq('referral_code', currentEarnerId)
+            .order('created_at', { ascending: false })
+            .limit(100);
+          if (refData) {
             setReferrals(refData);
           }
+        } catch (_) {}
       }
     } catch (e) {
-      console.error(e);
-      setSnack({ open: true, message: 'Failed to load user records', severity: 'warning' });
+      console.error('Record load error:', e);
     } finally {
       setLoadingRecords(false);
     }
@@ -504,6 +584,13 @@ export default function UserView() {
       setDeletingAccount(false);
     }
   };
+
+  // Robust case-insensitive balance calculation
+  const computedBalance = (
+    transactions.filter(t => t.transaction_type?.toLowerCase() === 'credit' && t.status?.toLowerCase() === 'completed').reduce((acc, curr) => acc + parseFloat(curr.amount || 0), 0) -
+    transactions.filter(t => t.transaction_type?.toLowerCase() === 'debit' && t.status?.toLowerCase() === 'completed').reduce((acc, curr) => acc + parseFloat(curr.amount || 0), 0) -
+    transactions.filter(t => t.transaction_type?.toLowerCase() === 'debit' && t.status?.toLowerCase() === 'pending').reduce((acc, curr) => acc + parseFloat(curr.amount || 0), 0)
+  );
 
   const renderIcon = () => {
     if (type === 'individual') return <PersonIcon />;
@@ -675,8 +762,25 @@ export default function UserView() {
 
           <Grid item xs={12} sm={4} md={3}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Join Date</Typography>
-            <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.5 }}>{new Date(data.created_at).toLocaleString()}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.5 }}>{new Date(data.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}</Typography>
           </Grid>
+          <Grid item xs={12} sm={4} md={3}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Last Active</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: data.last_active_at ? '#10b981' : 'text.disabled' }} />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: data.last_active_at ? '#10b981' : 'text.secondary' }}>
+                {data.last_active_at ? new Date(data.last_active_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : 'Never'}
+              </Typography>
+            </Box>
+          </Grid>
+          {type === 'individual' && (
+            <Grid item xs={12} sm={4} md={3}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Wallet Balance</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5, color: computedBalance >= 0 ? 'primary.main' : 'error.main', fontSize: '1.05rem' }}>
+                ₹{computedBalance.toFixed(2)}
+              </Typography>
+            </Grid>
+          )}
         </Grid>
       </Paper>
 
@@ -895,11 +999,7 @@ export default function UserView() {
                       <Box sx={{ p: 3, borderRadius: '16px', bgcolor: 'primary.main' + '11', border: `1px solid ${theme.palette.primary.main}33` }}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Current Balance</Typography>
                         <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, color: 'primary.main' }}>
-                          ₹{ (
-                            transactions.filter(t => t.transaction_type === 'Credit' && t.status === 'Completed').reduce((acc, curr) => acc + parseFloat(curr.amount), 0) -
-                            transactions.filter(t => t.transaction_type === 'Debit' && t.status === 'Completed').reduce((acc, curr) => acc + parseFloat(curr.amount), 0) -
-                            transactions.filter(t => t.transaction_type === 'Debit' && t.status === 'Pending').reduce((acc, curr) => acc + parseFloat(curr.amount), 0)
-                          ).toFixed(2) }
+                          ₹{computedBalance.toFixed(2)}
                         </Typography>
                       </Box>
                     </Grid>
@@ -907,7 +1007,7 @@ export default function UserView() {
                       <Box sx={{ p: 3, borderRadius: '16px', bgcolor: 'warning.main' + '11', border: `1px solid ${theme.palette.warning.main}33` }}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Pending Amount</Typography>
                         <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, color: 'warning.main' }}>
-                          ₹{transactions.filter(t => t.transaction_type === 'Debit' && t.status === 'Pending').reduce((acc, curr) => acc + parseFloat(curr.amount), 0).toFixed(2)}
+                          ₹{transactions.filter(t => t.transaction_type?.toLowerCase() === 'debit' && t.status?.toLowerCase() === 'pending').reduce((acc, curr) => acc + parseFloat(curr.amount), 0).toFixed(2)}
                         </Typography>
                       </Box>
                     </Grid>
@@ -915,7 +1015,7 @@ export default function UserView() {
                       <Box sx={{ p: 3, borderRadius: '16px', bgcolor: 'success.main' + '11', border: `1px solid ${theme.palette.success.main}33` }}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Total Earned</Typography>
                         <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, color: 'success.main' }}>
-                          ₹{transactions.filter(t => t.transaction_type === 'Credit' && t.status === 'Completed').reduce((acc, curr) => acc + parseFloat(curr.amount), 0).toFixed(2)}
+                          ₹{transactions.filter(t => t.transaction_type?.toLowerCase() === 'credit' && t.status?.toLowerCase() === 'completed').reduce((acc, curr) => acc + parseFloat(curr.amount), 0).toFixed(2)}
                         </Typography>
                       </Box>
                     </Grid>
@@ -923,7 +1023,7 @@ export default function UserView() {
                       <Box sx={{ p: 3, borderRadius: '16px', bgcolor: 'error.main' + '11', border: `1px solid ${theme.palette.error.main}33` }}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>Total Debited / Paid</Typography>
                         <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, color: 'error.main' }}>
-                          ₹{transactions.filter(t => t.transaction_type === 'Debit' && t.status === 'Completed').reduce((acc, curr) => acc + parseFloat(curr.amount), 0).toFixed(2)}
+                          ₹{transactions.filter(t => t.transaction_type?.toLowerCase() === 'debit' && t.status?.toLowerCase() === 'completed').reduce((acc, curr) => acc + parseFloat(curr.amount), 0).toFixed(2)}
                         </Typography>
                       </Box>
                     </Grid>

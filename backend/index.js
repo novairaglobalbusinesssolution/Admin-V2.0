@@ -262,7 +262,63 @@ const { createClient } = require('@supabase/supabase-js');
 // Initialize Supabase
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Multi-Database Supabase Clients
+const supabaseAuth = createClient(
+    process.env.SUPABASE_URL || 'https://ybqdewajnpffrguihujn.supabase.co',
+    process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlicWRld2FqbnBmZnJndWlodWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MDkxMTAsImV4cCI6MjEwODk4NTExMH0.Yn9688u1oTp_woM12CXrylSVXNRDsm9fRl3QTk8H9zk'
+);
+const supabaseWork = createClient(
+    process.env.SUPABASE_WORK_URL || 'https://efrdodrxbaqjqbhvgjbz.supabase.co',
+    process.env.SUPABASE_WORK_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmcmRvZHJ4YmFxanFiaHZnamJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQxNjEsImV4cCI6MjEwODk3MDE2MX0.9g8IEVit0S68r4NXYtrkEi5mIJdQXDnr1dpGL1vUbO8'
+);
+const supabasePayments = createClient(
+    process.env.SUPABASE_PAYMENTS_URL || 'https://bpiuvfiebiipjzvuexqg.supabase.co',
+    process.env.SUPABASE_PAYMENTS_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwaXV2ZmllYmlpcGp6dnVleHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MTIwNzAsImV4cCI6MjEwODk4ODA3MH0.zy77ozEPCLk-yXmb4PwFqs3bOiKae2BI5pbA2RrbRSg'
+);
+const supabaseCommunity = createClient(
+    process.env.SUPABASE_COMMUNITY_URL || 'https://bgmdikzbolgcvfbutybw.supabase.co',
+    process.env.SUPABASE_COMMUNITY_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnbWRpa3pib2xnY3ZmYnV0eWJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MTIyNDMsImV4cCI6MjEwODk4ODI0M30.N5cfdbwss-YaU6Ni6p6DkM20OhgIFcrcaxuZtecv38Q'
+);
+const supabaseSystem = createClient(
+    process.env.SUPABASE_SYSTEM_URL || 'https://egatmhtiyxuixdbdjzae.supabase.co',
+    process.env.SUPABASE_SYSTEM_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnYXRtaHRpeXh1aXhkYmRqemFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMTg4NDQsImV4cCI6MjA5OTg5NDg0NH0.WWhKBhCl37GMH66AUqV-fzkfYG8FF94NKjg5PvYEcjI'
+);
+
+const ROUTING_TABLE = {
+    apps: supabaseWork,
+    app_comments: supabaseWork,
+    review_submit_data: supabaseWork,
+    bulker_app_acceptances: supabaseWork,
+    tasks: supabaseWork,
+    user_task_logs: supabaseWork,
+    user_daily_stats: supabaseWork,
+    individual_wallet_transactions: supabasePayments,
+    company_fund_transactions: supabasePayments,
+    bulker_wallet_transactions: supabasePayments,
+    bulker_billing_history: supabasePayments,
+    invoices: supabasePayments,
+    gift_cards: supabasePayments,
+    individual_payment_settings: supabasePayments,
+    payment_settings: supabasePayments,
+    payment_gateways: supabasePayments,
+    puja_zone_posts: supabaseCommunity,
+    puja_zone_comments: supabaseCommunity,
+    tickets: supabaseCommunity,
+    ticket_messages: supabaseCommunity,
+    cron_settings: supabaseSystem,
+    live_list_settings: supabaseSystem,
+    smtp_settings: supabaseSystem,
+    security_blacklist: supabaseSystem
+};
+
+const supabase = new Proxy(supabaseAuth, {
+    get(target, prop, receiver) {
+        if (prop === 'from') {
+            return (table) => (ROUTING_TABLE[table] || supabaseAuth).from(table);
+        }
+        return Reflect.get(target, prop, receiver);
+    }
+});
 
 function loadFirebaseServiceAccount() {
     try {
@@ -1208,22 +1264,24 @@ app.post('/api/send-custom-notification', async (req, res) => {
             }
         }
         
-        // Batch insert to user_notifications for in-app history
-        for (const p of profilesData) {
-            dbInsertions.push({
-                earner_id: p.earner_id,
-                title: title,
-                body: body,
-                type: type || 'system',
-                link: link || '',
-                is_read: false
-            });
-        }
-        
-        if (dbInsertions.length > 0) {
-            const batchSize = 1000;
-            for(let i=0; i < dbInsertions.length; i += batchSize) {
-               await supabase.from('user_notifications').insert(dbInsertions.slice(i, i + batchSize));
+        // Optional batch insert to user_notifications (Disabled by default for 0-database storage)
+        if (req.body.saveToDb === true) {
+            for (const p of profilesData) {
+                dbInsertions.push({
+                    earner_id: p.earner_id,
+                    title: title,
+                    body: body,
+                    type: type || 'system',
+                    link: link || '',
+                    is_read: false
+                });
+            }
+            
+            if (dbInsertions.length > 0) {
+                const batchSize = 1000;
+                for(let i=0; i < dbInsertions.length; i += batchSize) {
+                   await supabase.from('user_notifications').insert(dbInsertions.slice(i, i + batchSize));
+                }
             }
         }
         

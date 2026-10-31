@@ -208,6 +208,9 @@ export default function UsersManagement() {
             </TableCell>
             <TableCell sx={{ py: 1.5 }}>
               <Typography variant="body2">{new Date(row.created_at).toLocaleDateString()}</Typography>
+              <Typography variant="caption" sx={{ color: row.last_active_at ? 'success.main' : 'text.secondary', display: 'block', fontSize: '0.72rem', fontWeight: 600 }}>
+                {row.last_active_at ? `Active: ${new Date(row.last_active_at).toLocaleDateString()}` : 'Active: Never'}
+              </Typography>
             </TableCell>
             <TableCell align="right" sx={{ py: 1.5 }}>
               <IconButton color="primary" size="small" onClick={() => navigate(`/user-view/individual/${row.id}`)}><VisibilityIcon fontSize="small" /></IconButton>
