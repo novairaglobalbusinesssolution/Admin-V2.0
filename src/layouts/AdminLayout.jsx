@@ -198,6 +198,7 @@ export default function AdminLayout() {
     { text: 'Live Checking Mails', icon: <EmailIcon fontSize="small" />, path: '/live-checking-mails' },
     { text: 'Push Notifications', icon: <NotificationsActiveIcon fontSize="small" />, path: '/push-notifications' },
     { text: 'Scan Zone', icon: <QrCodeScannerIcon fontSize="small" />, path: '/scan-zone' },
+    { text: '🩺 Doctor Novaira', icon: <SecurityIcon fontSize="small" sx={{ color: '#10b981' }} />, path: 'http://localhost:7700', external: true },
   ];
 
   const fileManagerItems = [
@@ -221,6 +222,10 @@ export default function AdminLayout() {
       <ListItem key={item.text} disablePadding sx={{ mb: 0.55 }}>
         <ListItemButton
           onClick={() => {
+            if (item.external) {
+              window.open(item.path, '_blank');
+              return;
+            }
             navigate(item.path);
             if (isMobile) setMobileOpen(false);
           }}
