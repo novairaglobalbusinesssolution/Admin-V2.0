@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 
 const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-  process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SYSTEM_URL || process.env.VITE_SUPABASE_SYSTEM_URL || 'https://egatmhtiyxuixdbdjzae.supabase.co',
+  process.env.SUPABASE_SYSTEM_ANON_KEY || process.env.VITE_SUPABASE_SYSTEM_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnYXRtaHRpeXh1aXhkYmRqemFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMTg4NDQsImV4cCI6MjA5OTg5NDg0NH0.WWhKBhCl37GMH66AUqV-fzkfYG8FF94NKjg5PvYEcjI'
 );
 
 export default async function handler(req, res) {
