@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Box, Typography, Paper, Button, TextField, Select, MenuItem, FormControl, InputLabel,
-  Grid, Card, CardContent, CircularProgress, Snackbar, Alert, RadioGroup, FormControlLabel, Radio,
+  Grid, Card, CardContent, CircularProgress, Snackbar, Alert, RadioGroup, FormControlLabel, Radio, Switch,
   Autocomplete, Chip, useTheme
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
@@ -21,6 +21,7 @@ export default function PushNotifications() {
   const [image, setImage] = useState('');
   const [notiType, setNotiType] = useState('system'); // system, tasks, wallet
   
+  const [onlyActiveDevices, setOnlyActiveDevices] = useState(true);
   const [sending, setSending] = useState(false);
   const [snack, setSnack] = useState({ open: false, message: '', type: 'success' });
 
@@ -32,7 +33,7 @@ export default function PushNotifications() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('earner_id, first_name, last_name, email, phone')
+        .select('earner_id, first_name, last_name, email, phone, fcm_token')
         .order('created_at', { ascending: false });
 
       if (!error && data && data.length > 0) {
@@ -54,7 +55,17 @@ export default function PushNotifications() {
 
   const handleSend = async () => {
     if (!title || !description) return setSnack({ open: true, message: 'Title and Description are required', type: 'warning' });
-    if (targetType === 'selected' && selectedUsers.length === 0) return setSnack({ open: true, message: 'Please select at least one user', type: 'warning' });
+    if (targetType === 'selected') {
+      if (selectedUsers.length === 0) return setSnack({ open: true, message: 'Please select at least one user', type: 'warning' });
+      const withTokens = selectedUsers.filter(u => !!u.fcm_token);
+      if (withTokens.length === 0) {
+        return setSnack({ 
+          open: true, 
+          message: 'The selected user has not opened the app yet (no FCM token). Please select a user with 🟢 Active Device.', 
+          type: 'warning' 
+        });
+      }
+    }
 
     setSending(true);
     try {
@@ -117,22 +128,37 @@ export default function PushNotifications() {
 
             {targetType === 'selected' && (
               <Box sx={{ mb: 4 }}>
+                <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Select specific earners to receive this notification:
+                  </Typography>
+                  <FormControlLabel 
+                    control={<Switch size="small" checked={onlyActiveDevices} onChange={(e) => setOnlyActiveDevices(e.target.checked)} color="success" />} 
+                    label={<Typography variant="caption" sx={{ fontWeight: 600, color: onlyActiveDevices ? 'success.main' : 'text.secondary' }}>Only Active Devices ({users.filter(u => !!u.fcm_token).length})</Typography>} 
+                  />
+                </Box>
                 <Autocomplete
                   multiple
-                  options={users}
+                  options={onlyActiveDevices ? users.filter(u => !!u.fcm_token) : users}
                   getOptionLabel={(option) => {
                     const name = option.first_name ? `${option.first_name} ${option.last_name || ''}`.trim() : (option.email || 'Unknown User');
-                    return `${name} (${option.earner_id})`;
+                    const status = option.fcm_token ? '🟢 Active Device' : '⚪ No Device (App not opened)';
+                    return `${name} (${option.earner_id}) - ${status}`;
                   }}
                   value={selectedUsers}
                   onChange={(e, newValue) => setSelectedUsers(newValue)}
                   loading={loadingUsers}
                   renderInput={(params) => (
-                    <TextField {...params} variant="outlined" label="Search & Select Users" placeholder="Select..." />
+                    <TextField {...params} variant="outlined" label="Search & Select Users" placeholder="Search by name, email, or earner ID..." />
                   )}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => (
-                      <Chip variant="outlined" label={option.earner_id} {...getTagProps({ index })} />
+                      <Chip 
+                        variant="outlined" 
+                        color={option.fcm_token ? "success" : "default"}
+                        label={`${option.earner_id} ${option.fcm_token ? '🟢' : '⚪'}`} 
+                        {...getTagProps({ index })} 
+                      />
                     ))
                   }
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
