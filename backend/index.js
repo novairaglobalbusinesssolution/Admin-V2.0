@@ -305,6 +305,8 @@ const ROUTING_TABLE = {
     puja_zone_comments: supabaseCommunity,
     tickets: supabaseCommunity,
     ticket_messages: supabaseCommunity,
+    user_notifications: supabaseCommunity,
+    community_chat: supabaseCommunity,
     cron_settings: supabaseSystem,
     live_list_settings: supabaseSystem,
     smtp_settings: supabaseSystem,

@@ -30,13 +30,23 @@ export default function PushNotifications() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com'}/api/users`);
-      const json = await res.json();
-      if (json.status === 'success') {
-        setUsers(json.data || []);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('earner_id, first_name, last_name, email, phone')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        setUsers(data);
+      } else {
+        const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com');
+        const res = await fetch(`${apiBase}/api/users`);
+        const json = await res.json();
+        if (json.status === 'success') {
+          setUsers(json.data || []);
+        }
       }
     } catch (e) {
-      console.error(e);
+      console.error('fetchUsers error:', e);
     } finally {
       setLoadingUsers(false);
     }
@@ -48,7 +58,8 @@ export default function PushNotifications() {
 
     setSending(true);
     try {
-      const res = await fetch(`${import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com'}/api/send-custom-notification`, {
+      const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com');
+      const res = await fetch(`${apiBase}/api/send-custom-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,7 +84,10 @@ export default function PushNotifications() {
         throw new Error(data.error || 'Failed to send');
       }
     } catch(e) {
-      setSnack({ open: true, message: e.message, type: 'error' });
+      const msg = e.message.includes('Failed to fetch')
+        ? 'Cannot connect to Backend Server. Please make sure backend is running on port 5000 (npm run dev).'
+        : e.message;
+      setSnack({ open: true, message: msg, type: 'error' });
     } finally {
       setSending(false);
     }

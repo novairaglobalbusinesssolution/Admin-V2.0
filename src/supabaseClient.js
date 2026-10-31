@@ -38,6 +38,7 @@ const TABLE_ROUTING = {
   'tickets': supabaseCommunity,
   'ticket_messages': supabaseCommunity,
   'community_chat': supabaseCommunity,
+  'user_notifications': supabaseCommunity,
 
   // 4. Security & System Database
   'cron_settings': supabaseSystem,
