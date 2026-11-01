@@ -76,7 +76,7 @@ export default function Withdrawals() {
       if (earnerIds.length > 0) {
         const { data: profiles, error: pErr } = await supabase
           .from('profiles')
-          .select('earner_id, first_name, last_name, email, phone, bulker_id')
+          .select('earner_id, first_name, last_name, email, phone, bulker_id, fcm_token')
           .in('earner_id', earnerIds);
         
         if (!pErr && profiles) {
@@ -176,6 +176,7 @@ export default function Withdrawals() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           earner_id: selectedTx.earner_id,
+          fcm_token: selectedTx.profile?.fcm_token || null,
           title: 'Withdrawal Processed',
           type: 'wallet',
           body: `Your withdrawal of ₹${selectedTx.amount} has been successfully paid via ${selectedTx.payoutData?.account_type || 'Bank'}. UTR: ${utrInput.trim()}`
@@ -216,6 +217,7 @@ export default function Withdrawals() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           earner_id: selectedTx.earner_id,
+          fcm_token: selectedTx.profile?.fcm_token || null,
           title: 'Withdrawal Cancelled',
           type: 'wallet',
           body: `Your withdrawal of ₹${selectedTx.amount} was cancelled. Reason: ${cancelReason.trim()}`

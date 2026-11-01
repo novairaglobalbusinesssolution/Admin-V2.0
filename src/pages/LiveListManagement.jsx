@@ -379,7 +379,7 @@ export default function LiveListManagement() {
 
         const { data: liveProfiles = [], error: profileErr } = await supabase
           .from('profiles')
-          .select('earner_id, referral_code, bulker_id')
+          .select('earner_id, referral_code, bulker_id, fcm_token')
           .in('earner_id', allSelectedEarnersArr);
 
         if (profileErr) console.warn('Failed to fetch referral references.', profileErr);
@@ -534,6 +534,7 @@ export default function LiveListManagement() {
 
               primaryNotifications.push({
                 earner_id: normalizedEarnerId,
+                fcm_token: earnerProfile?.fcm_token || null,
                 title: 'Wallet Credited',
                 body: `You received Rs. ${userReward} for completing ${appDetails.name}.`,
                 type: 'wallet'

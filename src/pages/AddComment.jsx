@@ -332,12 +332,34 @@ export default function AddComment() {
           }
         }
 
+        // Fetch tokens directly from DB1 for workers of assigned bulkers
+        let assignedTokens = [];
+        if (assignedBulkerIds.length > 0) {
+          const { data: bProfiles } = await supabase
+            .from('profiles')
+            .select('fcm_token, bulker_id')
+            .not('fcm_token', 'is', null);
+
+          if (bProfiles && bProfiles.length > 0) {
+            const bSet = new Set(assignedBulkerIds.map(b => String(b).replace(/^NOVAIRA\/BULKER\//i, '').trim().toUpperCase()));
+            assignedTokens = bProfiles
+              .filter(p => {
+                if (!p.bulker_id) return false;
+                const bClean = String(p.bulker_id).replace(/^NOVAIRA\/BULKER\//i, '').trim().toUpperCase();
+                return bSet.has(bClean);
+              })
+              .map(p => p.fcm_token)
+              .filter(Boolean);
+          }
+        }
+
         await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-bulk-notification`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             app_id: selectedApp.id,
             bulker_ids: assignedBulkerIds,
+            tokens: assignedTokens,
             title: `New ${effectiveType} Task Available!`,
             body: `Task for "${selectedApp.app_name}" has been published with ${newComments.length} slots. Earn rewards now!`,
             type: 'task'

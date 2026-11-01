@@ -525,6 +525,7 @@ export default function UserView() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               earner_id: data.earner_id,
+              fcm_token: data.fcm_token || null,
               title: 'Account status updated',
               body: notificationBody,
               type: 'account',
