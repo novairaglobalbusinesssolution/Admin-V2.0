@@ -76,6 +76,9 @@ export default function PushNotifications() {
         body: JSON.stringify({
           target: targetType,
           user_ids: selectedUsers.map(u => u.earner_id),
+          tokens: targetType === 'selected' 
+            ? selectedUsers.map(u => u.fcm_token).filter(Boolean)
+            : users.map(u => u.fcm_token).filter(Boolean),
           title,
           body: description,
           link,

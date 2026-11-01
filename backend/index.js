@@ -263,10 +263,14 @@ const { createClient } = require('@supabase/supabase-js');
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 // Initialize Multi-Database Supabase Clients
-const supabaseAuth = createClient(
-    process.env.SUPABASE_URL || 'https://ybqdewajnpffrguihujn.supabase.co',
-    process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlicWRld2FqbnBmZnJndWlodWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MDkxMTAsImV4cCI6MjEwODk4NTExMH0.Yn9688u1oTp_woM12CXrylSVXNRDsm9fRl3QTk8H9zk'
-);
+const rawAuthUrl = process.env.SUPABASE_URL || '';
+const isOldDb = !rawAuthUrl || rawAuthUrl.includes('tkakqfsm');
+const effectiveAuthUrl = !isOldDb ? rawAuthUrl : 'https://ybqdewajnpffrguihujn.supabase.co';
+const effectiveAuthKey = (!isOldDb && process.env.SUPABASE_ANON_KEY)
+    ? process.env.SUPABASE_ANON_KEY
+    : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlicWRld2FqbnBmZnJndWlodWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MDkxMTAsImV4cCI6MjEwODk4NTExMH0.Yn9688u1oTp_woM12CXrylSVXNRDsm9fRl3QTk8H9zk';
+
+const supabaseAuth = createClient(effectiveAuthUrl, effectiveAuthKey);
 const supabaseWork = createClient(
     process.env.SUPABASE_WORK_URL || 'https://efrdodrxbaqjqbhvgjbz.supabase.co',
     process.env.SUPABASE_WORK_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmcmRvZHJ4YmFxanFiaHZnamJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQxNjEsImV4cCI6MjEwODk3MDE2MX0.9g8IEVit0S68r4NXYtrkEi5mIJdQXDnr1dpGL1vUbO8'
@@ -543,7 +547,7 @@ app.post('/api/send-bulk-notification', async (req, res) => {
 });
 
 app.post('/api/send-notification', async (req, res) => {
-    const { earner_id, title, body, type } = req.body;
+    const { earner_id, fcm_token, title, body, type } = req.body;
     
     if (!earner_id || !title || !body) {
         return res.status(400).json({ error: 'Missing earner_id, title, or body' });
@@ -554,15 +558,19 @@ app.post('/api/send-notification', async (req, res) => {
     }
     
     try {
-        // Fetch user's FCM token from profiles table
-        const { data: profileData, error: profileErr } = await supabase
-            .from('profiles')
-            .select('fcm_token')
-            .eq('earner_id', earner_id)
-            .single();
-            
-        if (profileErr || !profileData || !profileData.fcm_token) {
-            return res.status(404).json({ error: 'FCM Token not found for this earner. Make sure they opened the app.' });
+        let token = fcm_token;
+        if (!token) {
+            // Fetch user's FCM token from profiles table
+            const { data: profileData, error: profileErr } = await supabase
+                .from('profiles')
+                .select('fcm_token')
+                .eq('earner_id', earner_id)
+                .single();
+                
+            if (profileErr || !profileData || !profileData.fcm_token) {
+                return res.status(404).json({ error: 'FCM Token not found for this earner. Make sure they opened the app.' });
+            }
+            token = profileData.fcm_token;
         }
         
         const message = {
@@ -570,7 +578,7 @@ app.post('/api/send-notification', async (req, res) => {
                 title: title,
                 body: body
             },
-            token: profileData.fcm_token
+            token: token
         };
         
         // Send via Firebase Admin
@@ -1191,7 +1199,7 @@ setInterval(async () => {
 // SEND CUSTOM PUSH NOTIFICATIONS
 // ----------------------------------------------------
 app.post('/api/send-custom-notification', async (req, res) => {
-    const { target, user_ids, title, body, link, image, type } = req.body;
+    const { target, user_ids, tokens, title, body, link, image, type } = req.body;
     
     if (!title || !body) {
         return res.status(400).json({ error: 'Missing title or body' });
@@ -1202,26 +1210,29 @@ app.post('/api/send-custom-notification', async (req, res) => {
     }
     
     try {
-        let profilesData = [];
-        
-        if (target === 'selected' && user_ids && user_ids.length > 0) {
-            const { data, error } = await supabase.from('profiles').select('earner_id, fcm_token').in('earner_id', user_ids);
-            if (error) throw error;
-            profilesData = data;
-        } else {
-            const { data, error } = await supabase.from('profiles').select('earner_id, fcm_token');
-            if (error) throw error;
-            profilesData = data;
-        }
-            
-        if (!profilesData || profilesData.length === 0) {
-            return res.status(404).json({ error: 'No users found to send notification.' });
-        }
-        
-        let successCount = 0;
-        let dbInsertions = [];
+        let validTokens = [];
 
-        const validTokens = profilesData.filter(p => p.fcm_token).map(p => p.fcm_token);
+        if (tokens && Array.isArray(tokens) && tokens.length > 0) {
+            validTokens = tokens.filter(Boolean);
+        } else {
+            let profilesData = [];
+            
+            if (target === 'selected' && user_ids && user_ids.length > 0) {
+                const { data, error } = await supabase.from('profiles').select('earner_id, fcm_token').in('earner_id', user_ids);
+                if (error) throw error;
+                profilesData = data;
+            } else {
+                const { data, error } = await supabase.from('profiles').select('earner_id, fcm_token');
+                if (error) throw error;
+                profilesData = data;
+            }
+                
+            if (!profilesData || profilesData.length === 0) {
+                return res.status(404).json({ error: 'No users found to send notification.' });
+            }
+
+            validTokens = profilesData.filter(p => p.fcm_token).map(p => p.fcm_token);
+        }
         
         if (validTokens.length === 0) {
             return res.status(400).json({ error: 'Selected users do not have FCM tokens configured.' });
