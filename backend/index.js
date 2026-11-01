@@ -1210,6 +1210,7 @@ app.post('/api/send-custom-notification', async (req, res) => {
     }
     
     try {
+        let profilesData = [];
         let validTokens = [];
 
         if (tokens && Array.isArray(tokens) && tokens.length > 0) {
@@ -1237,6 +1238,9 @@ app.post('/api/send-custom-notification', async (req, res) => {
         if (validTokens.length === 0) {
             return res.status(400).json({ error: 'Selected users do not have FCM tokens configured.' });
         }
+        
+        let successCount = 0;
+        let dbInsertions = [];
         
         const chunkSize = 500;
         for (let i = 0; i < validTokens.length; i += chunkSize) {
@@ -1278,7 +1282,7 @@ app.post('/api/send-custom-notification', async (req, res) => {
         }
         
         // Optional batch insert to user_notifications (Disabled by default for 0-database storage)
-        if (req.body.saveToDb === true) {
+        if (req.body.saveToDb === true && profilesData && profilesData.length > 0) {
             for (const p of profilesData) {
                 dbInsertions.push({
                     earner_id: p.earner_id,
