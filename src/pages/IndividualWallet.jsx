@@ -158,7 +158,7 @@ export default function IndividualWallet() {
 
         // Send Push Notification
         try {
-          const baseUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+          const baseUrl = import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com';
           fetch(`${baseUrl}/api/send-notification`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

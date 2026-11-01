@@ -39,7 +39,7 @@ export default function PushNotifications() {
       if (!error && data && data.length > 0) {
         setUsers(data);
       } else {
-        const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com');
+        const apiBase = import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com';
         const res = await fetch(`${apiBase}/api/users`);
         const json = await res.json();
         if (json.status === 'success') {
@@ -69,7 +69,7 @@ export default function PushNotifications() {
 
     setSending(true);
     try {
-      const apiBase = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com');
+      const apiBase = import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com';
       const res = await fetch(`${apiBase}/api/send-custom-notification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -99,7 +99,7 @@ export default function PushNotifications() {
       }
     } catch(e) {
       const msg = e.message.includes('Failed to fetch')
-        ? 'Cannot connect to Backend Server. Please make sure backend is running on port 5000 (npm run dev).'
+        ? 'Cannot connect to Backend Server (https://admin-v2-backend.onrender.com). Please make sure backend is active.'
         : e.message;
       setSnack({ open: true, message: msg, type: 'error' });
     } finally {

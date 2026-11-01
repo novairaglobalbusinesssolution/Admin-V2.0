@@ -515,7 +515,7 @@ export default function UserView() {
       setData({ ...data, status: nextStatus });
 
       if (type === 'individual') {
-        const backendUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+        const backendUrl = import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com';
         const notificationBody = nextStatus === 'Active'
           ? 'Your Novaira account is active again.'
           : 'Your Novaira account has been suspended. Please contact support if you believe this is a mistake.';

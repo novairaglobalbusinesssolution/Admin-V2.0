@@ -612,7 +612,7 @@ export default function LiveListManagement() {
             }
             
             if (primaryNotifications && primaryNotifications.length > 0) {
-              const baseUrl = import.meta.env.DEV ? 'http://localhost:5000' : 'https://admin-v2-backend.onrender.com';
+              const baseUrl = import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com';
               Promise.all(primaryNotifications.map(notif => 
                 fetch(`${baseUrl}/api/send-notification`, {
                   method: 'POST',
