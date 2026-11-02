@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Autocomplete,
@@ -67,9 +68,28 @@ const fetchAllRows = async (createQuery) => {
   }
 };
 
-function StatCard({ title, value, helper, icon, loading = false }) {
+function StatCard({ title, value, helper, icon, loading = false, onClick }) {
   return (
-    <Paper elevation={0} sx={{ p: 3, borderRadius: '24px', border: '1px solid', borderColor: 'divider', height: '100%' }}>
+    <Paper
+      elevation={0}
+      onClick={onClick}
+      sx={{
+        p: 3,
+        borderRadius: '24px',
+        border: '1px solid',
+        borderColor: 'divider',
+        height: '100%',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
+        ...(onClick && {
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: '0 6px 16px rgba(0, 0, 0, 0.08)',
+            borderColor: 'primary.main',
+          },
+        }),
+      }}
+    >
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="subtitle2" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 700 }}>
           {title}
@@ -100,6 +120,7 @@ function StatCard({ title, value, helper, icon, loading = false }) {
 
 export default function PaymentDashboard() {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
@@ -391,13 +412,11 @@ export default function PaymentDashboard() {
         const transactionType = String(row.transaction_type || '').toLowerCase();
         const status = String(row.status || '').toLowerCase();
         const isSuccessful = ['completed', 'success', 'successful'].includes(status);
-        const isPendingWithdrawal = transactionType === 'debit' && ['pending', 'processing'].includes(status);
-
         return {
           ...prev,
           currentCompanyBalance: prev.currentCompanyBalance + (isSuccessful ? (transactionType === 'debit' ? amount : -amount) : 0),
-          totalWithdrawalRequests: Math.max(0, prev.totalWithdrawalRequests - (isPendingWithdrawal ? 1 : 0)),
-          pendingWithdrawalAmount: Math.max(0, prev.pendingWithdrawalAmount - (isPendingWithdrawal ? amount : 0)),
+          totalWithdrawalRequests: prev.totalWithdrawalRequests,
+          pendingWithdrawalAmount: prev.pendingWithdrawalAmount,
           totalProcessed: Math.max(0, prev.totalProcessed - (isSuccessful ? amount : 0)),
           transactions: prev.transactions.filter((item) => item.id !== row.id),
         };
@@ -466,6 +485,7 @@ export default function PaymentDashboard() {
             helper={`${formatMoney(summary.pendingWithdrawalAmount)} pending amount`}
             icon={<RequestQuoteIcon fontSize="small" />}
             loading={summaryUpdating}
+            onClick={() => navigate('/payments/individuals/withdrawals')}
           />
         </Grid>
 

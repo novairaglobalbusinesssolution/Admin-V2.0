@@ -21,17 +21,26 @@ const formatDate = (value) => {
 const isIgnoredStatus = (status) => ['cancelled', 'rejected', 'failed'].includes(normalizeString(status).toLowerCase());
 
 export async function fetchPaymentDashboardData() {
-  const { data, error } = await supabase
-    .from('company_fund_transactions')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false });
+  const [companyRes, withdrawalsRes] = await Promise.all([
+    supabase
+      .from('company_fund_transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false }),
+    supabase
+      .from('individual_wallet_transactions')
+      .select('amount')
+      .eq('status', 'Pending')
+      .eq('transaction_type', 'Debit')
+      .ilike('description', 'Withdrawal:%')
+  ]);
 
-  if (error && error.code !== '42P01') {
-    throw error;
+  if (companyRes.error && companyRes.error.code !== '42P01') {
+    throw companyRes.error;
   }
 
-  const companyTransactions = Array.isArray(data) ? data : [];
+  const companyTransactions = Array.isArray(companyRes.data) ? companyRes.data : [];
+  const pendingWithdrawalRows = Array.isArray(withdrawalsRes.data) ? withdrawalsRes.data : [];
 
   const currentCompanyBalance = companyTransactions.reduce((sum, tx) => {
     if (isIgnoredStatus(tx.status) || !isSuccessfulStatus(tx.status)) return sum;
@@ -48,14 +57,8 @@ export async function fetchPaymentDashboardData() {
     return sum;
   }, 0);
 
-  const pendingWithdrawalRequests = companyTransactions.filter((tx) => {
-    const transactionType = normalizeString(tx.transaction_type).toLowerCase();
-    const status = normalizeString(tx.status).toLowerCase();
-
-    return transactionType === 'debit' && ['pending', 'processing'].includes(status);
-  });
-
-  const pendingWithdrawalAmount = pendingWithdrawalRequests.reduce((sum, tx) => sum + normalizeAmount(tx.amount), 0);
+  const totalWithdrawalRequests = pendingWithdrawalRows.length;
+  const pendingWithdrawalAmount = pendingWithdrawalRows.reduce((sum, tx) => sum + normalizeAmount(tx.amount), 0);
 
   const totalProcessed = companyTransactions.reduce((sum, tx) => {
     if (isIgnoredStatus(tx.status) || !isSuccessfulStatus(tx.status)) return sum;
@@ -64,7 +67,7 @@ export async function fetchPaymentDashboardData() {
 
   return {
     currentCompanyBalance,
-    totalWithdrawalRequests: pendingWithdrawalRequests.length,
+    totalWithdrawalRequests,
     pendingWithdrawalAmount,
     totalProcessed,
     transactions: companyTransactions
