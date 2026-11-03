@@ -25,7 +25,7 @@ export default function CommunityAdsView() {
     imageUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600&auto=format&fit=crop&q=80',
     ctaText: 'Claim Bonus Now',
     ctaUrl: 'https://novairaglobal.com',
-    badge: '📢 Sponsored Promo'
+    badge: 'Sponsored Promo'
   });
 
   const [loading, setLoading] = useState(false);
@@ -112,7 +112,7 @@ export default function CommunityAdsView() {
       imageUrl: ad.imageUrl || '',
       ctaText: ad.ctaText || 'Learn More',
       ctaUrl: ad.ctaUrl || '',
-      badge: ad.sender_badge || '📢 Sponsored Promo'
+      badge: ad.sender_badge || 'Sponsored Promo'
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -178,7 +178,7 @@ export default function CommunityAdsView() {
 
             {/* Badge Picker */}
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {['📢 Sponsored Promo', '🔥 Flash Deal', '⚡ Limited Offer', '🎉 Community Reward'].map((b) => (
+              {['Sponsored Promo', '🔥 Flash Deal', 'Limited Offer', '🎉 Community Reward'].map((b) => (
                 <Chip
                   key={b}
                   label={b}

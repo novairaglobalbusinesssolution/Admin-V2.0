@@ -134,7 +134,7 @@ export const subscribeToMessages = (onInsert, onUpdate, onDelete) => {
     .subscribe();
 };
 
-export const sendAdminMessage = async ({ message, badge = '👑 Super Admin', name = 'Novaira Admin', mediaUrl = null }) => {
+export const sendAdminMessage = async ({ message, badge = 'Super Admin', name = 'Novaira Admin', mediaUrl = null }) => {
   let content = message.trim();
   if (mediaUrl && mediaUrl.trim()) {
     content = `${content}\n${mediaUrl.trim()}`.trim();
@@ -204,7 +204,7 @@ export const pinNotice = async ({ title, message, level = 'info' }) => {
     .insert([{
       sender_name: 'Official Notice',
       sender_id: 'SYS-PINNED',
-      sender_badge: '📌 Pinned Notice',
+      sender_badge: 'Official Announcement',
       message: payload
     }])
     .select();
@@ -223,7 +223,7 @@ export const unpinNotice = async (rowId) => {
 };
 
 // ----------------- ADS & CAMPAIGNS -----------------
-export const broadcastAd = async ({ title, description, imageUrl, ctaText, ctaUrl, badge = '📢 Sponsored Promo' }) => {
+export const broadcastAd = async ({ title, description, imageUrl, ctaText, ctaUrl, badge = 'Sponsored Promo' }) => {
   const payload = JSON.stringify({
     type: 'ad_banner',
     title: title || 'Featured Promotion',
@@ -356,6 +356,32 @@ export const updateUserAccountStatus = async (earnerIdOrProfileId, newStatus) =>
   const { data, error } = await query.select();
   if (error) throw error;
   return data;
+};
+
+// ----------------- CHAT-ONLY RESTRICTION (DOES NOT TOUCH PROFILE/APP) -----------------
+export const isUserChatBlocked = (earnerId, settings) => {
+  if (!earnerId || !settings?.mutedUsers) return false;
+  return (settings.mutedUsers || []).includes(earnerId);
+};
+
+export const blockUserInChat = async (earnerId) => {
+  if (!earnerId) return false;
+  const currentSettings = await getChatSettings();
+  const currentMuted = currentSettings.mutedUsers || [];
+  if (!currentMuted.includes(earnerId)) {
+    const updatedMuted = [...currentMuted, earnerId];
+    await saveChatSettings({ mutedUsers: updatedMuted });
+  }
+  return true;
+};
+
+export const unblockUserInChat = async (earnerId) => {
+  if (!earnerId) return false;
+  const currentSettings = await getChatSettings();
+  const currentMuted = currentSettings.mutedUsers || [];
+  const updatedMuted = currentMuted.filter((id) => id !== earnerId);
+  await saveChatSettings({ mutedUsers: updatedMuted });
+  return true;
 };
 
 export const purgeOldMessages = async (hours = 24) => {

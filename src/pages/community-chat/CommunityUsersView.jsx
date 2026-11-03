@@ -23,10 +23,16 @@ import Swal from 'sweetalert2';
 
 import {
   fetchCommunityChatUsers,
-  updateUserAccountStatus,
   getChatSettings,
-  saveChatSettings
+  saveChatSettings,
+  blockUserInChat,
+  unblockUserInChat
 } from './communityChatService';
+import {
+  notifySuccess,
+  notifyError,
+  notifyConfirm
+} from './chatNotification';
 
 export default function CommunityUsersView() {
   const theme = useTheme();
@@ -95,33 +101,39 @@ export default function CommunityUsersView() {
     });
   };
 
-  // Toggle Account Block / Unblock
+  // Toggle Chat Block (CHAT ONLY - Does not suspend main app profile or earnings)
   const handleToggleBlock = async (user) => {
-    const isCurrentlyBlocked = user.status === 'Blocked';
-    const newStatus = isCurrentlyBlocked ? 'Active' : 'Blocked';
+    const isCurrentlyBlocked = chatSettings.mutedUsers?.includes(user.earner_id);
 
-    const result = await Swal.fire({
-      title: `${isCurrentlyBlocked ? 'Unblock' : 'Block'} Earner?`,
-      text: `Are you sure you want to ${isCurrentlyBlocked ? 'unblock and restore' : 'block and restrict'} ${user.first_name} (${user.earner_id})?`,
-      icon: isCurrentlyBlocked ? 'question' : 'warning',
-      showCancelButton: true,
-      confirmButtonColor: isCurrentlyBlocked ? '#22c55e' : '#ef4444',
-      confirmButtonText: isCurrentlyBlocked ? 'Yes, Unblock' : 'Yes, Block User'
+    const result = await notifyConfirm({
+      title: `${isCurrentlyBlocked ? 'Unblock' : 'Block'} from Chat?`,
+      text: isCurrentlyBlocked
+        ? `Restore chat access for ${user.first_name} (${user.earner_id})?`
+        : `Block ${user.first_name} (${user.earner_id}) from sending messages in Community Group Chat? (Note: Their main account and earnings remain 100% active).`,
+      confirmButtonText: isCurrentlyBlocked ? 'Yes, Unblock' : 'Yes, Block from Chat',
+      isDestructive: !isCurrentlyBlocked,
+      isDark
     });
 
     if (result.isConfirmed) {
       try {
-        await updateUserAccountStatus(user.id, newStatus);
-        setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u)));
-        Swal.fire({
-          icon: 'success',
-          title: `User ${newStatus}`,
-          text: `${user.first_name} is now ${newStatus.toLowerCase()}.`,
-          timer: 1500,
-          showConfirmButton: false
-        });
+        if (isCurrentlyBlocked) {
+          await unblockUserInChat(user.earner_id);
+          setChatSettings((prev) => ({
+            ...prev,
+            mutedUsers: (prev.mutedUsers || []).filter((id) => id !== user.earner_id)
+          }));
+          notifySuccess('Chat Access Restored', `${user.first_name} can now participate in community chat.`, 1600, isDark);
+        } else {
+          await blockUserInChat(user.earner_id);
+          setChatSettings((prev) => ({
+            ...prev,
+            mutedUsers: [...(prev.mutedUsers || []).filter((id) => id !== user.earner_id), user.earner_id]
+          }));
+          notifySuccess('Blocked in Chat', `${user.first_name} has been blocked from Community Chat only.`, 1800, isDark);
+        }
       } catch (err) {
-        Swal.fire({ icon: 'error', title: 'Update Failed', text: err.message });
+        notifyError('Action Failed', err.message, isDark);
       }
     }
   };
@@ -134,22 +146,24 @@ export default function CommunityUsersView() {
     setTimeoutModalOpen(true);
   };
 
-  // Apply Timeout
+  // Apply Chat Timeout (CHAT ONLY - Does not suspend main app profile or earnings)
   const handleApplyTimeout = async () => {
     if (!selectedUser) return;
     try {
-      await updateUserAccountStatus(selectedUser.id, 'Suspended');
-      setUsers((prev) => prev.map((u) => (u.id === selectedUser.id ? { ...u, status: 'Suspended' } : u)));
+      await blockUserInChat(selectedUser.earner_id);
+      setChatSettings((prev) => ({
+        ...prev,
+        mutedUsers: [...(prev.mutedUsers || []).filter((id) => id !== selectedUser.earner_id), selectedUser.earner_id]
+      }));
       setTimeoutModalOpen(false);
-      Swal.fire({
-        icon: 'success',
-        title: 'User Suspended',
-        text: `${selectedUser.first_name} has been suspended for ${timeoutDuration}. Reason: ${timeoutReason}`,
-        timer: 2000,
-        showConfirmButton: false
-      });
+      notifySuccess(
+        'Chat Timeout Applied',
+        `${selectedUser.first_name} has been muted in Community Chat for ${timeoutDuration}. Their main app account remains active.`,
+        2200,
+        isDark
+      );
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Suspension Failed', text: err.message });
+      notifyError('Timeout Failed', err.message, isDark);
     }
   };
 
@@ -610,7 +624,7 @@ export default function CommunityUsersView() {
                         <TableCell sx={{ py: 1.6 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.4 }}>
                             <Chip
-                              label={`💬 ${user.message_count} ${user.message_count === 1 ? 'message' : 'messages'}`}
+                              label={`${user.message_count} ${user.message_count === 1 ? 'message' : 'messages'}`}
                               size="small"
                               sx={{
                                 height: 22,
@@ -653,7 +667,7 @@ export default function CommunityUsersView() {
                             />
                             {isMuted && (
                               <Chip
-                                label="🔇 Muted"
+                                label="Muted in Chat" icon={<VolumeOffIcon sx={{ fontSize: "12px !important" }} />}
                                 size="small"
                                 sx={{
                                   fontWeight: 800,
@@ -672,14 +686,14 @@ export default function CommunityUsersView() {
                         <TableCell sx={{ py: 1.6 }}>
                           <Stack direction="row" spacing={0.6}>
                             <Chip
-                              label={perms.canSendLinks ? '🔗 Links' : '🔗 No Links'}
+                              label={perms.canSendLinks ? 'Links Allowed' : 'Links Restricted'}
                               size="small"
                               variant="outlined"
                               color={perms.canSendLinks ? 'default' : 'error'}
                               sx={{ height: 20, fontSize: '0.64rem', fontWeight: 700 }}
                             />
                             <Chip
-                              label={perms.canSendMedia ? '📷 Media' : '📷 No Media'}
+                              label={perms.canSendMedia ? 'Media Allowed' : 'Media Restricted'}
                               size="small"
                               variant="outlined"
                               color={perms.canSendMedia ? 'default' : 'error'}

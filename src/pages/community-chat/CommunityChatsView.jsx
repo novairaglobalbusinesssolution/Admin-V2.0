@@ -3,21 +3,25 @@ import {
   Box, Typography, Paper, TextField, IconButton, Button,
   Avatar, Chip, Tooltip, Stack, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Menu, MenuItem, useTheme, InputAdornment
+  Menu, MenuItem, useTheme, InputAdornment, Alert
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
+import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import BlockIcon from '@mui/icons-material/Block';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import LockIcon from '@mui/icons-material/Lock';
 import ShieldIcon from '@mui/icons-material/Shield';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloseIcon from '@mui/icons-material/Close';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
-import Swal from 'sweetalert2';
+import WorkspacePremiumIcon from '@mui/icons-material/WorkspacePremium';
+import CampaignIcon from '@mui/icons-material/Campaign';
+import VolumeOffIcon from '@mui/icons-material/VolumeOff';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ForumIcon from '@mui/icons-material/Forum';
 
 import {
   fetchMessages,
@@ -25,9 +29,23 @@ import {
   sendAdminMessage,
   deleteMessage,
   pinNotice,
-  verifyAdminMpin,
-  updateUserAccountStatus
+  getChatSettings,
+  saveChatSettings,
+  blockUserInChat,
+  unblockUserInChat
 } from './communityChatService';
+
+import {
+  notifySuccess,
+  notifyError,
+  notifyConfirm
+} from './chatNotification';
+
+const BADGE_OPTIONS = [
+  { label: 'Super Admin', badge: 'Super Admin', icon: <WorkspacePremiumIcon sx={{ fontSize: 15 }} /> },
+  { label: 'Moderator', badge: 'Moderator', icon: <ShieldIcon sx={{ fontSize: 15 }} /> },
+  { label: 'Official Notice', badge: 'Official Notice', icon: <CampaignIcon sx={{ fontSize: 15 }} /> }
+];
 
 export default function CommunityChatsView() {
   const theme = useTheme();
@@ -37,19 +55,23 @@ export default function CommunityChatsView() {
   const [loading, setLoading] = useState(true);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
-  const [senderBadge, setSenderBadge] = useState('👑 Super Admin');
+  const [selectedBadge, setSelectedBadge] = useState(BADGE_OPTIONS[0]);
+  const [badgeMenuAnchor, setBadgeMenuAnchor] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaUrlInput, setMediaUrlInput] = useState('');
   const [showMediaInput, setShowMediaInput] = useState(false);
 
-  // M-PIN Dialog State
-  const [mpinDialogOpen, setMpinDialogOpen] = useState(false);
-  const [mpinInput, setMpinInput] = useState('');
-  const [pendingAction, setPendingAction] = useState(null);
+  // Chat Settings State (for mutedUsers)
+  const [chatSettings, setChatSettings] = useState({ mutedUsers: [] });
 
   // Context Menu State
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedMsg, setSelectedMsg] = useState(null);
+
+  // Moderation Dialog State
+  const [modDialogOpen, setModDialogOpen] = useState(false);
+  const [modTargetUser, setModTargetUser] = useState(null);
+  const [modProcessing, setModProcessing] = useState(false);
 
   const messagesEndRef = useRef(null);
   const isUserScrolledUp = useRef(false);
@@ -61,11 +83,19 @@ export default function CommunityChatsView() {
   };
 
   useEffect(() => {
-    loadMessages();
+    loadInitialData();
 
     // Setup Supabase Realtime WebSocket
     const channel = subscribeToMessages(
       (newMsg) => {
+        if (newMsg.sender_id === 'SYS-CONFIG') {
+          try {
+            const parsed = JSON.parse(newMsg.message);
+            setChatSettings((prev) => ({ ...prev, ...parsed }));
+          } catch (_) {}
+          return;
+        }
+
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMsg.id)) return prev;
           return [...prev, newMsg];
@@ -73,6 +103,13 @@ export default function CommunityChatsView() {
         setTimeout(() => scrollToBottom('smooth'), 100);
       },
       (updatedMsg) => {
+        if (updatedMsg.sender_id === 'SYS-CONFIG') {
+          try {
+            const parsed = JSON.parse(updatedMsg.message);
+            setChatSettings((prev) => ({ ...prev, ...parsed }));
+          } catch (_) {}
+          return;
+        }
         setMessages((prev) => prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m)));
       },
       (deletedMsg) => {
@@ -85,15 +122,18 @@ export default function CommunityChatsView() {
     };
   }, []);
 
-  const loadMessages = async () => {
+  const loadInitialData = async () => {
     try {
       setLoading(true);
-      const data = await fetchMessages(150);
-      // Filter out internal system configs from general stream
+      const [data, settings] = await Promise.all([
+        fetchMessages(150),
+        getChatSettings()
+      ]);
+      setChatSettings(settings);
       setMessages(data.filter((m) => m.sender_id !== 'SYS-CONFIG'));
       setTimeout(() => scrollToBottom('auto'), 150);
     } catch (err) {
-      console.error('Failed to load chat messages:', err);
+      console.error('Failed to load chat data:', err);
     } finally {
       setLoading(false);
     }
@@ -114,7 +154,7 @@ export default function CommunityChatsView() {
     try {
       await sendAdminMessage({
         message: text,
-        badge: senderBadge,
+        badge: selectedBadge.badge,
         mediaUrl: mediaUrlInput
       });
       setInputText('');
@@ -123,11 +163,7 @@ export default function CommunityChatsView() {
       isUserScrolledUp.current = false;
       setTimeout(() => scrollToBottom('smooth'), 100);
     } catch (err) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Send Failed',
-        text: err.message || 'Could not deliver message to community lounge'
-      });
+      notifyError('Send Failed', err.message || 'Could not deliver message to community lounge', isDark);
     } finally {
       setSending(false);
     }
@@ -136,33 +172,21 @@ export default function CommunityChatsView() {
   // Delete message for everyone
   const handleDeleteForEveryone = async (msg) => {
     handleMenuClose();
-    const result = await Swal.fire({
+    const confirmed = await notifyConfirm({
       title: 'Delete Message?',
-      text: `Are you sure you want to permanently delete this message sent by "${msg.sender_name}" for all users?`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'Yes, Delete for Everyone'
+      text: `Permanently delete this message sent by "${msg.sender_name}" for all users?`,
+      confirmButtonText: 'Yes, Delete',
+      isDestructive: true,
+      isDark
     });
 
-    if (result.isConfirmed) {
+    if (confirmed.isConfirmed) {
       try {
         await deleteMessage(msg.id);
         setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-        Swal.fire({
-          icon: 'success',
-          title: 'Deleted',
-          text: 'Message has been removed from all devices.',
-          timer: 1500,
-          showConfirmButton: false
-        });
+        notifySuccess('Message Deleted', 'Removed from all devices.', 1500, isDark);
       } catch (err) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Delete Failed',
-          text: err.message || 'Failed to remove message'
-        });
+        notifyError('Delete Failed', err.message || 'Failed to remove message', isDark);
       }
     }
   };
@@ -176,54 +200,68 @@ export default function CommunityChatsView() {
         message: msg.message,
         level: 'info'
       });
-      Swal.fire({
-        icon: 'success',
-        title: 'Pinned!',
-        text: 'This message has been pinned as an official announcement in the app.',
-        timer: 1800,
-        showConfirmButton: false
-      });
+      notifySuccess('Pinned!', 'This message has been pinned as an official announcement.', 1800, isDark);
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Pin Failed', text: err.message });
+      notifyError('Pin Failed', err.message, isDark);
     }
   };
 
-  // Moderate user from chat
-  const handleModerateSender = async (msg) => {
+  // Open Chat Moderation Dialog
+  const handleOpenModeration = (msg) => {
     handleMenuClose();
     if (!msg.sender_id || msg.sender_id.startsWith('SYS')) {
-      Swal.fire({ icon: 'info', title: 'System Message', text: 'System messages cannot be suspended.' });
+      notifyError('System Message', 'System notices cannot be moderated.', isDark);
       return;
     }
+    setModTargetUser(msg);
+    setModDialogOpen(true);
+  };
 
-    const { value: action } = await Swal.fire({
-      title: `Moderate ${msg.sender_name}`,
-      text: `Earner ID: ${msg.sender_id}`,
-      input: 'select',
-      inputOptions: {
-        suspend1h: '⏱️ Suspend for 1 Hour',
-        suspend24h: '⏱️ Suspend for 24 Hours',
-        block: '🚫 Block / Ban Permanently',
-        unblock: '🔓 Unblock & Activate Account'
-      },
-      inputPlaceholder: 'Select Moderation Action',
-      showCancelButton: true,
-      confirmButtonText: 'Apply Moderation',
-      confirmButtonColor: '#ef4444'
-    });
+  // Block user from chat (CHAT ONLY - DOES NOT AFFECT PROFILE/APP)
+  const handleExecuteChatBlock = async () => {
+    if (!modTargetUser?.sender_id) return;
+    setModProcessing(true);
+    try {
+      await blockUserInChat(modTargetUser.sender_id);
+      setChatSettings((prev) => ({
+        ...prev,
+        mutedUsers: [...(prev.mutedUsers || []).filter((id) => id !== modTargetUser.sender_id), modTargetUser.sender_id]
+      }));
+      setModDialogOpen(false);
+      notifySuccess(
+        'User Blocked in Chat',
+        `${modTargetUser.sender_name} is now restricted from posting in community chat. Main app and earning account remain active.`,
+        2200,
+        isDark
+      );
+    } catch (err) {
+      notifyError('Action Failed', err.message, isDark);
+    } finally {
+      setModProcessing(false);
+    }
+  };
 
-    if (action) {
-      try {
-        const newStatus = action === 'unblock' ? 'Active' : action === 'block' ? 'Blocked' : 'Suspended';
-        await updateUserAccountStatus(msg.sender_id, newStatus);
-        Swal.fire({
-          icon: 'success',
-          title: 'Status Updated',
-          text: `User ${msg.sender_name} is now ${newStatus}.`
-        });
-      } catch (err) {
-        Swal.fire({ icon: 'error', title: 'Action Failed', text: err.message });
-      }
+  // Unblock user from chat
+  const handleExecuteChatUnblock = async () => {
+    if (!modTargetUser?.sender_id) return;
+    setModProcessing(true);
+    try {
+      await unblockUserInChat(modTargetUser.sender_id);
+      setChatSettings((prev) => ({
+        ...prev,
+        mutedUsers: (prev.mutedUsers || []).filter((id) => id !== modTargetUser.sender_id)
+      }));
+      setModDialogOpen(false);
+      notifySuccess(
+        'User Unblocked',
+        `${modTargetUser.sender_name} can now participate in community chat again.`,
+        1800,
+        isDark
+      );
+    } catch (err) {
+      notifyError('Action Failed', err.message, isDark);
+    } finally {
+      setModProcessing(false);
     }
   };
 
@@ -240,13 +278,13 @@ export default function CommunityChatsView() {
   const handleCopyText = (msg) => {
     navigator.clipboard.writeText(msg.message);
     handleMenuClose();
-    Swal.fire({
-      icon: 'success',
-      title: 'Copied!',
-      text: 'Message copied to clipboard',
-      timer: 1000,
-      showConfirmButton: false
-    });
+    notifySuccess('Copied!', 'Message copied to clipboard', 1200, isDark);
+  };
+
+  const handleCopyEarnerId = (id) => {
+    if (!id) return;
+    navigator.clipboard.writeText(id);
+    notifySuccess('Copied!', `Earner ID ${id} copied`, 1200, isDark);
   };
 
   // Filter messages
@@ -261,6 +299,48 @@ export default function CommunityChatsView() {
     );
   });
 
+  // Badge icon resolver helper (No emojis)
+  const renderBadgeContent = (badgeText) => {
+    if (!badgeText) return null;
+    const cleanText = badgeText.replace(/[^\w\s-]/g, '').trim();
+
+    if (cleanText.toLowerCase().includes('admin')) {
+      return (
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <WorkspacePremiumIcon sx={{ fontSize: 13, color: '#3b82f6' }} />
+          <span>{cleanText || 'Super Admin'}</span>
+        </Stack>
+      );
+    }
+
+    if (cleanText.toLowerCase().includes('moderator')) {
+      return (
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <ShieldIcon sx={{ fontSize: 13, color: '#10b981' }} />
+          <span>{cleanText || 'Moderator'}</span>
+        </Stack>
+      );
+    }
+
+    if (cleanText.toLowerCase().includes('notice') || cleanText.toLowerCase().includes('announcement')) {
+      return (
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <CampaignIcon sx={{ fontSize: 13, color: '#f59e0b' }} />
+          <span>{cleanText || 'Official Notice'}</span>
+        </Stack>
+      );
+    }
+
+    return (
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <VerifiedUserIcon sx={{ fontSize: 13, color: '#06b6d4' }} />
+        <span>{cleanText || 'Verified Earner'}</span>
+      </Stack>
+    );
+  };
+
+  const isTargetUserMuted = Boolean(modTargetUser?.sender_id && chatSettings.mutedUsers?.includes(modTargetUser.sender_id));
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', gap: 1.5 }}>
       {/* Top Header Card */}
@@ -273,11 +353,13 @@ export default function CommunityChatsView() {
           background: isDark
             ? 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.85) 100%)'
             : 'linear-gradient(135deg, rgba(240,249,255,0.8) 0%, rgba(255,255,255,0.95) 100%)',
+          backdropFilter: 'blur(12px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: 1.5
+          gap: 1.5,
+          boxShadow: isDark ? '0 8px 24px rgba(0,0,0,0.3)' : '0 8px 24px rgba(6,182,212,0.06)'
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -294,7 +376,7 @@ export default function CommunityChatsView() {
               boxShadow: '0 8px 18px rgba(6,182,212,0.35)'
             }}
           >
-            <VerifiedUserIcon />
+            <ForumIcon sx={{ fontSize: 24 }} />
           </Box>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 800, fontSize: '1.05rem', lineHeight: 1.2 }}>
@@ -307,13 +389,27 @@ export default function CommunityChatsView() {
                   height: 8,
                   borderRadius: '50%',
                   bgcolor: '#22c55e',
-                  boxShadow: '0 0 10px #22c55e',
-                  animation: 'pulse 1.8s infinite'
+                  boxShadow: '0 0 10px #22c55e'
                 }}
               />
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                 Live Stream Connected • {messages.length} messages loaded
               </Typography>
+              {chatSettings.mutedUsers?.length > 0 && (
+                <Chip
+                  icon={<VolumeOffIcon sx={{ fontSize: '12px !important', color: '#ef4444 !important' }} />}
+                  label={`${chatSettings.mutedUsers.length} Muted`}
+                  size="small"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    bgcolor: 'rgba(239, 68, 68, 0.12)',
+                    color: '#ef4444',
+                    border: '1px solid rgba(239, 68, 68, 0.25)'
+                  }}
+                />
+              )}
             </Box>
           </Box>
         </Box>
@@ -328,7 +424,11 @@ export default function CommunityChatsView() {
             minWidth: 260,
             '& .MuiOutlinedInput-root': {
               borderRadius: '14px',
-              bgcolor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.8)'
+              bgcolor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.85)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                borderColor: 'primary.main'
+              }
             }
           }}
           InputProps={{
@@ -384,6 +484,8 @@ export default function CommunityChatsView() {
             const isAd = msg.sender_id === 'SYS-AD';
             const isPinned = msg.sender_id === 'SYS-PINNED';
             const isSystem = msg.sender_id?.startsWith('SYS');
+            const isSenderMuted = Boolean(msg.sender_id && chatSettings.mutedUsers?.includes(msg.sender_id));
+
             const timeStr = new Date(msg.created_at).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
@@ -428,7 +530,12 @@ export default function CommunityChatsView() {
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                      <Chip label={msg.sender_badge || '📢 Sponsored Ad'} size="small" sx={{ bgcolor: '#f59e0b', color: '#000', fontWeight: 800, fontSize: '0.72rem' }} />
+                      <Chip
+                        icon={<CampaignIcon sx={{ fontSize: 14 }} />}
+                        label="Sponsored Promotion"
+                        size="small"
+                        sx={{ bgcolor: '#f59e0b', color: '#000', fontWeight: 800, fontSize: '0.72rem' }}
+                      />
                       <Typography variant="caption" color="text.secondary">{dateStr} • {timeStr}</Typography>
                     </Box>
                     {parsedAd?.imageUrl && (
@@ -486,39 +593,51 @@ export default function CommunityChatsView() {
                         height: 38,
                         fontSize: '0.88rem',
                         fontWeight: 800,
-                        bgcolor: isAdmin ? '#2563eb' : '#0ea5e9',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                        background: isAdmin ? 'linear-gradient(135deg, #1d4ed8, #2563eb)' : 'linear-gradient(135deg, #0284c7, #0ea5e9)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        border: isAdmin ? '2px solid rgba(255,255,255,0.4)' : 'none'
                       }}
                     >
-                      {msg.sender_name?.charAt(0)?.toUpperCase() || 'U'}
+                      {isAdmin ? <WorkspacePremiumIcon sx={{ fontSize: 20 }} /> : (msg.sender_name?.charAt(0)?.toUpperCase() || 'U')}
                     </Avatar>
 
                     {/* Bubble Content */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start' }}>
                       {/* Name & Badge Header */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.4 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.4, flexWrap: 'wrap' }}>
                         <Typography variant="caption" sx={{ fontWeight: 800, color: isAdmin ? 'primary.main' : 'text.primary' }}>
                           {msg.sender_name}
                         </Typography>
 
                         {msg.sender_badge && (
                           <Chip
-                            label={msg.sender_badge}
+                            label={renderBadgeContent(msg.sender_badge)}
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.66rem',
+                              fontWeight: 700,
+                              bgcolor: isAdmin
+                                ? 'rgba(37,99,235,0.12)'
+                                : 'rgba(14,165,233,0.12)',
+                              color: isAdmin ? '#2563eb' : '#0284c7',
+                              border: `1px solid ${isAdmin ? 'rgba(37,99,235,0.2)' : 'rgba(14,165,233,0.2)'}`
+                            }}
+                          />
+                        )}
+
+                        {isSenderMuted && !isAdmin && (
+                          <Chip
+                            icon={<VolumeOffIcon sx={{ fontSize: '11px !important', color: '#ef4444 !important' }} />}
+                            label="Muted in Chat"
                             size="small"
                             sx={{
                               height: 18,
                               fontSize: '0.62rem',
-                              fontWeight: 800,
-                              bgcolor: isAdmin
-                                ? 'rgba(37,99,235,0.15)'
-                                : msg.sender_badge.includes('Supervisor')
-                                ? 'rgba(16,185,129,0.15)'
-                                : 'rgba(148,163,184,0.15)',
-                              color: isAdmin
-                                ? '#3b82f6'
-                                : msg.sender_badge.includes('Supervisor')
-                                ? '#10b981'
-                                : 'text.secondary'
+                              fontWeight: 700,
+                              bgcolor: 'rgba(239, 68, 68, 0.1)',
+                              color: '#ef4444',
+                              border: '1px solid rgba(239, 68, 68, 0.2)'
                             }}
                           />
                         )}
@@ -532,37 +651,48 @@ export default function CommunityChatsView() {
                       <Paper
                         elevation={0}
                         sx={{
-                          p: 1.5,
+                          p: 1.6,
                           px: 2,
                           borderRadius: '18px',
                           borderTopLeftRadius: !isAdmin ? '4px' : '18px',
                           borderTopRightRadius: isAdmin ? '4px' : '18px',
-                          bgcolor: isAdmin
-                            ? '#2563eb'
+                          background: isAdmin
+                            ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)'
                             : isDark
                             ? '#1e293b'
                             : '#ffffff',
                           color: isAdmin ? '#ffffff' : 'text.primary',
                           boxShadow: isAdmin
-                            ? '0 6px 18px rgba(37,99,235,0.25)'
+                            ? '0 6px 20px rgba(37,99,235,0.3)'
                             : isDark
                             ? '0 6px 18px rgba(0,0,0,0.3)'
-                            : '0 4px 14px rgba(0,0,0,0.06)',
+                            : '0 4px 14px rgba(0,0,0,0.05)',
                           border: !isAdmin ? `1px solid ${theme.palette.divider}` : 'none',
                           wordBreak: 'break-word',
                           position: 'relative'
                         }}
                       >
-                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
                           {msg.message}
                         </Typography>
                       </Paper>
 
-                      {/* Earner ID footer for moderators */}
+                      {/* Earner ID footer with instant copy */}
                       {!isAdmin && msg.sender_id && (
-                        <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.62rem', mt: 0.3, px: 0.5 }}>
-                          ID: {msg.sender_id}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.3, px: 0.5 }}>
+                          <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.65rem', fontFamily: 'monospace' }}>
+                            {msg.sender_id}
+                          </Typography>
+                          <Tooltip title="Copy Earner ID">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleCopyEarnerId(msg.sender_id)}
+                              sx={{ p: 0.2, color: 'text.disabled', '&:hover': { color: 'primary.main' } }}
+                            >
+                              <ContentCopyIcon sx={{ fontSize: 11 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       )}
                     </Box>
 
@@ -594,22 +724,133 @@ export default function CommunityChatsView() {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
         PaperProps={{
-          sx: { borderRadius: '16px', minWidth: 200, boxShadow: '0 12px 32px rgba(0,0,0,0.18)' }
+          sx: {
+            borderRadius: '16px',
+            minWidth: 220,
+            p: 0.5,
+            border: `1px solid ${theme.palette.divider}`,
+            boxShadow: '0 16px 36px rgba(0,0,0,0.2)'
+          }
         }}
       >
-        <MenuItem onClick={() => handleCopyText(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem' }}>
-          <ContentCopyIcon fontSize="small" color="action" /> Copy Text
+        <MenuItem onClick={() => handleCopyText(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem', borderRadius: '10px' }}>
+          <ContentCopyIcon fontSize="small" color="action" /> Copy Message
         </MenuItem>
-        <MenuItem onClick={() => handlePinMessage(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem' }}>
+        <MenuItem onClick={() => handlePinMessage(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem', borderRadius: '10px' }}>
           <PushPinIcon fontSize="small" sx={{ color: '#ec4899' }} /> Pin Announcement
         </MenuItem>
-        <MenuItem onClick={() => handleModerateSender(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem' }}>
-          <ShieldIcon fontSize="small" sx={{ color: '#f59e0b' }} /> Moderate User
-        </MenuItem>
-        <MenuItem onClick={() => handleDeleteForEveryone(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem', color: 'error.main' }}>
+        {selectedMsg && !selectedMsg.sender_id?.startsWith('SYS') && (
+          <MenuItem onClick={() => handleOpenModeration(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem', borderRadius: '10px', color: '#f59e0b' }}>
+            <BlockIcon fontSize="small" sx={{ color: '#f59e0b' }} /> Chat Access / Block
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => handleDeleteForEveryone(selectedMsg)} sx={{ py: 1, gap: 1.5, fontSize: '0.85rem', borderRadius: '10px', color: 'error.main' }}>
           <DeleteOutlineIcon fontSize="small" color="error" /> Delete for Everyone
         </MenuItem>
       </Menu>
+
+      {/* Dedicated Chat-Only Moderation Dialog */}
+      <Dialog
+        open={modDialogOpen}
+        onClose={() => !modProcessing && setModDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '24px',
+            p: 1,
+            border: `1px solid ${theme.palette.divider}`,
+            boxShadow: '0 24px 48px rgba(0,0,0,0.3)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: 1.2 }}>
+          <ShieldIcon sx={{ color: '#f59e0b', fontSize: 24 }} />
+          Community Chat Access
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          {modTargetUser && (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                border: `1px solid ${theme.palette.divider}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5
+              }}
+            >
+              <Avatar sx={{ bgcolor: '#0284c7', fontWeight: 800 }}>
+                {modTargetUser.sender_name?.charAt(0)?.toUpperCase() || 'U'}
+              </Avatar>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800 }} noWrap>
+                  {modTargetUser.sender_name}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }} noWrap>
+                  {modTargetUser.sender_id}
+                </Typography>
+              </Box>
+              <Chip
+                icon={isTargetUserMuted ? <VolumeOffIcon sx={{ fontSize: 13 }} /> : <CheckCircleIcon sx={{ fontSize: 13 }} />}
+                label={isTargetUserMuted ? 'Blocked in Chat' : 'Active'}
+                size="small"
+                color={isTargetUserMuted ? 'error' : 'success'}
+                sx={{ fontWeight: 700 }}
+              />
+            </Paper>
+          )}
+
+          <Alert severity="info" icon={<InfoOutlinedIcon fontSize="small" />} sx={{ borderRadius: '14px', fontSize: '0.82rem', lineHeight: 1.5 }}>
+            <strong>Chat-Only Restriction:</strong> Blocking this user only prevents them from sending messages in the Community Group Chat. Their main account, earning tasks, and wallet remain 100% active.
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0, gap: 1, flexDirection: 'column' }}>
+          {isTargetUserMuted ? (
+            <Button
+              fullWidth
+              variant="contained"
+              color="success"
+              disabled={modProcessing}
+              startIcon={modProcessing ? <CircularProgress size={16} color="inherit" /> : <CheckCircleIcon />}
+              onClick={handleExecuteChatUnblock}
+              sx={{ borderRadius: '12px', py: 1.2, fontWeight: 700, textTransform: 'none' }}
+            >
+              Unblock & Restore Chat Access
+            </Button>
+          ) : (
+            <Button
+              fullWidth
+              variant="contained"
+              color="error"
+              disabled={modProcessing}
+              startIcon={modProcessing ? <CircularProgress size={16} color="inherit" /> : <BlockIcon />}
+              onClick={handleExecuteChatBlock}
+              sx={{
+                borderRadius: '12px',
+                py: 1.2,
+                fontWeight: 700,
+                textTransform: 'none',
+                background: 'linear-gradient(135deg, #ef4444, #dc2626)'
+              }}
+            >
+              Block from Community Chat
+            </Button>
+          )}
+
+          <Button
+            fullWidth
+            variant="text"
+            onClick={() => setModDialogOpen(false)}
+            disabled={modProcessing}
+            sx={{ borderRadius: '12px', color: 'text.secondary', fontWeight: 600, textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Admin Message Sender Dock */}
       <Paper
@@ -647,17 +888,55 @@ export default function CommunityChatsView() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
           {/* Badge Selector Pill */}
           <Chip
-            label={senderBadge}
-            onClick={() => {
-              const options = ['👑 Super Admin', '🛡️ Moderator', '📢 System Announcement'];
-              const nextIndex = (options.indexOf(senderBadge) + 1) % options.length;
-              setSenderBadge(options[nextIndex]);
-            }}
+            icon={selectedBadge.icon}
+            label={selectedBadge.label}
+            onClick={(e) => setBadgeMenuAnchor(e.currentTarget)}
             size="small"
             color="primary"
             variant="outlined"
-            sx={{ fontWeight: 800, cursor: 'pointer', borderRadius: '10px' }}
+            sx={{
+              fontWeight: 800,
+              cursor: 'pointer',
+              borderRadius: '12px',
+              px: 0.5,
+              py: 1.8,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                transform: 'translateY(-1px)',
+                boxShadow: '0 4px 12px rgba(37,99,235,0.25)'
+              }
+            }}
           />
+
+          <Menu
+            anchorEl={badgeMenuAnchor}
+            open={Boolean(badgeMenuAnchor)}
+            onClose={() => setBadgeMenuAnchor(null)}
+            PaperProps={{
+              sx: {
+                borderRadius: '16px',
+                minWidth: 180,
+                p: 0.5,
+                border: `1px solid ${theme.palette.divider}`,
+                boxShadow: '0 12px 30px rgba(0,0,0,0.2)'
+              }
+            }}
+          >
+            {BADGE_OPTIONS.map((opt) => (
+              <MenuItem
+                key={opt.badge}
+                selected={selectedBadge.badge === opt.badge}
+                onClick={() => {
+                  setSelectedBadge(opt);
+                  setBadgeMenuAnchor(null);
+                }}
+                sx={{ py: 1, gap: 1.2, fontSize: '0.85rem', borderRadius: '10px' }}
+              >
+                {opt.icon}
+                <span>{opt.label}</span>
+              </MenuItem>
+            ))}
+          </Menu>
 
           {/* Media Attach Button */}
           <Tooltip title="Attach image or social media link">
@@ -665,7 +944,7 @@ export default function CommunityChatsView() {
               size="small"
               onClick={() => setShowMediaInput(!showMediaInput)}
               color={showMediaInput || mediaUrlInput ? 'primary' : 'default'}
-              sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: '10px' }}
+              sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: '12px', p: 0.9 }}
             >
               <AttachFileIcon fontSize="small" />
             </IconButton>
@@ -687,7 +966,11 @@ export default function CommunityChatsView() {
             sx={{
               '& .MuiOutlinedInput-root': {
                 borderRadius: '14px',
-                bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'
+                bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  borderColor: 'primary.main'
+                }
               }
             }}
           />
@@ -697,14 +980,20 @@ export default function CommunityChatsView() {
             type="submit"
             variant="contained"
             disabled={sending || (!inputText.trim() && !mediaUrlInput.trim())}
-            endIcon={sending ? <CircularProgress size={16} color="inherit" /> : <SendIcon />}
+            endIcon={sending ? <CircularProgress size={16} color="inherit" /> : <SendRoundedIcon />}
             sx={{
               borderRadius: '14px',
               px: 3,
               fontWeight: 800,
               textTransform: 'none',
-              minWidth: 100,
-              boxShadow: 'none'
+              minWidth: 105,
+              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+              boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                transform: 'translateY(-1px)',
+                boxShadow: '0 6px 18px rgba(37,99,235,0.45)'
+              }
             }}
           >
             Send

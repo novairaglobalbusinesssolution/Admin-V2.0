@@ -173,8 +173,8 @@ export default function AdminLayout() {
   const mainMenuItems = [
     { text: 'Dashboard', icon: <DashboardIcon fontSize="small" />, path: '/' },
     { text: 'Users', icon: <PeopleAltIcon fontSize="small" />, path: '/users' },
-    { text: '🌺 Puja 2026 Feed', icon: <PhotoLibraryIcon fontSize="small" sx={{ color: '#f59e0b' }} />, path: '/puja-feed-2026' },
-    { text: '💬 Community Group Chat', icon: <ForumIcon fontSize="small" sx={{ color: '#06b6d4' }} />, path: '/community-chat' },
+    { text: 'Puja 2026 Feed', icon: <PhotoLibraryIcon fontSize="small" sx={{ color: '#f59e0b' }} />, path: '/puja-feed-2026' },
+    { text: 'Community Group Chat', icon: <ForumIcon fontSize="small" sx={{ color: '#06b6d4' }} />, path: '/community-chat' },
     { text: 'Payments', icon: <AccountBalanceWalletIcon fontSize="small" />, path: '/payments' },
     { text: 'Notifications', icon: <NotificationsActiveIcon fontSize="small" />, path: '/notifications', badge: totalNotifications },
   ];
