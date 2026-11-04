@@ -169,6 +169,49 @@ export default function Withdrawals() {
         .eq('id', selectedTx.id);
         
       if (error) throw error;
+
+      // Sync to company fund transactions ledger
+      try {
+        const { data: existingFundTx } = await supabase
+          .from('company_fund_transactions')
+          .select('id')
+          .or(`transaction_id.eq.${selectedTx.transaction_id},related_transaction_id.eq.${selectedTx.id}`)
+          .limit(1)
+          .maybeSingle();
+
+        const fundPayload = {
+          transaction_id: selectedTx.transaction_id,
+          transaction_type: 'Debit',
+          amount: Number(selectedTx.amount || 0),
+          reference_type: 'individual_wallet',
+          reference_id: selectedTx.earner_id,
+          party_type: 'individual',
+          party_id: selectedTx.earner_id,
+          description: selectedTx.description || 'Individual withdrawal payout',
+          status: 'Completed',
+          created_at: new Date().toISOString(),
+          related_transaction_id: selectedTx.id,
+          metadata: {
+            earner_id: selectedTx.earner_id,
+            utr_id: utrInput.trim(),
+            payout_details: selectedTx.payoutData || selectedTx.payout_details || null,
+            source_table: 'individual_wallet_transactions'
+          }
+        };
+
+        if (existingFundTx?.id) {
+          await supabase
+            .from('company_fund_transactions')
+            .update(fundPayload)
+            .eq('id', existingFundTx.id);
+        } else {
+          await supabase
+            .from('company_fund_transactions')
+            .insert(fundPayload);
+        }
+      } catch (fundErr) {
+        console.error('Failed to sync to company_fund_transactions:', fundErr);
+      }
       
       // Send push notification
       fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-notification`, {
@@ -210,6 +253,19 @@ export default function Withdrawals() {
         .eq('id', selectedTx.id);
         
       if (error) throw error;
+
+      // Also update company fund ledger to cancelled
+      try {
+        await supabase
+          .from('company_fund_transactions')
+          .update({
+            status: 'Cancelled',
+            description: newDesc
+          })
+          .or(`transaction_id.eq.${selectedTx.transaction_id},related_transaction_id.eq.${selectedTx.id}`);
+      } catch (fundErr) {
+        console.error('Failed to update company_fund_transactions on cancel:', fundErr);
+      }
       
       // Send push notification
       fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-notification`, {
