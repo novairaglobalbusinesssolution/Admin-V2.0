@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
 let mainWindow;
@@ -32,8 +32,9 @@ function createWindow() {
     width: 1280,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs')
     },
     autoHideMenuBar: true,
     title: "NOVAIRA ADMIN",

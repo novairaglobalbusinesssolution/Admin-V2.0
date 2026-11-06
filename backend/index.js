@@ -198,6 +198,34 @@ function getBackendHealth() {
     };
 }
 
+// Universal API Security Guard (Blocks public access to admin endpoints)
+function apiAuth(req, res, next) {
+    const authHeader = req.headers.authorization || '';
+    const adminKey = req.headers['x-admin-key'] || req.headers['x-api-key'] || '';
+    const cookies = Object.fromEntries((req.headers.cookie || '')
+        .split(';')
+        .map(p => p.trim())
+        .filter(Boolean)
+        .map(c => {
+            const [k, ...v] = c.split('=');
+            return [k, decodeURIComponent(v.join('='))];
+        }));
+
+    const isCookieAuth = cookies.novaira_admin_session === 'authenticated';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const isTokenMatch = token === DASHBOARD_PASSWORD || (token && token === (process.env.NOVAIRA_DASHBOARD_PASSWORD || 'Novaira002@#'));
+    const isKeyMatch = adminKey.trim() === DASHBOARD_PASSWORD;
+
+    if (isCookieAuth || isTokenMatch || isKeyMatch) {
+        return next();
+    }
+
+    return res.status(401).json({ 
+        status: 'error', 
+        error: 'Unauthorized: Valid Admin API credentials required' 
+    });
+}
+
 function dashboardAuth(req, res, next) {
     const cookies = Object.fromEntries((req.headers.cookie || '')
         .split(';')
@@ -377,7 +405,7 @@ function getFirebaseMessaging() {
 // Push Notification Route
 
 // Bulk Push Notification Route
-app.post('/api/send-bulk-notification', async (req, res) => {
+app.post('/api/send-bulk-notification', apiAuth, async (req, res) => {
     const { app_id, bulker_ids, tokens, title, body, type, link, image } = req.body;
 
     if (!title || !body) {
@@ -516,7 +544,7 @@ app.post('/api/send-bulk-notification', async (req, res) => {
     }
 });
 
-app.post('/api/send-notification', async (req, res) => {
+app.post('/api/send-notification', apiAuth, async (req, res) => {
     const { earner_id, fcm_token, title, body, type, link, image } = req.body;
     
     if ((!earner_id && !fcm_token) || !title || !body) {
@@ -586,7 +614,7 @@ app.post('/api/send-notification', async (req, res) => {
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : supabase;
 
-app.post('/api/send-account-status-email', async (req, res) => {
+app.post('/api/send-account-status-email', apiAuth, async (req, res) => {
     const { earner_id, previous_status, status } = req.body;
     const allowedStatuses = ['Active', 'Suspended'];
 
@@ -708,7 +736,7 @@ app.post('/api/truecaller-login', async (req, res) => {
 // Start Server
 
 // Test SMTP Configuration
-app.post('/api/test-smtp', async (req, res) => {
+app.post('/api/test-smtp', apiAuth, async (req, res) => {
     const { host, port, username, password, encryption, sender_email, sender_name, test_email } = req.body;
     
     if (!test_email) {
@@ -755,7 +783,7 @@ cloudinary.config({
   api_secret: 'OKMxHQk7eWBkBdxXpix-IoabN2I'
 });
 
-app.post('/api/cloudinary/list', async (req, res) => {
+app.post('/api/cloudinary/list', apiAuth, async (req, res) => {
     try {
         const { folder = '' } = req.body;
         
@@ -790,7 +818,7 @@ app.post('/api/cloudinary/list', async (req, res) => {
     }
 });
 
-app.post('/api/cloudinary/delete', async (req, res) => {
+app.post('/api/cloudinary/delete', apiAuth, async (req, res) => {
     try {
         const { public_ids } = req.body; // array
         if (!public_ids || !public_ids.length) return res.status(400).json({ error: 'No files provided' });
@@ -802,7 +830,7 @@ app.post('/api/cloudinary/delete', async (req, res) => {
     }
 });
 
-app.post('/api/cloudinary/rename', async (req, res) => {
+app.post('/api/cloudinary/rename', apiAuth, async (req, res) => {
     try {
         const { from_id, to_id } = req.body;
         if (!from_id || !to_id) return res.status(400).json({ error: 'Missing parameters' });
@@ -837,7 +865,7 @@ const deleteCloudinaryFolderRecursive = async (folderPath) => {
     await cloudinary.api.delete_folder(folderPath);
 };
 
-app.post('/api/cloudinary/delete-folder', async (req, res) => {
+app.post('/api/cloudinary/delete-folder', apiAuth, async (req, res) => {
     try {
         const { folder } = req.body;
         if (!folder) return res.status(400).json({ error: 'Folder path missing' });
@@ -850,7 +878,7 @@ app.post('/api/cloudinary/delete-folder', async (req, res) => {
     }
 });
 
-app.post('/api/cloudinary/rename-folder', async (req, res) => {
+app.post('/api/cloudinary/rename-folder', apiAuth, async (req, res) => {
     try {
         const { from_path, to_path } = req.body;
         if (!from_path || !to_path) return res.status(400).json({ error: 'Paths missing' });
@@ -862,7 +890,7 @@ app.post('/api/cloudinary/rename-folder', async (req, res) => {
     }
 });
 
-app.post('/api/cloudinary/download-folder', async (req, res) => {
+app.post('/api/cloudinary/download-folder', apiAuth, async (req, res) => {
     const archiver = require('archiver');
     const https = require('https');
     const http = require('http');
@@ -959,7 +987,7 @@ app.post('/api/cloudinary/download-folder', async (req, res) => {
 // ----------------------------------------------------
 // SEND LIVE CHECKING EMAIL API
 // ----------------------------------------------------
-app.post('/api/send-live-checking-email', async (req, res) => {
+app.post('/api/send-live-checking-email', apiAuth, async (req, res) => {
     try {
         const { smtp_id, receiver_email, app_data } = req.body;
         if (!smtp_id || !receiver_email) return res.status(400).json({ error: 'Missing SMTP config or Receiver Email' });
@@ -1015,7 +1043,7 @@ app.post('/api/send-live-checking-email', async (req, res) => {
 });
 
 
-app.post('/api/send-bulk-live-checking', async (req, res) => {
+app.post('/api/send-bulk-live-checking', apiAuth, async (req, res) => {
     try {
         const { smtp_id, apps } = req.body;
         if (!smtp_id || !apps || apps.length === 0) return res.status(400).json({ error: 'Missing SMTP or apps data' });
@@ -1180,7 +1208,7 @@ setInterval(async () => {
 // ----------------------------------------------------
 // SEND CUSTOM PUSH NOTIFICATIONS
 // ----------------------------------------------------
-app.post('/api/send-custom-notification', async (req, res) => {
+app.post('/api/send-custom-notification', apiAuth, async (req, res) => {
     const { target, user_ids, tokens, title, body, link, image, type } = req.body;
     
     if (!title || !body) {
@@ -1295,7 +1323,7 @@ app.post('/api/send-custom-notification', async (req, res) => {
 });
 
 
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', apiAuth, async (req, res) => {
     try {
         const { data, error } = await supabase.from('profiles').select('earner_id, first_name, last_name, email, phone').order('created_at', { ascending: false });
         if (error) throw error;
@@ -1375,7 +1403,7 @@ app.post('/api/send-otp', async (req, res) => {
 
 
 // Image Upload API for Scan Zone
-app.post('/api/cloudinary/upload', async (req, res) => {
+app.post('/api/cloudinary/upload', apiAuth, async (req, res) => {
     try {
         const { image, folder } = req.body;
         if (!image) return res.status(400).json({ error: 'No image provided' });
@@ -1391,6 +1419,7 @@ app.post('/api/cloudinary/upload', async (req, res) => {
         res.status(500).json({ error: 'Failed to upload image' });
     }
 });
+
 
 
 

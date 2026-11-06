@@ -59,8 +59,9 @@
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "backend/.env",
       "backend/**/*",
+      "!backend/.env",
+      "!backend/serviceAccountKey.json",
       "!backend/node_modules/**/*"
     ],
     "win": {

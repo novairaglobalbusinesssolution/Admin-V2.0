@@ -169,7 +169,8 @@ export default function CommunityUsersView() {
 
   // Toggle Mute in Community Chat (Without suspending main wallet)
   const handleToggleMute = async (user) => {
-    const isMuted = chatSettings.mutedUsers?.includes(user.earner_id);
+    const isChatBlocked = chatSettings.mutedUsers?.includes(user.earner_id);
+                    const isMuted = isChatBlocked;
     let newMuted = [];
     if (isMuted) {
       newMuted = (chatSettings.mutedUsers || []).filter((id) => id !== user.earner_id);
@@ -371,13 +372,13 @@ export default function CommunityUsersView() {
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
           <Paper elevation={0} sx={{ p: 2, borderRadius: '18px', border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Suspended / Blocked</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Suspended Accounts</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#ef4444' }}>{metrics.suspendedCount}</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
           <Paper elevation={0} sx={{ p: 2, borderRadius: '18px', border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Muted in Chat</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Blocked in Chat</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#f59e0b' }}>{metrics.mutedCount}</Typography>
           </Paper>
         </Grid>
@@ -465,10 +466,10 @@ export default function CommunityUsersView() {
           <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', py: 0.5 }}>
             {[
               { id: 'ALL', label: 'All Chatters', count: users.length },
-              { id: 'Active', label: 'Active', count: metrics.activeCount },
-              { id: 'Suspended', label: 'Suspended', count: users.filter((u) => u.status === 'Suspended').length },
-              { id: 'Blocked', label: 'Blocked', count: users.filter((u) => u.status === 'Blocked').length },
-              { id: 'MUTED', label: 'Chat Muted', count: metrics.mutedCount }
+              { id: 'Active', label: 'Active Account', count: metrics.activeCount },
+              { id: 'Suspended', label: 'Suspended Account', count: users.filter((u) => u.status === 'Suspended').length },
+              { id: 'Blocked', label: 'Blocked Account', count: users.filter((u) => u.status === 'Blocked').length },
+              { id: 'MUTED', label: 'Chat Blocked', count: metrics.mutedCount }
             ].map((f) => {
               const isSelected = statusFilter === f.id;
               return (
@@ -543,7 +544,8 @@ export default function CommunityUsersView() {
                   {paginatedUsers.map((user, idx) => {
                     const isBlocked = user.status === 'Blocked';
                     const isSuspended = user.status === 'Suspended';
-                    const isMuted = chatSettings.mutedUsers?.includes(user.earner_id);
+                    const isChatBlocked = Boolean(chatSettings.mutedUsers?.includes(user.earner_id));
+                    const isMuted = isChatBlocked;
                     const perms = chatSettings.userPermissions?.[user.earner_id] || { canSendLinks: true, canSendMedia: true };
                     const lastActiveDate = new Date(user.last_message_at).toLocaleDateString('en-IN', {
                       month: 'short',
@@ -660,14 +662,15 @@ export default function CommunityUsersView() {
                         <TableCell sx={{ py: 1.6 }}>
                           <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
                             <Chip
-                              label={user.status || 'Active'}
+                              label={`Account: ${user.status || 'Active'}`}
                               size="small"
                               color={isBlocked ? 'error' : isSuspended ? 'warning' : 'success'}
                               sx={{ fontWeight: 800, height: 22, fontSize: '0.7rem', borderRadius: '8px' }}
                             />
-                            {isMuted && (
+                            {isChatBlocked ? (
                               <Chip
-                                label="Muted in Chat" icon={<VolumeOffIcon sx={{ fontSize: "12px !important" }} />}
+                                label="Chat Blocked"
+                                icon={<BlockIcon sx={{ fontSize: "12px !important" }} />}
                                 size="small"
                                 sx={{
                                   fontWeight: 800,
@@ -676,6 +679,19 @@ export default function CommunityUsersView() {
                                   borderRadius: '8px',
                                   bgcolor: 'rgba(239,68,68,0.12)',
                                   color: '#ef4444'
+                                }}
+                              />
+                            ) : (
+                              <Chip
+                                label="Chat Active"
+                                size="small"
+                                sx={{
+                                  fontWeight: 700,
+                                  height: 20,
+                                  fontSize: '0.66rem',
+                                  borderRadius: '8px',
+                                  bgcolor: 'rgba(34,197,94,0.1)',
+                                  color: '#22c55e'
                                 }}
                               />
                             )}
@@ -743,17 +759,17 @@ export default function CommunityUsersView() {
                             </Tooltip>
 
                             {/* Block / Unblock Toggle */}
-                            <Tooltip title={isBlocked ? 'Unblock Earner' : 'Block / Ban Earner'}>
+                            <Tooltip title={isChatBlocked ? 'Unblock from Community Chat' : 'Block from Community Chat (App account & earnings stay 100% active)'}>
                               <IconButton
                                 size="small"
                                 onClick={() => handleToggleBlock(user)}
                                 sx={{
-                                  bgcolor: isBlocked ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                                  color: isBlocked ? '#22c55e' : '#ef4444',
+                                  bgcolor: isChatBlocked ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                                  color: isChatBlocked ? '#22c55e' : '#ef4444',
                                   borderRadius: '10px'
                                 }}
                               >
-                                {isBlocked ? <CheckCircleIcon fontSize="small" /> : <BlockIcon fontSize="small" />}
+                                {isChatBlocked ? <CheckCircleIcon fontSize="small" /> : <BlockIcon fontSize="small" />}
                               </IconButton>
                             </Tooltip>
                           </Stack>
@@ -786,10 +802,10 @@ export default function CommunityUsersView() {
         onClose={() => setTimeoutModalOpen(false)}
         PaperProps={{ sx: { borderRadius: '22px', p: 1, minWidth: { xs: 320, sm: 460 } } }}
       >
-        <DialogTitle sx={{ fontWeight: 800 }}>Suspend Community Chatter</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>Set Community Chat Timeout</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            Suspending <strong>{selectedUser?.first_name}</strong> ({selectedUser?.earner_id}) will temporarily pause their community lounge access.
+            Suspending <strong>{selectedUser?.first_name}</strong> ({selectedUser?.earner_id}) will pause their Community Chat posting. (Note: Their main account and earnings remain 100% active).
           </Typography>
 
           <FormControl size="small" fullWidth>
