@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Typography, Paper, TextField, Button, 
-  FormControlLabel, Select, MenuItem, Switch, Checkbox, Radio, RadioGroup,
-  Autocomplete, useTheme, Grid, Tabs, Tab, Chip, Card,
-  CardContent, InputAdornment, IconButton, Tooltip, Divider,
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
+  FormControlLabel, Select, MenuItem, Switch, Checkbox,
+  Autocomplete, useTheme, Chip, InputAdornment, IconButton, Tooltip, Divider,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  CircularProgress
 } from '@mui/material';
 import { supabase } from '../supabaseClient';
 
 // MUI Icons
 import AndroidIcon from '@mui/icons-material/Android';
 import AppleIcon from '@mui/icons-material/Apple';
-import AppRegistrationIcon from '@mui/icons-material/AppRegistration';
+import LanguageIcon from '@mui/icons-material/Language';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import StarIcon from '@mui/icons-material/Star';
 import CommentIcon from '@mui/icons-material/Comment';
@@ -21,8 +21,18 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import TimerIcon from '@mui/icons-material/Timer';
 import BlockIcon from '@mui/icons-material/Block';
 import AppsIcon from '@mui/icons-material/Apps';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import SendIcon from '@mui/icons-material/Send';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import SpeedIcon from '@mui/icons-material/Speed';
+import LayersIcon from '@mui/icons-material/Layers';
+import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
+import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
+import ShieldIcon from '@mui/icons-material/Shield';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 
-// Basic IST Time formatting
+// IST Time formatting
 const getISTDate = () => {
   const d = new Date();
   const istOffset = 5.5 * 60 * 60 * 1000;
@@ -32,6 +42,7 @@ const getISTDate = () => {
 
 export default function AddComment() {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   
   // Category Tab: 'All', 'Android App', 'iOS App', 'Registration', 'YT Video'
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -51,8 +62,7 @@ export default function AddComment() {
   const [scheduleTime, setScheduleTime] = useState(getISTDate());
 
   // === REVIEW MODE (Android & iOS) ===
-  // 'text' = Normal text comments, 'star_only' = Only star ratings without comment text
-  const [reviewMode, setReviewMode] = useState('text');
+  const [reviewMode, setReviewMode] = useState('text'); // 'text' or 'star_only'
   const [multiStarMode, setMultiStarMode] = useState(false);
   const [globalRating, setGlobalRating] = useState(5);
   const [commentsText, setCommentsText] = useState('');
@@ -104,7 +114,6 @@ export default function AddComment() {
   const handleAppChange = async (event, newValue) => {
     setSelectedApp(newValue);
     if (newValue) {
-      // Auto-switch category tab to match the selected app's task type if not already
       if (newValue.task_type && selectedCategory !== 'All' && selectedCategory !== newValue.task_type) {
         setSelectedCategory(newValue.task_type);
       }
@@ -141,10 +150,10 @@ export default function AddComment() {
         }
         
         if (newValue.task_type === 'Registration') {
-          setRegProcedure(data.instructions || '1. Download / Open the link\n2. Complete registration with mobile/email\n3. Verify OTP and take screenshot of dashboard');
+          setRegProcedure(data.instructions || '1. Click the registration link\n2. Complete signup with valid mobile number & email\n3. Verify OTP & submit basic KYC\n4. Upload account dashboard screenshot showing registered User ID');
           setRegVideoUrl(data.app_package || '');
         } else if (newValue.task_type === 'YT Video') {
-          setYtProcedure(data.instructions || 'Watch full video, like, and subscribe to the channel.');
+          setYtProcedure(data.instructions || 'Watch full video (minimum 2 mins), hit like button, and subscribe to the channel.');
           setYtVideoUrl(data.app_package || '');
         }
       }
@@ -204,7 +213,7 @@ export default function AddComment() {
 
   const handleSave = async () => {
     if (!selectedApp) {
-      return setAlertData({ open: true, title: 'Error', message: 'Please select an Application / Task first.', type: 'error' });
+      return setAlertData({ open: true, title: 'Application Required', message: 'Please select a target Application / Task first before deploying.', type: 'error' });
     }
 
     setSaving(true);
@@ -231,7 +240,7 @@ export default function AddComment() {
             });
           }
           if (newComments.length === 0) {
-            throw new Error('Please enter at least one comment in the text box.');
+            throw new Error('Please enter at least one review comment in the text field.');
           }
         } else {
           // Star Rating Only Mode (No text comment)
@@ -247,12 +256,12 @@ export default function AddComment() {
             }
           });
           if (newComments.length === 0) {
-            throw new Error('Please enter a quantity greater than 0 for at least one star rating.');
+            throw new Error('Please enter a quantity greater than 0 for at least one star rating slot.');
           }
         }
       } else if (effectiveType === 'Registration') {
         if (!regProcedure.trim()) {
-          throw new Error('Please enter the registration guidelines / procedure.');
+          throw new Error('Please enter the registration guidelines and step-by-step instructions.');
         }
         
         let instructionsText = regProcedure.trim();
@@ -262,19 +271,19 @@ export default function AddComment() {
         appUpdatePayload.instructions = instructionsText;
 
         const count = parseInt(regSlots || 1, 10);
-        if (count <= 0) throw new Error('Please specify at least 1 registration slot.');
+        if (count <= 0) throw new Error('Please specify at least 1 registration slot capacity.');
 
         for (let i = 0; i < count; i++) {
           newComments.push({
             app_id: selectedApp.id,
-            content: '', // Registration tasks use instructions, no dummy comment text
+            content: '',
             rating: 5,
             status: 'active'
           });
         }
       } else if (effectiveType === 'YT Video') {
         if (!ytProcedure.trim()) {
-          throw new Error('Please enter the YouTube task instructions / procedure.');
+          throw new Error('Please enter the YouTube watch time and interaction instructions.');
         }
 
         let ytInstructions = ytProcedure.trim();
@@ -287,16 +296,15 @@ export default function AddComment() {
         if (ytCommentMode === 'custom_comments') {
           newComments = parseText(ytCommentsText, 5);
           if (newComments.length === 0) {
-            throw new Error('Please paste at least one YouTube comment (Admin custom added).');
+            throw new Error('Please paste at least one YouTube comment in the comments pool.');
           }
         } else {
-          // Watch & Like only (Without Comment): Slots created with strictly blank content. Zero dummy comments!
           const count = parseInt(ytSlots || 1, 10);
           if (count <= 0) throw new Error('Please specify at least 1 video watch slot.');
           for (let i = 0; i < count; i++) {
             newComments.push({
               app_id: selectedApp.id,
-              content: '', // Admin did not add extra comment, so content is completely blank
+              content: '',
               rating: 5,
               status: 'active'
             });
@@ -319,7 +327,7 @@ export default function AddComment() {
         if (insertError) throw insertError;
       }
 
-      // 5. Trigger Notifications exclusively to workers of assigned bulkers
+      // 5. Trigger Targeted Push Notifications
       try {
         let assignedBulkerIds = [];
         if (selectedApp.assigned_bulkers) {
@@ -332,7 +340,6 @@ export default function AddComment() {
           }
         }
 
-        // Fetch tokens directly from DB1 for workers of assigned bulkers
         let assignedTokens = [];
         if (assignedBulkerIds.length > 0) {
           const { data: bProfiles } = await supabase
@@ -366,13 +373,13 @@ export default function AddComment() {
           })
         });
       } catch (err) {
-        console.warn('Push notification failed:', err);
+        console.warn('Push notification delivery skipped or failed:', err);
       }
 
       setAlertData({ 
         open: true, 
-        title: 'Task Configured Successfully!', 
-        message: `Deployed ${newComments.length} task slots/comments for "${selectedApp.app_name}". Push notification sent exclusively to assigned bulker earners!`, 
+        title: 'Task Successfully Deployed!', 
+        message: `Successfully released ${newComments.length} task slots/comments for "${selectedApp.app_name}". Push notifications dispatched to target bulker network!`, 
         type: 'success' 
       });
 
@@ -384,13 +391,12 @@ export default function AddComment() {
 
     } catch (e) {
       console.error(e);
-      setAlertData({ open: true, title: 'Error', message: e.message, type: 'error' });
+      setAlertData({ open: true, title: 'Deployment Error', message: e.message, type: 'error' });
     } finally {
       setSaving(false);
     }
   };
 
-  // Helper for star count quick buttons
   const addStarCount = (rating, increment) => {
     setStarCounts(prev => ({
       ...prev,
@@ -400,256 +406,646 @@ export default function AddComment() {
 
   const totalStarOnlySlots = Object.values(starCounts).reduce((a, b) => a + (parseInt(b, 10) || 0), 0);
 
-  return (
-    <Box sx={{ maxWidth: '1400px', mx: 'auto', pb: 10 }}>
-      
-      {/* Page Title */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 800 }}>Deploy Tasks & Comments</Typography>
-          <Typography variant="body2" color="text.secondary">Configure reviews, ratings, registration guidelines, or video tasks by category.</Typography>
-        </Box>
-      </Box>
+  // Live count of comments parsed
+  const liveParsedCount = useMemo(() => {
+    if (effectiveType === 'Android App' || effectiveType === 'iOS App') {
+      if (reviewMode === 'text') {
+        if (!multiStarMode) {
+          return parseText(commentsText, globalRating).length;
+        } else {
+          return Object.keys(multiStarTexts).reduce((acc, r) => acc + parseText(multiStarTexts[r], parseInt(r)).length, 0);
+        }
+      } else {
+        return totalStarOnlySlots;
+      }
+    } else if (effectiveType === 'Registration') {
+      return parseInt(regSlots || 0, 10);
+    } else if (effectiveType === 'YT Video') {
+      return ytCommentMode === 'custom_comments' ? parseText(ytCommentsText, 5).length : parseInt(ytSlots || 0, 10);
+    }
+    return 0;
+  }, [effectiveType, reviewMode, multiStarMode, commentsText, globalRating, multiStarTexts, totalStarOnlySlots, regSlots, ytCommentMode, ytCommentsText, ytSlots]);
 
-      {/* Category Tabs */}
-      <Paper elevation={0} sx={{ borderRadius: '16px', mb: 3, p: 0.5, border: `1px solid ${theme.palette.divider}`, bgcolor: theme.palette.mode === 'light' ? '#fbfbfb' : 'background.paper' }}>
-        <Tabs 
-          value={selectedCategory} 
-          onChange={(e, val) => setSelectedCategory(val)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            '& .MuiTab-root': {
-              textTransform: 'none',
+  const categories = [
+    { id: 'All', label: 'All Tasks', icon: <AppsIcon sx={{ fontSize: 18 }} /> },
+    { id: 'Android App', label: 'Google Play', icon: <AndroidIcon sx={{ fontSize: 18, color: '#10b981' }} /> },
+    { id: 'iOS App', label: 'Apple App Store', icon: <AppleIcon sx={{ fontSize: 18, color: '#3b82f6' }} /> },
+    { id: 'Registration', label: 'Web Registration', icon: <LanguageIcon sx={{ fontSize: 18, color: '#f59e0b' }} /> },
+    { id: 'YT Video', label: 'YouTube Campaign', icon: <YouTubeIcon sx={{ fontSize: 18, color: '#ef4444' }} /> }
+  ];
+
+  return (
+    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3, pb: 8 }}>
+      
+      {/* 1. Header Pod: Glassmorphic Executive Bar */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2.5,
+          borderRadius: '24px',
+          border: '1px solid',
+          borderColor: isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.2)',
+          background: isDark
+            ? 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(15,23,42,0.85) 100%)'
+            : 'linear-gradient(135deg, rgba(238,242,255,0.8) 0%, rgba(255,255,255,0.95) 100%)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 2,
+          width: '100%'
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box
+            sx={{
+              width: 52,
+              height: 52,
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              boxShadow: '0 8px 24px rgba(99,102,241,0.35)'
+            }}
+          >
+            <CommentIcon sx={{ fontSize: 28 }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
+              Task Automation & Comment Engine
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Deploy verified review texts, star rating pools, registration instructions, and YouTube campaigns into production workstations.
+            </Typography>
+          </Box>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Chip
+            icon={<CalendarMonthIcon sx={{ fontSize: '1rem !important' }} />}
+            label={`IST Target: ${scheduleTime}`}
+            sx={{
+              bgcolor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.1)',
+              color: '#6366f1',
               fontWeight: 700,
-              fontSize: '0.95rem',
-              borderRadius: '12px',
-              minHeight: 48,
-              mr: 1
-            }
-          }}
-        >
-          <Tab value="All" label="All Tasks" icon={<AppsIcon fontSize="small" />} iconPosition="start" />
-          <Tab value="Android App" label="Android App" icon={<AndroidIcon fontSize="small" color="success" />} iconPosition="start" />
-          <Tab value="iOS App" label="iOS App" icon={<AppleIcon fontSize="small" />} iconPosition="start" />
-          <Tab value="Registration" label="Registration" icon={<AppRegistrationIcon fontSize="small" color="primary" />} iconPosition="start" />
-          <Tab value="YT Video" label="YT Video" icon={<YouTubeIcon fontSize="small" color="error" />} iconPosition="start" />
-        </Tabs>
+              border: '1px solid rgba(99,102,241,0.3)',
+              borderRadius: '12px'
+            }}
+          />
+          <Chip
+            icon={<SpeedIcon sx={{ fontSize: '1rem !important' }} />}
+            label={`${filteredApps.length} Tasks Scheduled`}
+            sx={{
+              bgcolor: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)',
+              color: '#10b981',
+              fontWeight: 700,
+              border: '1px solid rgba(16,185,129,0.3)',
+              borderRadius: '12px'
+            }}
+          />
+        </Box>
       </Paper>
 
-      <Paper sx={{ p: { xs: 2.5, md: 4 }, borderRadius: '24px', mb: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: `1px solid ${theme.palette.divider}` }}>
-        
-        {/* App Selection & Schedule */}
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, mb: 4, width: '100%' }}>
-          <Box sx={{ flex: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Select Application / Task</Typography>
-              {selectedApp && (
-                <Chip 
-                  size="small" 
-                  label={selectedApp.task_type || 'Task'} 
-                  color={
-                    selectedApp.task_type === 'Android App' ? 'success' : 
-                    selectedApp.task_type === 'iOS App' ? 'default' : 
-                    selectedApp.task_type === 'Registration' ? 'primary' : 'error'
-                  }
-                  sx={{ fontWeight: 700, borderRadius: '8px' }} 
-                />
-              )}
-            </Box>
-            <Autocomplete
-              options={filteredApps}
-              getOptionLabel={(option) => `[Task #${option.task_id}] ${option.app_name} (${option.task_type || 'Android App'})`}
-              value={selectedApp}
-              onChange={handleAppChange}
-              renderInput={(params) => (
-                <TextField 
-                  {...params} 
-                  placeholder={`Search ${selectedCategory === 'All' ? 'any' : selectedCategory} Task by Name or ID`} 
-                  sx={{ '& .MuiOutlinedInput-root': { minHeight: '56px', fontSize: '1.05rem', borderRadius: '14px' } }} 
-                />
-              )}
-              fullWidth
-            />
-            {selectedApp && (
-              <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                  Assigned Bulker(s):
-                </Typography>
-                {assignedBulkersDisplay.length > 0 ? (
-                  assignedBulkersDisplay.map((bName) => (
-                    <Chip 
-                      key={bName} 
-                      label={bName} 
-                      size="small" 
-                      variant="outlined" 
-                      color="primary"
-                      sx={{ fontWeight: 700, borderRadius: '8px' }} 
-                    />
-                  ))
-                ) : (
-                  <Chip 
-                    label="No Bulkers Assigned" 
-                    size="small" 
-                    color="warning" 
-                    variant="outlined"
-                    sx={{ fontWeight: 600, borderRadius: '8px' }} 
+      {/* 2. Compact 1-Row Category Filter Bar (Grid 5 equal columns, No wrapping) */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' },
+          gap: 1.5,
+          width: '100%'
+        }}
+      >
+        {categories.map((cat) => {
+          const isSelected = selectedCategory === cat.id;
+          return (
+            <Paper
+              key={cat.id}
+              elevation={0}
+              onClick={() => setSelectedCategory(cat.id)}
+              sx={{
+                px: 2,
+                py: 1.2,
+                borderRadius: '14px',
+                cursor: 'pointer',
+                border: '1.5px solid',
+                borderColor: isSelected
+                  ? '#6366f1'
+                  : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                bgcolor: isSelected
+                  ? isDark ? 'rgba(99,102,241,0.18)' : 'rgba(99,102,241,0.08)'
+                  : isDark ? 'rgba(15,23,42,0.65)' : 'rgba(255,255,255,0.7)',
+                backdropFilter: 'blur(16px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1.2,
+                minHeight: 48,
+                transition: 'all 0.2s ease',
+                boxShadow: isSelected ? '0 4px 14px rgba(99,102,241,0.25)' : 'none',
+                '&:hover': {
+                  borderColor: '#6366f1',
+                  transform: 'translateY(-1px)'
+                }
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                {cat.icon}
+              </Box>
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  color: isSelected ? '#6366f1' : 'text.primary',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {cat.label}
+              </Typography>
+            </Paper>
+          );
+        })}
+      </Box>
+
+      {/* 3. Main Operational Command Card (Full Width edge-to-edge) */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2.5, md: 3.5 },
+          borderRadius: '24px',
+          border: '1px solid',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+          bgcolor: isDark ? 'rgba(15,23,42,0.65)' : 'rgba(255,255,255,0.7)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3.5,
+          width: '100%'
+        }}
+      >
+        {/* Section A: App Selection & Schedule Filter (Full Width 50/50 Grid) */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, letterSpacing: '-0.01em' }}>
+              1. Target Task & Release Schedule
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Select the live active task to provision comments or instructions for workers.
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '2.5fr 1fr' },
+              gap: 2.5,
+              width: '100%',
+              alignItems: 'start'
+            }}
+          >
+            {/* App Autocomplete */}
+            <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Autocomplete
+                fullWidth
+                options={filteredApps}
+                getOptionLabel={(option) => `[Task #${option.task_id || option.id.slice(0, 6)}] ${option.app_name} (${option.task_type || 'Android App'})`}
+                value={selectedApp}
+                onChange={handleAppChange}
+                renderInput={(params) => (
+                  <TextField 
+                    {...params} 
+                    label="Select Application / Task *"
+                    placeholder={`Search ${selectedCategory === 'All' ? 'any' : selectedCategory} task by name or ID...`} 
+                    sx={{
+                      width: '100%',
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '14px',
+                        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                      }
+                    }}
                   />
                 )}
-                <Typography variant="caption" sx={{ color: 'text.secondary', ml: 0.5 }}>
-                  (Push notification will strictly reach ONLY devices of workers under {assignedBulkersDisplay.length > 0 ? `these ${assignedBulkersDisplay.length} bulker(s)` : 'assigned bulkers'})
-                </Typography>
-              </Box>
-            )}
-          </Box>
-          <Box sx={{ flex: 1, minWidth: '220px' }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Publish Date (IST Kolkata)</Typography>
-            <TextField
-              type="date"
-              fullWidth
-              value={scheduleTime}
-              onChange={(e) => setScheduleTime(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { minHeight: '56px', fontSize: '1rem', borderRadius: '14px' } }}
-            />
-          </Box>
-        </Box>
+              />
 
-        {/* Daily Limits & Time Gap Section */}
-        <Box sx={{ bgcolor: theme.palette.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)', p: 3, borderRadius: '16px', mb: 4, border: `1px solid ${theme.palette.divider}` }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TimerIcon color="primary" fontSize="small" /> Daily Limits & Scheduling Settings
-          </Typography>
-          <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>1 User Take Limit:</Typography>
-              <TextField 
-                type="number" 
-                fullWidth 
-                value={limit} 
-                onChange={e => setLimit(Number(e.target.value))} 
-                size="small" 
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} 
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>Timer Gap (Minutes):</Typography>
-              <TextField 
-                type="number" 
-                fullWidth 
-                value={timerGap} 
-                onChange={e => setTimerGap(Number(e.target.value))} 
-                size="small" 
-                disabled={!enableTimer} 
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} 
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControlLabel 
-                control={<Checkbox checked={enableTimer} onChange={e => setEnableTimer(e.target.checked)} color="primary" />} 
-                label={<Typography variant="body2" sx={{ fontWeight: 600 }}>Enable Waitlist Timer Gap</Typography>} 
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>Repeat Link Block Rule:</Typography>
-                <Select
-                  size="small"
-                  fullWidth
-                  value={blockLinkMode}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setBlockLinkMode(val);
-                    if (val === 'custom' && !blockUntilDate) {
-                      const d = new Date();
-                      d.setDate(d.getDate() + 7);
-                      setBlockUntilDate(d.toISOString().slice(0, 10));
-                    }
+              {/* Selected App Live Insight Pill */}
+              {selectedApp && (
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: '12px',
+                    bgcolor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)',
+                    border: '1px solid',
+                    borderColor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1.5,
+                    width: '100%'
                   }}
-                  sx={{ borderRadius: '10px' }}
                 >
-                  <MenuItem value="7_days">7 Days Cooldown (Default)</MenuItem>
-                  <MenuItem value="custom">Set Custom Date Block</MenuItem>
-                  <MenuItem value="none">No Block (Allow Repeat)</MenuItem>
-                </Select>
-              </Box>
-            </Grid>
-            {blockLinkMode === 'custom' && (
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: 'primary.main' }}>
-                  Block Until Date (IST):
-                </Typography>
-                <TextField 
-                  type="date" 
-                  fullWidth 
-                  value={blockUntilDate} 
-                  onChange={e => setBlockUntilDate(e.target.value)} 
-                  size="small" 
-                  helperText="User cannot repeat task until this date passes"
-                  FormHelperTextProps={{ sx: { fontSize: '0.72rem', mt: 0.5 } }}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} 
-                />
-              </Grid>
-            )}
-          </Grid>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Chip
+                      size="small"
+                      label={selectedApp.task_type || 'Task'}
+                      sx={{
+                        fontWeight: 800,
+                        fontSize: '0.75rem',
+                        bgcolor: selectedApp.task_type === 'Android App' ? 'rgba(16,185,129,0.15)' :
+                                selectedApp.task_type === 'iOS App' ? 'rgba(59,130,246,0.15)' :
+                                selectedApp.task_type === 'Registration' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: selectedApp.task_type === 'Android App' ? '#10b981' :
+                               selectedApp.task_type === 'iOS App' ? '#3b82f6' :
+                               selectedApp.task_type === 'Registration' ? '#f59e0b' : '#ef4444',
+                        border: '1px solid',
+                        borderColor: selectedApp.task_type === 'Android App' ? 'rgba(16,185,129,0.3)' :
+                                     selectedApp.task_type === 'iOS App' ? 'rgba(59,130,246,0.3)' :
+                                     selectedApp.task_type === 'Registration' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'
+                      }}
+                    />
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                      Package: <span style={{ color: isDark ? '#fff' : '#000', fontFamily: 'monospace' }}>{selectedApp.app_package || 'N/A'}</span>
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                      Bulkers:
+                    </Typography>
+                    {assignedBulkersDisplay.length > 0 ? (
+                      assignedBulkersDisplay.map((bName) => (
+                        <Chip 
+                          key={bName} 
+                          label={bName} 
+                          size="small" 
+                          sx={{
+                            fontWeight: 700,
+                            borderRadius: '8px',
+                            fontSize: '0.72rem',
+                            bgcolor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
+                            color: '#6366f1'
+                          }} 
+                        />
+                      ))
+                    ) : (
+                      <Chip 
+                        label="No Bulkers Assigned" 
+                        size="small" 
+                        sx={{
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          fontSize: '0.72rem',
+                          bgcolor: 'rgba(245,158,11,0.15)',
+                          color: '#f59e0b'
+                        }} 
+                      />
+                    )}
+                  </Box>
+                </Box>
+              )}
+            </Box>
+
+            {/* Target Schedule Date */}
+            <Box sx={{ width: '100%' }}>
+              <TextField
+                fullWidth
+                label="Target Publish Date (IST) *"
+                type="date"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+                sx={{
+                  width: '100%',
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '14px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                  }
+                }}
+              />
+            </Box>
+          </Box>
         </Box>
 
-        {/* ============================================================== */}
-        {/* CASE 1: ANDROID APP & IOS APP (REVIEW & STAR RATINGS)          */}
-        {/* ============================================================== */}
+        <Divider sx={{ borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+
+        {/* Section B: Engine Automation Protocols (Daily Limits, Timer Gap & Duplicate Link Guard) */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ShieldIcon sx={{ color: '#6366f1', fontSize: 20 }} />
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                2. Engine Automation Protocols & Security Rules
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              Protects against bot spam, duplicate submissions, and unfair task hogging.
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' },
+              gap: 2,
+              width: '100%'
+            }}
+          >
+            {/* 1. Limit per user */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                border: '1px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>
+                TASK LIMIT PER EARNER
+              </Typography>
+              <TextField
+                fullWidth
+                type="number"
+                size="small"
+                value={limit}
+                onChange={e => setLimit(Math.max(1, Number(e.target.value)))}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '10px',
+                    fontWeight: 700
+                  }
+                }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                Max times a single user can execute this task.
+              </Typography>
+            </Paper>
+
+            {/* 2. Timer gap interval */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                border: '1px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>
+                TIMER GAP (MINUTES)
+              </Typography>
+              <TextField
+                fullWidth
+                type="number"
+                size="small"
+                disabled={!enableTimer}
+                value={timerGap}
+                onChange={e => setTimerGap(Math.max(1, Number(e.target.value)))}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '10px',
+                    fontWeight: 700
+                  }
+                }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                Cooldown enforced between consecutive runs.
+              </Typography>
+            </Paper>
+
+            {/* 3. Timer gap toggle */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                border: '1px solid',
+                borderColor: enableTimer ? 'rgba(99,102,241,0.4)' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                bgcolor: enableTimer
+                  ? isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.05)'
+                  : isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: 1
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 800, color: enableTimer ? '#6366f1' : 'text.secondary' }}>
+                WAITLIST COOLDOWN
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={enableTimer}
+                    onChange={e => setEnableTimer(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                    {enableTimer ? 'Enforced' : 'Disabled'}
+                  </Typography>
+                }
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                Locks next task until cooldown timer expires.
+              </Typography>
+            </Paper>
+
+            {/* 4. Repeat Link Protection */}
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                border: '1px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>
+                REPEAT LINK GUARD
+              </Typography>
+              <Select
+                size="small"
+                fullWidth
+                value={blockLinkMode}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setBlockLinkMode(val);
+                  if (val === 'custom' && !blockUntilDate) {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 7);
+                    setBlockUntilDate(d.toISOString().slice(0, 10));
+                  }
+                }}
+                sx={{ borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem' }}
+              >
+                <MenuItem value="7_days">7 Days Cooldown</MenuItem>
+                <MenuItem value="custom">Custom Date Block</MenuItem>
+                <MenuItem value="none">No Block (Allow Repeat)</MenuItem>
+              </Select>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                Prevents repeat payouts for identical links.
+              </Typography>
+            </Paper>
+          </Box>
+
+          {/* If custom date block selected */}
+          {blockLinkMode === 'custom' && (
+            <Box sx={{ width: '100%', mt: 0.5 }}>
+              <TextField
+                fullWidth
+                size="small"
+                type="date"
+                label="Block Until Date (IST) *"
+                value={blockUntilDate}
+                onChange={e => setBlockUntilDate(e.target.value)}
+                helperText="Earners cannot repeat this task package link until this timestamp passes."
+                FormHelperTextProps={{ sx: { fontSize: '0.72rem' } }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '12px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                  }
+                }}
+              />
+            </Box>
+          )}
+        </Box>
+
+        <Divider sx={{ borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+
+        {/* Section C: Dynamic Task Execution Workspaces */}
+
+        {/* CASE 1: PLAY STORE & APP STORE (REVIEWS & STAR RATINGS) */}
         {(effectiveType === 'Android App' || effectiveType === 'iOS App') && (
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+            
+            {/* Header with Mode Toggle */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 2,
+                width: '100%'
+              }}
+            >
               <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {effectiveType === 'Android App' ? <AndroidIcon color="success" /> : <AppleIcon />} 
-                  App Reviews & Star Ratings
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Choose whether to deploy text comments or star ratings only.
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {effectiveType === 'Android App' ? (
+                    <AndroidIcon sx={{ color: '#10b981', fontSize: 24 }} />
+                  ) : (
+                    <AppleIcon sx={{ color: '#3b82f6', fontSize: 24 }} />
+                  )}
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    3. App Review & Star Rating Distribution Engine
+                  </Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  Choose between verified text comment generation or star-only rating quotas.
                 </Typography>
               </Box>
 
-              {/* Toggle Review Mode */}
-              <Box sx={{ display: 'flex', bgcolor: theme.palette.mode === 'light' ? '#eceff1' : 'rgba(255,255,255,0.06)', p: 0.5, borderRadius: '12px' }}>
-                <Button 
+              {/* Text Comments vs Star Only Switcher */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  p: 0.5,
+                  borderRadius: '14px',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                  border: '1px solid',
+                  borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
+                }}
+              >
+                <Button
                   size="small"
                   variant={reviewMode === 'text' ? 'contained' : 'text'}
-                  color={reviewMode === 'text' ? 'primary' : 'inherit'}
                   onClick={() => setReviewMode('text')}
-                  startIcon={<CommentIcon />}
-                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+                  startIcon={<CommentIcon sx={{ fontSize: 16 }} />}
+                  sx={{
+                    borderRadius: '10px',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    textTransform: 'none',
+                    bgcolor: reviewMode === 'text' ? '#6366f1' : 'transparent',
+                    color: reviewMode === 'text' ? '#fff' : 'text.secondary',
+                    boxShadow: reviewMode === 'text' ? '0 4px 14px rgba(99,102,241,0.3)' : 'none'
+                  }}
                 >
-                  Text Comments
+                  Text Comments Mode
                 </Button>
-                <Button 
+                <Button
                   size="small"
                   variant={reviewMode === 'star_only' ? 'contained' : 'text'}
-                  color={reviewMode === 'star_only' ? 'primary' : 'inherit'}
                   onClick={() => setReviewMode('star_only')}
-                  startIcon={<StarIcon />}
-                  sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+                  startIcon={<StarIcon sx={{ fontSize: 16 }} />}
+                  sx={{
+                    borderRadius: '10px',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    textTransform: 'none',
+                    bgcolor: reviewMode === 'star_only' ? '#6366f1' : 'transparent',
+                    color: reviewMode === 'star_only' ? '#fff' : 'text.secondary',
+                    boxShadow: reviewMode === 'star_only' ? '0 4px 14px rgba(99,102,241,0.3)' : 'none'
+                  }}
                 >
-                  Star Only (No Comment)
+                  Star Only Mode (No Comment)
                 </Button>
               </Box>
             </Box>
 
-            {/* Sub-mode A: Text Comments */}
+            {/* Sub-mode A: Text Comments Workspace */}
             {reviewMode === 'text' && (
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Paste Comments List</Typography>
-                  <FormControlLabel 
-                    control={<Switch checked={multiStarMode} onChange={e => setMultiStarMode(e.target.checked)} color="secondary" />} 
-                    label={<Typography variant="button" sx={{ fontWeight: 700 }}>Multi-Star Mode</Typography>} 
-                  />
-                </Box>
-
-                {!multiStarMode ? (
-                  <>
-                    <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>Global Rating:</Typography>
-                      <Select value={globalRating} onChange={e => setGlobalRating(e.target.value)} size="small" sx={{ width: 160, borderRadius: '10px' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
+                
+                {/* Mode Toolbar: Multi-star switch + Global star select */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 2,
+                    p: 2,
+                    borderRadius: '16px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                    border: '1px solid',
+                    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                    width: '100%'
+                  }}
+                >
+                  {!multiStarMode ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        Target Rating for Pool:
+                      </Typography>
+                      <Select
+                        size="small"
+                        value={globalRating}
+                        onChange={e => setGlobalRating(e.target.value)}
+                        sx={{
+                          width: 170,
+                          borderRadius: '10px',
+                          fontWeight: 700,
+                          bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#fff'
+                        }}
+                      >
                         <MenuItem value={5}>⭐⭐⭐⭐⭐ (5 Star)</MenuItem>
                         <MenuItem value={4}>⭐⭐⭐⭐ (4 Star)</MenuItem>
                         <MenuItem value={3}>⭐⭐⭐ (3 Star)</MenuItem>
@@ -657,151 +1053,296 @@ export default function AddComment() {
                         <MenuItem value={1}>⭐ (1 Star)</MenuItem>
                       </Select>
                     </Box>
+                  ) : (
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#6366f1' }}>
+                      Multi-Star Distribution Active (Separate Text Pools for 5★, 4★, 3★, 2★, 1★)
+                    </Typography>
+                  )}
+
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={multiStarMode}
+                        onChange={e => setMultiStarMode(e.target.checked)}
+                        color="secondary"
+                      />
+                    }
+                    label={
+                      <Typography variant="button" sx={{ fontWeight: 800, fontSize: '0.82rem' }}>
+                        Split Multi-Star Mode
+                      </Typography>
+                    }
+                  />
+                </Box>
+
+                {/* Single Global Textarea */}
+                {!multiStarMode ? (
+                  <Box sx={{ width: '100%' }}>
                     <TextField
                       fullWidth
                       multiline
-                      rows={12}
-                      placeholder="Paste review comments here (one comment per line)... Numbers (1., 2.) and bullets will be cleaned automatically."
+                      rows={10}
+                      placeholder="Paste review comments here (one comment per line)...&#10;&#10;Numbers (1., 2.), bullets (- * • ✔), and AI greetings ('Here are 10 reviews...') will be automatically parsed and filtered out."
                       value={commentsText}
                       onChange={(e) => setCommentsText(e.target.value)}
-                      sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', borderRadius: '14px' } }}
+                      sx={{
+                        width: '100%',
+                        '& .MuiOutlinedInput-root': {
+                          fontFamily: 'monospace',
+                          fontSize: '0.88rem',
+                          borderRadius: '16px',
+                          bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.8)'
+                        }
+                      }}
                     />
-                  </>
+                  </Box>
                 ) : (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                  /* 5-Star Split Textareas */
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      gap: 2,
+                      width: '100%'
+                    }}
+                  >
                     {[5, 4, 3, 2, 1].map(rating => (
-                      <Box key={rating}>
-                        <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 700 }}>
-                          {'⭐'.repeat(rating)} ({rating} Star Comments)
-                        </Typography>
+                      <Paper
+                        key={rating}
+                        elevation={0}
+                        sx={{
+                          p: 2,
+                          borderRadius: '16px',
+                          border: '1px solid',
+                          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                          bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 1,
+                          gridColumn: rating === 5 ? { xs: 'span 1', md: 'span 2' } : 'span 1'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#f59e0b' }}>
+                            {'⭐'.repeat(rating)} ({rating}-Star Comments)
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={`${parseText(multiStarTexts[rating], rating).length} ready`}
+                            sx={{ fontWeight: 700, fontSize: '0.72rem', borderRadius: '8px' }}
+                          />
+                        </Box>
                         <TextField
                           fullWidth
                           multiline
-                          rows={3.5}
-                          placeholder={`Paste ${rating}-star comments here (one per line)...`}
+                          rows={rating === 5 ? 4 : 3}
+                          placeholder={`Paste ${rating}-star comments here (one comment per line)...`}
                           value={multiStarTexts[rating]}
-                          onChange={(e) => setMultiStarTexts({...multiStarTexts, [rating]: e.target.value})}
-                          sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', borderRadius: '12px' } }}
+                          onChange={(e) => setMultiStarTexts({ ...multiStarTexts, [rating]: e.target.value })}
+                          sx={{
+                            width: '100%',
+                            '& .MuiOutlinedInput-root': {
+                              fontFamily: 'monospace',
+                              fontSize: '0.85rem',
+                              borderRadius: '12px'
+                            }
+                          }}
                         />
-                      </Box>
+                      </Paper>
                     ))}
                   </Box>
                 )}
               </Box>
             )}
 
-            {/* Sub-mode B: Star Rating Only */}
+            {/* Sub-mode B: Star Rating Only Workspace */}
             {reviewMode === 'star_only' && (
-              <Box sx={{ p: 3, borderRadius: '16px', bgcolor: theme.palette.mode === 'light' ? '#fdfdfd' : 'rgba(255,255,255,0.02)', border: `1px solid ${theme.palette.divider}` }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    Specify Star Rating Quantities
-                  </Typography>
-                  <Chip 
-                    label={`Total Slots to Create: ${totalStarOnlySlots}`} 
-                    color="primary" 
-                    sx={{ fontWeight: 700, fontSize: '0.9rem', py: 2, borderRadius: '10px' }} 
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 1.5,
+                    p: 2,
+                    borderRadius: '16px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                    border: '1px solid',
+                    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
+                  }}
+                >
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                      Star Rating Slot Quotas
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Workers will receive tasks instructing them to submit the exact star rating on the app store without writing a review.
+                    </Typography>
+                  </Box>
+                  <Chip
+                    icon={<CheckCircleIcon sx={{ fontSize: '1rem !important' }} />}
+                    label={`Total Slots to Create: ${totalStarOnlySlots}`}
+                    sx={{
+                      bgcolor: 'rgba(99,102,241,0.15)',
+                      color: '#6366f1',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      py: 2,
+                      borderRadius: '12px',
+                      border: '1px solid rgba(99,102,241,0.3)'
+                    }}
                   />
                 </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Workers will receive tasks instructing them to give the selected star rating on Play Store / App Store without typing any text comment.
-                </Typography>
 
-                <Grid container spacing={2.5}>
-                  {[5, 4, 3, 2, 1].map(r => (
-                    <Grid item xs={12} sm={6} md={2.4} key={r}>
-                      <Card variant="outlined" sx={{ borderRadius: '14px', p: 2, textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{ fontWeight: 800, color: '#f59e0b', mb: 0.5 }}>
-                          {'⭐'.repeat(r)}
-                        </Typography>
-                        <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 1.5, color: 'text.secondary' }}>
-                          {r}-Star Rating
-                        </Typography>
-                        <TextField 
-                          type="number"
-                          fullWidth
-                          size="small"
-                          label="Quantity"
-                          value={starCounts[r] || ''}
-                          onChange={(e) => setStarCounts({ ...starCounts, [r]: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', textAlign: 'center' } }}
-                        />
-                        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5, mt: 1 }}>
-                          <Button size="small" variant="outlined" onClick={() => addStarCount(r, 5)} sx={{ minWidth: 32, p: 0.3, fontSize: '0.75rem' }}>+5</Button>
-                          <Button size="small" variant="outlined" onClick={() => addStarCount(r, 10)} sx={{ minWidth: 32, p: 0.3, fontSize: '0.75rem' }}>+10</Button>
-                          <Button size="small" variant="outlined" onClick={() => addStarCount(r, 25)} sx={{ minWidth: 32, p: 0.3, fontSize: '0.75rem' }}>+25</Button>
-                        </Box>
-                      </Card>
-                    </Grid>
+                {/* 5-Column Single Row Grid for 5★ down to 1★ */}
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(5, 1fr)' },
+                    gap: 2,
+                    width: '100%'
+                  }}
+                >
+                  {[5, 4, 3, 2, 1].map((r) => (
+                    <Paper
+                      key={r}
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        borderRadius: '18px',
+                        border: '1.5px solid',
+                        borderColor: (starCounts[r] || 0) > 0 ? '#f59e0b' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                        bgcolor: (starCounts[r] || 0) > 0
+                          ? isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.04)'
+                          : isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 1.2,
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#f59e0b', letterSpacing: '0.1em' }}>
+                        {'⭐'.repeat(r)}
+                      </Typography>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                        {r}-Star Quota
+                      </Typography>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="number"
+                        value={starCounts[r] || ''}
+                        onChange={(e) => setStarCounts({ ...starCounts, [r]: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: '10px',
+                            textAlign: 'center',
+                            fontWeight: 800
+                          }
+                        }}
+                      />
+                      <Box sx={{ display: 'flex', gap: 0.5, width: '100%', justifyContent: 'center' }}>
+                        <Button size="small" variant="outlined" onClick={() => addStarCount(r, 5)} sx={{ minWidth: 32, p: 0.4, fontSize: '0.72rem', borderRadius: '8px' }}>+5</Button>
+                        <Button size="small" variant="outlined" onClick={() => addStarCount(r, 10)} sx={{ minWidth: 32, p: 0.4, fontSize: '0.72rem', borderRadius: '8px' }}>+10</Button>
+                        <Button size="small" variant="outlined" onClick={() => addStarCount(r, 25)} sx={{ minWidth: 32, p: 0.4, fontSize: '0.72rem', borderRadius: '8px' }}>+25</Button>
+                      </Box>
+                    </Paper>
                   ))}
-                </Grid>
+                </Box>
               </Box>
             )}
           </Box>
         )}
 
-        {/* ============================================================== */}
-        {/* CASE 2: REGISTRATION TASK MODE                                  */}
-        {/* ============================================================== */}
+        {/* CASE 2: REGISTRATION TASK MODE */}
         {effectiveType === 'Registration' && (
-          <Box sx={{ p: 3, borderRadius: '16px', bgcolor: theme.palette.mode === 'light' ? '#fdfdfd' : 'rgba(255,255,255,0.02)', border: `1px solid ${theme.palette.divider}` }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AppRegistrationIcon color="primary" /> Registration Task Configuration
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Provide the step-by-step registration procedure and tutorial video link for workers to complete the signup successfully.
-            </Typography>
-
-            <Grid container spacing={3}>
-              {/* Guidelines / Procedure */}
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                  Registration Guidelines & Step-by-Step Procedure *
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LanguageIcon sx={{ color: '#f59e0b', fontSize: 24 }} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                  3. Web Registration & KYC Workflow Configuration
                 </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={6}
-                  placeholder={`Example:\n1. Click the link to open the registration page\n2. Sign up using a valid Indian mobile number & verify OTP\n3. Complete basic profile KYC\n4. Take a clear screenshot of your account profile screen showing your user ID`}
-                  value={regProcedure}
-                  onChange={(e) => setRegProcedure(e.target.value)}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', fontFamily: 'monospace' } }}
-                />
-              </Grid>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Provide comprehensive signup guidelines, tutorial link, and total earner capacity.
+              </Typography>
+            </Box>
 
-              {/* Tutorial Video Type & URL */}
-              <Grid item xs={12} md={4}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Tutorial Video Type</Typography>
+            {/* Registration Procedure Full Width Textarea */}
+            <Box sx={{ width: '100%' }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                REGISTRATION GUIDELINES & STEP-BY-STEP PROCEDURE *
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={6}
+                placeholder="1. Click the registration link to open the portal&#10;2. Register with a valid Indian mobile number and email&#10;3. Verify OTP & complete basic profile KYC&#10;4. Take a clear screenshot of your profile screen displaying your registered User ID"
+                value={regProcedure}
+                onChange={(e) => setRegProcedure(e.target.value)}
+                sx={{
+                  width: '100%',
+                  '& .MuiOutlinedInput-root': {
+                    fontFamily: 'monospace',
+                    fontSize: '0.88rem',
+                    borderRadius: '16px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.8)'
+                  }
+                }}
+              />
+            </Box>
+
+            {/* Video Provider + URL + Slots Grid */}
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1.5fr 1fr' },
+                gap: 2,
+                width: '100%'
+              }}
+            >
+              {/* Video Provider */}
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                  TUTORIAL VIDEO TYPE
+                </Typography>
                 <Select
                   fullWidth
                   size="small"
                   value={regVideoType}
                   onChange={(e) => setRegVideoType(e.target.value)}
-                  sx={{ borderRadius: '12px', minHeight: 45 }}
+                  sx={{ borderRadius: '12px', minHeight: 45, fontWeight: 700 }}
                 >
                   <MenuItem value="youtube">
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <YouTubeIcon color="error" fontSize="small" /> YouTube Tutorial Link
+                      <YouTubeIcon sx={{ color: '#ef4444', fontSize: 18 }} /> YouTube Tutorial
                     </Box>
                   </MenuItem>
                   <MenuItem value="server">
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <VideoLibraryIcon color="primary" fontSize="small" /> Server / Direct MP4 Link
+                      <VideoLibraryIcon sx={{ color: '#3b82f6', fontSize: 18 }} /> Direct MP4 / Server
                     </Box>
                   </MenuItem>
                 </Select>
-              </Grid>
+              </Box>
 
-              <Grid item xs={12} md={5}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Tutorial Video URL (Optional)</Typography>
+              {/* Video URL */}
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                  TUTORIAL VIDEO URL (OPTIONAL)
+                </Typography>
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder={regVideoType === 'youtube' ? 'https://www.youtube.com/watch?v=...' : 'https://res.cloudinary.com/... or server link'}
+                  placeholder={regVideoType === 'youtube' ? 'https://www.youtube.com/watch?v=...' : 'https://...'}
                   value={regVideoUrl}
                   onChange={(e) => setRegVideoUrl(e.target.value)}
                   InputProps={{
-                    startAdornment: <LinkIcon color="action" sx={{ mr: 1, fontSize: 20 }} />,
+                    startAdornment: <LinkIcon color="action" sx={{ mr: 1, fontSize: 18 }} />,
                     endAdornment: regVideoUrl && (
                       <InputAdornment position="end">
                         <Tooltip title="Test Video Link">
@@ -814,43 +1355,55 @@ export default function AddComment() {
                   }}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
                 />
-              </Grid>
+              </Box>
 
-              {/* Task Slots */}
-              <Grid item xs={12} md={3}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Registration Slots / Capacity *</Typography>
+              {/* Total Registration Slots */}
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                  SLOTS / EARNER BUDGET *
+                </Typography>
                 <TextField
                   fullWidth
-                  type="number"
                   size="small"
+                  type="number"
                   placeholder="e.g. 50"
                   value={regSlots}
                   onChange={(e) => setRegSlots(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px', fontWeight: 800 } }}
                 />
-                <Typography variant="caption" color="text.secondary">Number of workers who can take this task</Typography>
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
           </Box>
         )}
 
-        {/* ============================================================== */}
-        {/* CASE 3: YT VIDEO TASK MODE                                     */}
-        {/* ============================================================== */}
+        {/* CASE 3: YOUTUBE CAMPAIGN MODE */}
         {effectiveType === 'YT Video' && (
-          <Box sx={{ p: 3, borderRadius: '16px', bgcolor: theme.palette.mode === 'light' ? '#fdfdfd' : 'rgba(255,255,255,0.02)', border: `1px solid ${theme.palette.divider}` }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <YouTubeIcon color="error" /> YouTube Video Task Configuration
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Configure watch time, channel/video link, and choose whether workers must post specific comments or just watch & like.
-            </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <YouTubeIcon sx={{ color: '#ef4444', fontSize: 24 }} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                  3. YouTube Video Campaign Engine
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Configure YouTube channel/video links, watch time duration, and engagement requirements.
+              </Typography>
+            </Box>
 
-            <Grid container spacing={3}>
-              {/* YouTube Video or Channel Link */}
-              <Grid item xs={12} md={8}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                  YouTube Video Link or Channel Link *
+            {/* Video URL + Mode Selector Grid */}
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1.6fr 1fr' },
+                gap: 2,
+                width: '100%'
+              }}
+            >
+              {/* YouTube Link */}
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                  YOUTUBE VIDEO OR CHANNEL LINK *
                 </Typography>
                 <TextField
                   fullWidth
@@ -859,7 +1412,7 @@ export default function AddComment() {
                   value={ytVideoUrl}
                   onChange={(e) => setYtVideoUrl(e.target.value)}
                   InputProps={{
-                    startAdornment: <YouTubeIcon color="error" sx={{ mr: 1, fontSize: 20 }} />,
+                    startAdornment: <YouTubeIcon sx={{ color: '#ef4444', mr: 1, fontSize: 18 }} />,
                     endAdornment: ytVideoUrl && (
                       <InputAdornment position="end">
                         <Tooltip title="Test Link">
@@ -872,126 +1425,209 @@ export default function AddComment() {
                   }}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
                 />
-              </Grid>
+              </Box>
 
-              {/* Task Mode (Watch & Like vs Paste Comments) */}
-              <Grid item xs={12} md={4}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Task Requirement Mode</Typography>
+              {/* Task Requirement Mode */}
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                  REQUIREMENT MODE *
+                </Typography>
                 <Select
                   fullWidth
                   size="small"
                   value={ytCommentMode}
                   onChange={(e) => setYtCommentMode(e.target.value)}
-                  sx={{ borderRadius: '12px', minHeight: 45 }}
+                  sx={{ borderRadius: '12px', minHeight: 45, fontWeight: 700 }}
                 >
-                  <MenuItem value="none">Watch, Like & Subscribe Only (Without Comment)</MenuItem>
-                  <MenuItem value="custom_comments">Post Specific Comments (Admin Added Only)</MenuItem>
+                  <MenuItem value="none">Watch, Like & Subscribe Only</MenuItem>
+                  <MenuItem value="custom_comments">Post Specific Comments (Admin Pool)</MenuItem>
                 </Select>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                  {ytCommentMode === 'none' 
-                    ? 'Pure watch & like task. Absolutely no dummy comments will be added.' 
-                    : 'Only comments explicitly entered by you will be assigned.'}
-                </Typography>
-              </Grid>
+              </Box>
+            </Box>
 
-              {/* Task Description / Procedure */}
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                  Task Procedure / Watch Instructions *
+            {/* Watch Instructions */}
+            <Box sx={{ width: '100%' }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                TASK PROCEDURE / WATCH INSTRUCTIONS *
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={3.5}
+                placeholder="e.g. Watch the complete video (minimum 3 mins), click Like, subscribe to the channel with notification bell on, and take a screenshot."
+                value={ytProcedure}
+                onChange={(e) => setYtProcedure(e.target.value)}
+                sx={{
+                  width: '100%',
+                  '& .MuiOutlinedInput-root': {
+                    fontFamily: 'monospace',
+                    fontSize: '0.88rem',
+                    borderRadius: '16px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.8)'
+                  }
+                }}
+              />
+            </Box>
+
+            {/* Slots or Custom Comments */}
+            {ytCommentMode === 'none' ? (
+              <Box sx={{ width: { xs: '100%', sm: '300px' } }}>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                  TOTAL WATCH SLOTS *
+                </Typography>
+                <TextField
+                  fullWidth
+                  type="number"
+                  size="small"
+                  placeholder="e.g. 50"
+                  value={ytSlots}
+                  onChange={(e) => setYtSlots(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px', fontWeight: 800 } }}
+                />
+              </Box>
+            ) : (
+              <Box sx={{ width: '100%' }}>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                  PASTE YOUTUBE COMMENTS (ONE COMMENT PER LINE) *
                 </Typography>
                 <TextField
                   fullWidth
                   multiline
-                  rows={3.5}
-                  placeholder="e.g. Watch the complete video (minimum 3 mins), click Like, subscribe to the channel with notification bell on, and take a screenshot."
-                  value={ytProcedure}
-                  onChange={(e) => setYtProcedure(e.target.value)}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', fontFamily: 'monospace' } }}
+                  rows={8}
+                  placeholder="Paste YouTube comments here (one comment per line)..."
+                  value={ytCommentsText}
+                  onChange={(e) => setYtCommentsText(e.target.value)}
+                  sx={{
+                    width: '100%',
+                    '& .MuiOutlinedInput-root': {
+                      fontFamily: 'monospace',
+                      fontSize: '0.88rem',
+                      borderRadius: '16px',
+                      bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.8)'
+                    }
+                  }}
                 />
-              </Grid>
-
-              {/* If Watch & Like only: Slots */}
-              {ytCommentMode === 'none' && (
-                <Grid item xs={12} md={4}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Watch Task Slots / Capacity *</Typography>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    size="small"
-                    placeholder="e.g. 50"
-                    value={ytSlots}
-                    onChange={(e) => setYtSlots(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
-                  />
-                  <Typography variant="caption" color="text.secondary">Total workers who can perform this task</Typography>
-                </Grid>
-              )}
-
-              {/* If specific comments: Comments List */}
-              {ytCommentMode === 'custom_comments' && (
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                    Paste YouTube Comments List (One per line) *
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={8}
-                    placeholder="Paste YouTube comments here (one comment per line)..."
-                    value={ytCommentsText}
-                    onChange={(e) => setYtCommentsText(e.target.value)}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px', fontFamily: 'monospace' } }}
-                  />
-                </Grid>
-              )}
-            </Grid>
+              </Box>
+            )}
           </Box>
         )}
 
-        {/* Save & Deploy Button */}
-        <Button 
-          variant="contained" 
-          size="large" 
-          fullWidth 
-          onClick={handleSave} 
-          disabled={saving || !selectedApp}
-          sx={{ 
-            mt: 4, 
-            py: 1.8, 
-            fontSize: '1.15rem', 
-            fontWeight: 700, 
-            borderRadius: '16px',
-            textTransform: 'none',
-            boxShadow: '0 8px 24px rgba(25, 118, 210, 0.25)'
+        <Divider sx={{ borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+
+        {/* 4. Live Telemetry Summary & Primary Deploy Pod */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 2.5,
+            p: 2.5,
+            borderRadius: '20px',
+            bgcolor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.04)',
+            border: '1.5px solid',
+            borderColor: isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.18)',
+            width: '100%'
           }}
         >
-          {saving ? 'Processing & Deploying Tasks...' : `Save & Deploy ${effectiveType} Task`}
-        </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: '12px',
+                bgcolor: 'rgba(99,102,241,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#6366f1'
+              }}
+            >
+              <PlaylistAddCheckIcon sx={{ fontSize: 24 }} />
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                {liveParsedCount} Task Slots Ready to Deploy
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {selectedApp ? `Targeting: ${selectedApp.app_name} (${effectiveType})` : 'Select an application above to activate deployment'}
+              </Typography>
+            </Box>
+          </Box>
+
+          <Button
+            variant="contained"
+            size="large"
+            onClick={handleSave}
+            disabled={saving || !selectedApp}
+            startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
+            sx={{
+              px: 4,
+              py: 1.5,
+              borderRadius: '14px',
+              fontWeight: 800,
+              fontSize: '0.95rem',
+              textTransform: 'none',
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              boxShadow: '0 8px 24px rgba(99,102,241,0.35)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                boxShadow: '0 12px 28px rgba(99,102,241,0.45)'
+              },
+              '&:disabled': {
+                opacity: 0.5
+              }
+            }}
+          >
+            {saving ? 'Deploying to Workstations...' : `Deploy ${liveParsedCount > 0 ? liveParsedCount : ''} ${effectiveType} Task Slots`}
+          </Button>
+        </Box>
       </Paper>
 
-      {/* Material Alert Dialog */}
+      {/* Confirmation & Feedback Dialog */}
       <Dialog 
         open={alertData.open} 
         onClose={() => setAlertData({ ...alertData, open: false })}
-        PaperProps={{ sx: { borderRadius: '28px', p: 2, minWidth: '320px', textAlign: 'center' } }}
+        PaperProps={{
+          sx: {
+            borderRadius: '24px',
+            p: 2,
+            minWidth: '340px',
+            maxWidth: '480px',
+            textAlign: 'center',
+            bgcolor: isDark ? 'rgba(15,23,42,0.95)' : '#ffffff',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid',
+            borderColor: alertData.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.35)'
+          }
+        }}
       >
-        <DialogTitle sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 700, fontSize: '1.4rem', color: alertData.type === 'error' ? 'error.main' : 'success.main' }}>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem', color: alertData.type === 'error' ? '#ef4444' : '#10b981', pb: 1 }}>
           {alertData.title}
         </DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ color: 'text.primary', fontSize: '1.05rem', mt: 1 }}>
+          <DialogContentText sx={{ color: 'text.primary', fontSize: '0.92rem', mt: 0.5 }}>
             {alertData.message}
           </DialogContentText>
         </DialogContent>
-        <DialogActions sx={{ justifyContent: 'center', pb: 2, pt: 1 }}>
+        <DialogActions sx={{ justifyContent: 'center', pb: 1, pt: 1 }}>
           <Button 
             onClick={() => setAlertData({ ...alertData, open: false })} 
             variant="contained" 
-            color={alertData.type === 'error' ? 'error' : 'success'} 
-            disableElevation 
-            sx={{ px: 4, py: 1, borderRadius: '100px', fontWeight: 600, textTransform: 'none' }}
+            sx={{
+              px: 4,
+              py: 1,
+              borderRadius: '12px',
+              fontWeight: 700,
+              textTransform: 'none',
+              bgcolor: alertData.type === 'error' ? '#ef4444' : '#10b981',
+              '&:hover': {
+                bgcolor: alertData.type === 'error' ? '#dc2626' : '#059669'
+              }
+            }}
           >
-            OK
+            Acknowledge
           </Button>
         </DialogActions>
       </Dialog>

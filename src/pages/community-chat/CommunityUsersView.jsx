@@ -19,6 +19,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ForumIcon from '@mui/icons-material/Forum';
 import ChatBubbleIcon from '@mui/icons-material/ChatBubble';
+import PhoneIcon from '@mui/icons-material/Phone';
 import Swal from 'sweetalert2';
 
 import {
@@ -302,10 +303,10 @@ export default function CommunityUsersView() {
         sx={{
           p: 2.5,
           borderRadius: '22px',
-          border: `1px solid ${theme.palette.divider}`,
-          background: isDark
-            ? 'linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(15,23,42,0.9) 100%)'
-            : 'linear-gradient(135deg, rgba(239,246,255,0.85) 0%, rgba(255,255,255,0.98) 100%)',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)',
+          bgcolor: isDark ? 'rgba(12, 17, 29, 0.7)' : 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(24px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -353,31 +354,31 @@ export default function CommunityUsersView() {
       {/* Quick Stats Metric Cards */}
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={2.4}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: '18px', border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
+          <Paper elevation={0} sx={{ p: 2.2, borderRadius: '20px', border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)', bgcolor: isDark ? 'rgba(12, 17, 29, 0.65)' : 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(20px) saturate(160%)', WebkitBackdropFilter: 'blur(20px) saturate(160%)', transition: 'transform 0.2s ease', '&:hover': { transform: 'translateY(-2px)' } }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Active Chatters</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#3b82f6' }}>{metrics.totalChatters}</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: '18px', border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
+          <Paper elevation={0} sx={{ p: 2.2, borderRadius: '20px', border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)', bgcolor: isDark ? 'rgba(12, 17, 29, 0.65)' : 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(20px) saturate(160%)', WebkitBackdropFilter: 'blur(20px) saturate(160%)', transition: 'transform 0.2s ease', '&:hover': { transform: 'translateY(-2px)' } }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Total Messages</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#06b6d4' }}>{metrics.totalMessages}</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: '18px', border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
+          <Paper elevation={0} sx={{ p: 2.2, borderRadius: '20px', border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)', bgcolor: isDark ? 'rgba(12, 17, 29, 0.65)' : 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(20px) saturate(160%)', WebkitBackdropFilter: 'blur(20px) saturate(160%)', transition: 'transform 0.2s ease', '&:hover': { transform: 'translateY(-2px)' } }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Active Accounts</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#22c55e' }}>{metrics.activeCount}</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: '18px', border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
+          <Paper elevation={0} sx={{ p: 2.2, borderRadius: '20px', border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)', bgcolor: isDark ? 'rgba(12, 17, 29, 0.65)' : 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(20px) saturate(160%)', WebkitBackdropFilter: 'blur(20px) saturate(160%)', transition: 'transform 0.2s ease', '&:hover': { transform: 'translateY(-2px)' } }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Suspended Accounts</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#ef4444' }}>{metrics.suspendedCount}</Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={2.4}>
-          <Paper elevation={0} sx={{ p: 2, borderRadius: '18px', border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
+          <Paper elevation={0} sx={{ p: 2.2, borderRadius: '20px', border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)', bgcolor: isDark ? 'rgba(12, 17, 29, 0.65)' : 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(20px) saturate(160%)', WebkitBackdropFilter: 'blur(20px) saturate(160%)', transition: 'transform 0.2s ease', '&:hover': { transform: 'translateY(-2px)' } }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>Blocked in Chat</Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: '#f59e0b' }}>{metrics.mutedCount}</Typography>
           </Paper>
@@ -390,8 +391,10 @@ export default function CommunityUsersView() {
         sx={{
           p: 2.2,
           borderRadius: '22px',
-          border: `1px solid ${theme.palette.divider}`,
-          bgcolor: 'background.paper',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)',
+          bgcolor: isDark ? 'rgba(12, 17, 29, 0.65)' : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
           display: 'flex',
           flexDirection: 'column',
           gap: 2
@@ -504,10 +507,12 @@ export default function CommunityUsersView() {
         elevation={0}
         sx={{
           borderRadius: '24px',
-          border: `1px solid ${theme.palette.divider}`,
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)',
           overflow: 'hidden',
-          bgcolor: 'background.paper',
-          boxShadow: isDark ? '0 10px 30px rgba(0,0,0,0.3)' : '0 10px 24px rgba(37,99,235,0.05)'
+          bgcolor: isDark ? 'rgba(12, 17, 29, 0.65)' : 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+          boxShadow: isDark ? '0 12px 35px rgba(0,0,0,0.4)' : '0 10px 26px rgba(37,99,235,0.04)'
         }}
       >
         {loading ? (
@@ -614,7 +619,7 @@ export default function CommunityUsersView() {
                         {/* Contact Details */}
                         <TableCell sx={{ py: 1.6 }}>
                           <Typography variant="body2" sx={{ fontSize: '0.82rem', fontWeight: 650 }}>{user.email}</Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>📞 {user.phone}</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}><PhoneIcon sx={{ fontSize: 13, color: 'text.secondary' }} /><Typography variant="caption" color="text.secondary">{user.phone}</Typography></Box>
                           {user.bulker_id && user.bulker_id !== '—' && (
                             <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
                               Bulker: {user.bulker_id}

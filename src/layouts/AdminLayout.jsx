@@ -41,6 +41,9 @@ import Collapse from '@mui/material/Collapse';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import SecurityIcon from '@mui/icons-material/Security';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import SearchIcon from '@mui/icons-material/Search';
+import OmniSearchModal from '../components/OmniSearchModal';
 import { supabase } from '../supabaseClient';
 
 import { ColorModeContext } from '../App';
@@ -52,6 +55,18 @@ export default function AdminLayout() {
   const colorMode = useContext(ColorModeContext);
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const [expandedPaymentMenu, setExpandedPaymentMenu] = useState('');
   const [sidebarLoading, setSidebarLoading] = useState(true);
   const navigate = useNavigate();
@@ -171,38 +186,38 @@ export default function AdminLayout() {
   };
 
   const mainMenuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon fontSize="small" />, path: '/' },
-    { text: 'Users', icon: <PeopleAltIcon fontSize="small" />, path: '/users' },
-    { text: 'Puja 2026 Feed', icon: <PhotoLibraryIcon fontSize="small" sx={{ color: '#f59e0b' }} />, path: '/puja-feed-2026' },
-    { text: 'Community Group Chat', icon: <ForumIcon fontSize="small" sx={{ color: '#06b6d4' }} />, path: '/community-chat' },
-    { text: 'Payments', icon: <AccountBalanceWalletIcon fontSize="small" />, path: '/payments' },
-    { text: 'Notifications', icon: <NotificationsActiveIcon fontSize="small" />, path: '/notifications', badge: totalNotifications },
+    { text: 'Dashboard', icon: <DashboardIcon fontSize="small" />, color: '#3b82f6', path: '/' },
+    { text: 'Users Directory', icon: <PeopleAltIcon fontSize="small" />, color: '#06b6d4', path: '/users' },
+    { text: 'Festive Puja Feed', icon: <PhotoLibraryIcon fontSize="small" />, color: '#f59e0b', path: '/puja-feed-2026' },
+    { text: 'Community Lounge', icon: <ForumIcon fontSize="small" />, color: '#8b5cf6', path: '/community-chat' },
+    { text: 'Payment Ledger', icon: <AccountBalanceWalletIcon fontSize="small" />, color: '#10b981', path: '/payments' },
+    { text: 'System Alerts', icon: <NotificationsActiveIcon fontSize="small" />, color: '#ec4899', path: '/notifications', badge: totalNotifications },
   ];
 
   const appManagementItems = [
-    { text: 'Add App', icon: <LibraryAddIcon fontSize="small" />, path: '/add-app' },
-    { text: 'App List', icon: <AppsIcon fontSize="small" />, path: '/app-list' },
+    { text: 'Deploy New App', icon: <LibraryAddIcon fontSize="small" />, color: '#3b82f6', path: '/add-app' },
+    { text: 'Published Apps', icon: <AppsIcon fontSize="small" />, color: '#06b6d4', path: '/app-list' },
   ];
 
   const commentManagementItems = [
-    { text: 'Add Comment', icon: <RateReviewIcon fontSize="small" />, path: '/add-comment' },
-    { text: 'Manage Comment', icon: <ForumIcon fontSize="small" />, path: '/manage-comment' },
+    { text: 'Add Review Task', icon: <RateReviewIcon fontSize="small" />, color: '#f59e0b', path: '/add-comment' },
+    { text: 'Review Submissions', icon: <ForumIcon fontSize="small" />, color: '#8b5cf6', path: '/manage-comment' },
   ];
 
   const liveListItems = [
-    { text: 'Add Live', icon: <PlaylistAddCheckIcon fontSize="small" />, path: '/add-live' },
-    { text: 'Live List', icon: <ViewListIcon fontSize="small" />, path: '/live-list' },
+    { text: 'Add Verification', icon: <PlaylistAddCheckIcon fontSize="small" />, color: '#10b981', path: '/add-live' },
+    { text: 'Verification List', icon: <ViewListIcon fontSize="small" />, color: '#3b82f6', path: '/live-list' },
   ];
 
   const othersItems = [
-    { text: 'Live Checking Mails', icon: <EmailIcon fontSize="small" />, path: '/live-checking-mails' },
-    { text: 'Push Notifications', icon: <NotificationsActiveIcon fontSize="small" />, path: '/push-notifications' },
-    { text: 'Scan Zone', icon: <QrCodeScannerIcon fontSize="small" />, path: '/scan-zone' },
-    { text: '🩺 Doctor Novaira', icon: <SecurityIcon fontSize="small" sx={{ color: '#10b981' }} />, path: 'http://localhost:7700', external: true },
+    { text: 'Mail Diagnostics', icon: <EmailIcon fontSize="small" />, color: '#06b6d4', path: '/live-checking-mails' },
+    { text: 'Push Broadcasts', icon: <CampaignIcon fontSize="small" />, color: '#ec4899', path: '/push-notifications' },
+    { text: 'OCR Scanner Zone', icon: <QrCodeScannerIcon fontSize="small" />, color: '#f59e0b', path: '/scan-zone' },
+    { text: 'System Health Diagnostics', icon: <MonitorHeartIcon fontSize="small" />, color: '#10b981', path: 'http://localhost:7700', external: true },
   ];
 
   const fileManagerItems = [
-    { text: 'File Manager', icon: <FolderSharedIcon fontSize="small" />, path: '/file-manager' },
+    { text: 'Cloud File Vault', icon: <FolderSharedIcon fontSize="small" />, color: '#6366f1', path: '/file-manager' },
   ];
 
   const renderSkeletonItem = (key) => (
@@ -241,22 +256,24 @@ export default function AdminLayout() {
             // Active State
             ...(isActive ? {
               background: isDark
-                ? 'linear-gradient(135deg, rgba(37,99,235,0.22) 0%, rgba(59,130,246,0.10) 100%)'
-                : 'linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(96,165,250,0.06) 100%)',
+                ? 'linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(147,51,234,0.14) 100%)'
+                : 'linear-gradient(135deg, rgba(37,99,235,0.14) 0%, rgba(96,165,250,0.08) 100%)',
               color: isDark ? '#93c5fd' : '#1d4ed8',
+              backdropFilter: 'blur(12px)',
+              border: isDark ? '1px solid rgba(96,165,250,0.32)' : '1px solid rgba(37,99,235,0.20)',
               boxShadow: isDark
-                ? 'inset 0 0 0 1px rgba(96,165,250,0.3), 0 4px 16px rgba(0,0,0,0.25)'
-                : 'inset 0 0 0 1px rgba(37,99,235,0.22), 0 4px 16px rgba(37,99,235,0.1)',
+                ? '0 6px 20px rgba(59,130,246,0.22), inset 0 0 10px rgba(96,165,250,0.10)'
+                : '0 4px 16px rgba(37,99,235,0.10)',
               '&::before': {
                 content: '""',
                 position: 'absolute',
                 left: 0,
-                top: '22%',
-                bottom: '22%',
+                top: '20%',
+                bottom: '20%',
                 width: '4px',
                 borderRadius: '0 4px 4px 0',
-                background: 'linear-gradient(180deg, #3b82f6, #60a5fa)',
-                boxShadow: '0 0 10px #3b82f6',
+                background: 'linear-gradient(180deg, #38bdf8, #818cf8)',
+                boxShadow: '0 0 12px #38bdf8',
               }
             } : {
               color: isDark ? '#94a3b8' : '#64748b',
@@ -382,44 +399,29 @@ export default function AdminLayout() {
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-      <Box sx={{ px: 2, pt: 2, pb: 1.4 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            px: 1.5,
-            py: 1.2,
-            borderRadius: '20px',
-            border: theme.palette.mode === 'light'
-              ? '1px solid rgba(37,99,235,0.12)'
-              : '1px solid rgba(148,163,184,0.12)',
-            background: theme.palette.mode === 'light'
-              ? 'linear-gradient(135deg, rgba(37,99,235,0.06) 0%, rgba(255,255,255,0.9) 100%)'
-              : 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.85) 100%)',
-            boxShadow: theme.palette.mode === 'light'
-              ? '0 10px 24px -6px rgba(37,99,235,0.08)'
-              : '0 10px 24px -6px rgba(0,0,0,0.3)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              borderColor: 'primary.main',
-              transform: 'translateY(-1px)',
-              boxShadow: '0 12px 28px -4px rgba(37,99,235,0.15)',
-            }
-          }}
-        >
+      <Box
+        sx={{
+          height: '68px',
+          minHeight: '68px',
+          px: 2.2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.mode === 'light' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.02)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.4 }}>
           <Box sx={{ position: 'relative' }}>
             <Avatar
               sx={{
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 color: '#fff',
-                fontSize: '1rem',
+                fontSize: '0.95rem',
                 fontWeight: 900,
                 background: 'linear-gradient(135deg, #2563eb, #38bdf8)',
-                boxShadow: '0 8px 16px rgba(37,99,235,0.32)',
-                transition: 'transform 0.3s ease',
-                '&:hover': { transform: 'rotate(10deg) scale(1.05)' }
+                boxShadow: '0 6px 14px rgba(37,99,235,0.3)',
               }}
             >
               {adminSession.name ? adminSession.name.charAt(0).toUpperCase() : 'N'}
@@ -429,26 +431,43 @@ export default function AdminLayout() {
                 position: 'absolute',
                 bottom: -1,
                 right: -1,
-                width: 10,
-                height: 10,
+                width: 9,
+                height: 9,
                 borderRadius: '50%',
                 bgcolor: '#22c55e',
-                border: `2px solid ${theme.palette.mode === 'light' ? '#fff' : '#0f172a'}`,
-                boxShadow: '0 0 8px #22c55e',
+                border: `2px solid ${theme.palette.mode === 'light' ? '#fff' : '#0c0f17'}`,
+                boxShadow: '0 0 6px #22c55e',
               }}
             />
           </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body1" sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 800, fontSize: '0.94rem', lineHeight: 1.2, letterSpacing: '-0.01em' }}>
+          <Box>
+            <Typography variant="body1" sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 800, fontSize: '0.92rem', lineHeight: 1.2, letterSpacing: '-0.01em' }}>
               Novaira Global
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.3 }}>
-              <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 800, fontSize: '0.62rem', letterSpacing: 1.2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.2 }}>
+              <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 800, fontSize: '0.62rem', letterSpacing: 1.1 }}>
                 ADMIN PRO
               </Typography>
-              <Chip label="v2.1" size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 800, bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.08)' : 'rgba(59,130,246,0.15)', color: 'primary.main' }} />
+              <Chip label="v2.1" size="small" sx={{ height: 16, fontSize: '0.58rem', fontWeight: 800, bgcolor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.08)' : 'rgba(59,130,246,0.15)', color: 'primary.main', px: 0.2 }} />
             </Box>
           </Box>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+          <Box
+            sx={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              bgcolor: '#10b981',
+              boxShadow: '0 0 8px #10b981',
+              animation: 'dockPulse 2.5s infinite',
+              '@keyframes dockPulse': {
+                '0%, 100%': { opacity: 0.7, transform: 'scale(1)' },
+                '50%': { opacity: 1, transform: 'scale(1.25)' },
+              }
+            }}
+          />
         </Box>
       </Box>
 
@@ -465,8 +484,9 @@ export default function AdminLayout() {
         sx={{
           p: 1.8,
           borderTop: `1px solid ${theme.palette.divider}`,
-          background: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.8)' : 'rgba(12,15,23,0.8)',
-          backdropFilter: 'blur(10px)',
+          background: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.78)' : 'rgba(8,11,18,0.72)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          borderTop: theme.palette.mode === 'light' ? '1px solid rgba(15,23,42,0.08)' : '1px solid rgba(255,255,255,0.08)',
         }}
       >
         <List sx={{ p: 0, mb: 1.2, mx: -0.5 }}>
@@ -613,7 +633,7 @@ export default function AdminLayout() {
 
   const paymentsDrawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-      <Box sx={{ px: 2, pt: 2.4, pb: 1.5, display: 'flex', alignItems: 'center' }}>
+      <Box sx={{ height: '68px', minHeight: '68px', px: 2, display: 'flex', alignItems: 'center', borderBottom: `1px solid ${theme.palette.divider}` }}>
         <Button
           fullWidth
           variant="outlined"
@@ -621,8 +641,8 @@ export default function AdminLayout() {
           startIcon={<ArrowBackIosNewIcon fontSize="small" />}
           onClick={() => navigate('/')}
           sx={{
-            borderRadius: '18px',
-            minHeight: '42px',
+            borderRadius: '12px',
+            minHeight: '38px',
             justifyContent: 'flex-start',
             color: 'text.secondary',
             borderColor: 'divider',
@@ -666,68 +686,150 @@ export default function AdminLayout() {
       </Box>
 
       <Box sx={{ p: 2, pt: 1.5, borderTop: `1px solid ${theme.palette.divider}`, background: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(15,17,23,0.5)', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.85rem', fontWeight: 700 }}>
-          {adminSession.name ? adminSession.name.charAt(0).toUpperCase() : 'N'}
+        <Avatar sx={{ width: 34, height: 34, background: 'linear-gradient(135deg, #10b981, #06b6d4)', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)' }}>
+          <AccountBalanceWalletIcon sx={{ fontSize: 18, color: '#fff' }} />
         </Avatar>
-        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{adminSession.name || 'Admin User'}</Typography>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 800, fontSize: '0.82rem' }}>Financial Ledger</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+            <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, fontSize: '0.68rem', letterSpacing: '0.03em' }}>LEDGER SECURED</Typography>
+          </Box>
+        </Box>
       </Box>
     </Box>
   );
 
-    const communityChatSubMenuItems = [
-    { text: 'Live Chats', icon: <ForumIcon fontSize="small" sx={{ color: '#06b6d4' }} />, path: '/community-chat' },
-    { text: 'Users & Moderation', icon: <PeopleAltIcon fontSize="small" sx={{ color: '#3b82f6' }} />, path: '/community-chat/users' },
-    { text: 'Ads & Campaigns', icon: <CampaignIcon fontSize="small" sx={{ color: '#f59e0b' }} />, path: '/community-chat/ads' },
-    { text: 'Pinned Notices', icon: <PushPinIcon fontSize="small" sx={{ color: '#ec4899' }} />, path: '/community-chat/pinned' },
-    { text: 'Security & Settings', icon: <SecurityIcon fontSize="small" sx={{ color: '#10b981' }} />, path: '/community-chat/settings' },
+  const communityChatSubMenuItems = [
+    { text: 'Live Stream Lounge', icon: <ForumIcon fontSize="small" />, color: '#06b6d4', path: '/community-chat' },
+    { text: 'Chatters & Moderation', icon: <PeopleAltIcon fontSize="small" />, color: '#3b82f6', path: '/community-chat/users' },
+    { text: 'Broadcast Ads', icon: <CampaignIcon fontSize="small" />, color: '#f59e0b', path: '/community-chat/ads' },
+    { text: 'Pinned Announcements', icon: <PushPinIcon fontSize="small" />, color: '#ec4899', path: '/community-chat/pinned' },
+    { text: 'Security & Slow Mode', icon: <SecurityIcon fontSize="small" />, color: '#10b981', path: '/community-chat/settings' },
   ];
 
   const communityChatDrawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-      <Box sx={{ px: 2, pt: 2.4, pb: 1.5, display: 'flex', alignItems: 'center' }}>
+      <Box
+        sx={{
+          height: '68px',
+          minHeight: '68px',
+          px: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.mode === 'light' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.02)',
+        }}
+      >
         <Button
           fullWidth
           variant="outlined"
           color="inherit"
-          startIcon={<ArrowBackIosNewIcon fontSize="small" />}
+          startIcon={<ArrowBackIosNewIcon fontSize="small" sx={{ fontSize: 13 }} />}
           onClick={() => navigate('/')}
           sx={{
-            borderRadius: '18px',
-            minHeight: '42px',
+            borderRadius: '12px',
+            minHeight: '38px',
             justifyContent: 'flex-start',
-            color: 'text.secondary',
-            borderColor: 'divider',
+            color: 'text.primary',
+            borderColor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.1)' : 'rgba(255,255,255,0.1)',
             textTransform: 'none',
-            fontWeight: 600,
+            fontWeight: 750,
             fontSize: '0.8rem',
-            backgroundColor: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.5)' : 'rgba(15,17,23,0.35)',
+            bgcolor: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.04)',
+            '&:hover': {
+              bgcolor: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.08)',
+              borderColor: 'primary.main',
+            }
           }}
         >
           Back to Dashboard
         </Button>
       </Box>
 
-      <Box sx={{ overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, px: 0, pt: 0, pb: 2 }}>
-        <Typography variant="overline" sx={{ px: 3, mb: 0.8, mt: 1.5, fontWeight: 700, color: 'text.disabled', fontSize: '0.6rem', display: 'block', letterSpacing: 0.7 }}>
-          COMMUNITY CHAT
+      {/* Brand & Channel Info */}
+      <Box sx={{ px: 2.2, pt: 2, pb: 1 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.2,
+            p: 1.4,
+            borderRadius: '16px',
+            bgcolor: 'rgba(6, 182, 212, 0.1)',
+            border: '1px solid rgba(6, 182, 212, 0.25)',
+          }}
+        >
+          <Avatar sx={{ width: 32, height: 32, background: 'linear-gradient(135deg, #06b6d4, #3b82f6)', boxShadow: '0 4px 10px rgba(6, 182, 212, 0.35)' }}>
+            <ForumIcon sx={{ fontSize: 17, color: '#fff' }} />
+          </Avatar>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: '0.82rem', lineHeight: 1.2 }}>
+              Community Lounge
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#06b6d4', fontWeight: 700, fontSize: '0.66rem', letterSpacing: '0.04em' }}>
+              MODERATION OS
+            </Typography>
+          </Box>
+          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
+        </Box>
+      </Box>
+
+      <Box sx={{ overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, px: 0, pt: 0.5, pb: 2 }}>
+        <Typography variant="overline" sx={{ px: 2.8, mb: 0.6, mt: 1.2, fontWeight: 800, color: 'text.secondary', fontSize: '0.62rem', display: 'flex', alignItems: 'center', letterSpacing: 1.2, gap: 1.2, '&::after': { content: '""', flex: 1, height: '1px', bgcolor: theme.palette.divider, opacity: 0.7, mr: 2.2 } }}>
+          LOUNGE CHANNELS
         </Typography>
 
-        <List sx={{ pt: 0 }}>
+        <List sx={{ pt: 0, pb: 0.4 }}>
           {communityChatSubMenuItems.map(renderMenuItem)}
         </List>
       </Box>
 
-      <Box sx={{ p: 2, pt: 1.5, borderTop: `1px solid ${theme.palette.divider}`, background: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(15,17,23,0.5)', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ width: 32, height: 32, bgcolor: '#06b6d4', fontSize: '0.85rem', fontWeight: 700 }}>
-          💬
-        </Avatar>
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 750, fontSize: '0.8rem' }}>Community Lounge</Typography>
-          <Typography variant="caption" sx={{ color: '#22c55e', fontWeight: 700, fontSize: '0.65rem' }}>● Real-time Active</Typography>
+      {/* Footer Live Telemetry */}
+      <Box
+        sx={{
+          p: 1.8,
+          borderTop: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.mode === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(8,11,18,0.7)',
+          backdropFilter: 'blur(20px)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+          <Box sx={{ position: 'relative' }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 800, fontSize: '0.72rem', color: '#22c55e', letterSpacing: '0.04em', display: 'block' }}>
+              REAL-TIME WEBSOCKET
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+              Connected to public lounge
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </Box>
   );
+
+  const getHeaderInfo = () => {
+    const allItems = [
+      ...mainMenuItems,
+      ...appManagementItems,
+      ...commentManagementItems,
+      ...liveListItems,
+      ...othersItems,
+      ...fileManagerItems,
+      ...communityChatSubMenuItems,
+    ];
+    const match = allItems.find((m) => m.path === location.pathname);
+    if (match) return { title: match.text, section: 'Novaira OS' };
+    if (location.pathname.startsWith('/puja-feed')) return { title: 'Festive Puja Feed', section: 'Campaigns' };
+    if (location.pathname.startsWith('/community-chat')) return { title: 'Community Lounge', section: 'Realtime' };
+    if (location.pathname.startsWith('/payments')) return { title: 'Financial Ledger', section: 'Payments' };
+    if (location.pathname.startsWith('/settings')) return { title: 'Platform Settings', section: 'System' };
+    return { title: 'Novaira Admin Suite', section: 'Novaira OS' };
+  };
 
   const activeDrawer = isPaymentsRoute ? paymentsDrawer : (isCommunityChatRoute ? communityChatDrawer : drawer);
 
@@ -741,51 +843,214 @@ export default function AdminLayout() {
         sx={{
           width: { md: `calc(100% - ${drawerWidth}px)` },
           ml: { md: `${drawerWidth}px` },
-          borderBottom: `1px solid ${theme.palette.divider}`,
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          backgroundColor: theme.palette.mode === 'light' ? 'rgba(255, 255, 255, 0.78)' : 'rgba(7, 9, 14, 0.75)',
+          borderBottom: theme.palette.mode === 'light' ? '1px solid rgba(15, 23, 42, 0.08)' : '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: theme.palette.mode === 'light' ? '0 4px 20px rgba(0, 0, 0, 0.02)' : '0 10px 30px rgba(0, 0, 0, 0.35)',
+          transition: 'all 0.3s ease',
         }}
       >
-        <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, sm: 3 } }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, sm: 3 }, minHeight: '68px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <IconButton
               color="inherit"
               aria-label="open drawer"
               edge="start"
               onClick={handleDrawerToggle}
-              sx={{ mr: 2, display: { md: 'none' } }}
+              sx={{
+                display: { md: 'none' },
+                borderRadius: '12px',
+                border: theme.palette.mode === 'light' ? '1px solid rgba(15,23,42,0.1)' : '1px solid rgba(255,255,255,0.1)',
+                bgcolor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.03)' : 'rgba(255,255,255,0.05)',
+              }}
             >
               <MenuIcon />
             </IconButton>
 
-            <Typography variant="h6" noWrap component="div" sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600, display: { xs: 'none', sm: 'block' } }}>
-              {[...mainMenuItems, ...appManagementItems].find((m) => m.path === location.pathname)?.text || 'Novaira Admin'}
-            </Typography>
+            <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  {getHeaderInfo().section}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.68rem' }}>/</Typography>
+                <Typography variant="h6" noWrap sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.01em', background: theme.palette.mode === 'dark' ? 'linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%)' : 'linear-gradient(135deg, #0f172a 0%, #334155 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                  {getHeaderInfo().title}
+                </Typography>
+              </Box>
+            </Box>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <IconButton onClick={colorMode.toggleColorMode} color="inherit" size="large" sx={{ backgroundColor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(148,163,184,0.08)', borderRadius: '12px', border: theme.palette.mode === 'light' ? '1px solid rgba(37,99,235,0.10)' : 'none' }}>
-              {theme.palette.mode === 'dark' ? <LightModeIcon sx={{ color: '#fbbf24' }} /> : <DarkModeOutlinedIcon />}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                        {/* OmniSearch Global Search Pill */}
+            <Box
+              onClick={() => setSearchOpen(true)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.2,
+                px: 1.8,
+                py: 0.7,
+                width: { xs: '150px', sm: '240px', md: '340px' },
+                borderRadius: '12px',
+                cursor: 'pointer',
+                bgcolor: theme.palette.mode === 'light' ? 'rgba(15, 23, 42, 0.04)' : 'rgba(255, 255, 255, 0.05)',
+                border: theme.palette.mode === 'light' ? '1px solid rgba(15, 23, 42, 0.08)' : '1px solid rgba(255, 255, 255, 0.08)',
+                backdropFilter: 'blur(12px)',
+                transition: 'all 0.22s ease',
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'light' ? 'rgba(15, 23, 42, 0.07)' : 'rgba(255, 255, 255, 0.08)',
+                  borderColor: 'primary.main',
+                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.08)',
+                }
+              }}
+            >
+              <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+              <Typography sx={{ flex: 1, fontSize: '0.82rem', color: 'text.secondary', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Search pages, users, apps...
+              </Typography>
+              <Chip
+                label="Ctrl K"
+                size="small"
+                sx={{
+                  display: { xs: 'none', sm: 'inline-flex' },
+                  height: 19,
+                  fontSize: '0.62rem',
+                  fontWeight: 800,
+                  borderRadius: '5px',
+                  bgcolor: theme.palette.mode === 'light' ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)',
+                  color: 'text.secondary',
+                  border: theme.palette.mode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.1)'
+                }}
+              />
+            </Box>
+
+            {/* Live Security Pill */}
+            <Box
+              sx={{
+                display: { xs: 'none', md: 'flex' },
+                alignItems: 'center',
+                gap: 0.8,
+                px: 1.5,
+                py: 0.5,
+                borderRadius: '24px',
+                background: theme.palette.mode === 'light' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                boxShadow: '0 0 16px rgba(16, 185, 129, 0.15)',
+              }}
+            >
+              <Box
+                sx={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  bgcolor: '#10b981',
+                  boxShadow: '0 0 10px #10b981',
+                  animation: 'pulseStatusDot 2s infinite',
+                  '@keyframes pulseStatusDot': {
+                    '0%': { transform: 'scale(1)', opacity: 0.8 },
+                    '50%': { transform: 'scale(1.3)', opacity: 1 },
+                    '100%': { transform: 'scale(1)', opacity: 0.8 },
+                  }
+                }}
+              />
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: '#10b981', letterSpacing: '0.06em' }}>
+                SYSTEM SECURE
+              </Typography>
+            </Box>
+
+            {/* Dark / Light Mode Toggle */}
+            <IconButton
+              onClick={colorMode.toggleColorMode}
+              size="small"
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: '13px',
+                background: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(255,255,255,0.05)',
+                border: theme.palette.mode === 'light' ? '1px solid rgba(37,99,235,0.12)' : '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                '&:hover': {
+                  background: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.12)' : 'rgba(255,255,255,0.1)',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 6px 16px rgba(0,0,0,0.12)'
+                }
+              }}
+            >
+              {theme.palette.mode === 'dark' ? <LightModeIcon sx={{ color: '#fbbf24', fontSize: '1.25rem' }} /> : <DarkModeOutlinedIcon sx={{ color: '#2563eb', fontSize: '1.25rem' }} />}
             </IconButton>
 
+            {/* Notifications Toggle */}
             <IconButton
               onClick={handleNotifOpen}
-              color="inherit"
-              size="large"
+              size="small"
               sx={{
-                backgroundColor: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.03)' : 'rgba(148,163,184,0.08)',
-                borderRadius: '12px',
-                border: theme.palette.mode === 'light' ? '1px solid rgba(15,23,42,0.04)' : 'none'
+                width: 40,
+                height: 40,
+                borderRadius: '13px',
+                background: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.04)' : 'rgba(255,255,255,0.05)',
+                border: theme.palette.mode === 'light' ? '1px solid rgba(15,23,42,0.08)' : '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                '&:hover': {
+                  background: theme.palette.mode === 'light' ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.1)',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 6px 16px rgba(0,0,0,0.12)'
+                }
               }}
             >
               <Badge badgeContent={totalNotifications} color="error" max={99}>
-                <NotificationsNoneIcon />
+                <NotificationsNoneIcon sx={{ fontSize: '1.25rem' }} />
               </Badge>
             </IconButton>
 
-            <IconButton onClick={handleProfileMenuOpen} sx={{ ml: 0.5, p: 0.5, backgroundColor: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(148,163,184,0.08)', borderRadius: '14px', border: theme.palette.mode === 'light' ? '1px solid rgba(37,99,235,0.10)' : 'none' }}>
-              <Avatar alt="Admin" sx={{ width: 36, height: 36, bgcolor: theme.palette.primary.main }}>
-                <AccountCircleIcon />
+            {/* Profile Pill */}
+            <Box
+              onClick={handleProfileMenuOpen}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.2,
+                py: 0.5,
+                px: 1.2,
+                pl: 0.6,
+                borderRadius: '16px',
+                cursor: 'pointer',
+                background: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.05)' : 'rgba(255,255,255,0.05)',
+                border: theme.palette.mode === 'light' ? '1px solid rgba(37,99,235,0.12)' : '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                '&:hover': {
+                  background: theme.palette.mode === 'light' ? 'rgba(37,99,235,0.1)' : 'rgba(255,255,255,0.1)',
+                  transform: 'translateY(-2px)',
+                  borderColor: 'primary.main',
+                  boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
+                }
+              }}
+            >
+              <Avatar
+                alt="Admin"
+                sx={{
+                  width: 34,
+                  height: 34,
+                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.35)',
+                  fontSize: '0.88rem',
+                  fontWeight: 900
+                }}
+              >
+                {adminSession?.name ? adminSession.name.charAt(0).toUpperCase() : 'A'}
               </Avatar>
-            </IconButton>
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'left', pr: 0.5 }}>
+                <Typography sx={{ fontSize: '0.78rem', fontWeight: 750, lineHeight: 1.2, color: 'text.primary' }}>
+                  {adminSession?.name || 'Administrator'}
+                </Typography>
+                <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, color: 'primary.main', letterSpacing: '0.04em' }}>
+                  EXECUTIVE ADMIN
+                </Typography>
+              </Box>
+            </Box>
           </Box>
         </Toolbar>
       </AppBar>
@@ -1022,8 +1287,9 @@ export default function AdminLayout() {
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
               width: drawerWidth,
-              borderTopRightRadius: '24px',
-              borderBottomRightRadius: '24px',
+              borderTopRightRadius: '0px',
+              borderBottomRightRadius: '0px',
+              borderRadius: '0px !important',
               borderRight: `1px solid ${theme.palette.divider}`,
               bgcolor: theme.palette.mode === 'light' ? '#ffffff' : '#0c0f17',
               boxShadow: theme.palette.mode === 'light'
@@ -1047,6 +1313,7 @@ export default function AdminLayout() {
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
               width: drawerWidth,
+              borderRadius: '0px !important',
               borderRight: `1px solid ${theme.palette.divider}`,
               bgcolor: theme.palette.mode === 'light' ? '#ffffff' : '#0c0f17',
               backgroundImage: theme.palette.mode === 'light'
@@ -1078,11 +1345,12 @@ export default function AdminLayout() {
           bgcolor: 'background.default',
         }}
       >
-        <Toolbar />
-        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: '1400px', mx: 'auto' }}>
+        <Toolbar sx={{ minHeight: '68px !important' }} />
+        <Box sx={{ p: { xs: 2, sm: 3, md: 3.5 }, maxWidth: '1600px', mx: 'auto' }}>
           <Outlet />
         </Box>
       </Box>
+      <OmniSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} toggleColorMode={colorMode.toggleColorMode} />
     </Box>
   );
 }

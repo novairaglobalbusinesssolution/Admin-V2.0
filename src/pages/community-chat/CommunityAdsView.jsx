@@ -3,7 +3,7 @@ import {
   Box, Typography, Paper, TextField, Button,
   Grid, Card, CardMedia, CardContent, CardActions,
   Chip, IconButton, CircularProgress, Stack,
-  useTheme, Divider
+  useTheme, Divider, Tooltip
 } from '@mui/material';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import SendIcon from '@mui/icons-material/Send';
@@ -11,6 +11,9 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SmartphoneIcon from '@mui/icons-material/Smartphone';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import LayersIcon from '@mui/icons-material/Layers';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import Swal from 'sweetalert2';
 
 import { broadcastAd, fetchAdsHistory, deleteMessage } from './communityChatService';
@@ -20,7 +23,7 @@ export default function CommunityAdsView() {
   const isDark = theme.palette.mode === 'dark';
 
   const [form, setForm] = useState({
-    title: '🚀 Weekend Mega Bonus: Earn 2X Coins Today!',
+    title: 'Weekend Mega Bonus: Earn 2X Coins Today!',
     description: 'Submit 5 app review tasks before midnight and get instant Rs. 50 cash bonus added straight to your Novaira wallet!',
     imageUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600&auto=format&fit=crop&q=80',
     ctaText: 'Claim Bonus Now',
@@ -117,6 +120,8 @@ export default function CommunityAdsView() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const badgeOptions = ['Sponsored Promo', 'Flash Deal', 'Limited Offer', 'Community Reward', 'Exclusive Update'];
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       {/* Top Header Card */}
@@ -124,42 +129,77 @@ export default function CommunityAdsView() {
         elevation={0}
         sx={{
           p: 2.5,
-          borderRadius: '22px',
-          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: '24px',
+          border: '1px solid',
+          borderColor: isDark ? 'rgba(245,158,11,0.25)' : 'rgba(245,158,11,0.2)',
           background: isDark
-            ? 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(15,23,42,0.9) 100%)'
+            ? 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(15,23,42,0.85) 100%)'
             : 'linear-gradient(135deg, rgba(254,243,199,0.7) 0%, rgba(255,255,255,0.95) 100%)',
+          backdropFilter: 'blur(16px)',
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
           gap: 2
         }}
       >
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: '16px',
-            bgcolor: '#f59e0b',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#000',
-            boxShadow: '0 8px 20px rgba(245,158,11,0.3)'
-          }}
-        >
-          <CampaignIcon sx={{ fontSize: 28 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box
+            sx={{
+              width: 52,
+              height: 52,
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#000',
+              boxShadow: '0 8px 24px rgba(245,158,11,0.35)'
+            }}
+          >
+            <CampaignIcon sx={{ fontSize: 30 }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
+              Sponsored Campaigns & In-Chat Ads
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Broadcast rich promotional cards directly into the Community Lounge with 1-click CTA triggers.
+            </Typography>
+          </Box>
         </Box>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 800 }}>In-Chat Ads & Sponsored Campaigns</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Create rich promotional banners and push them into the Community Group Chat. Users see them live with 1-click CTA buttons.
-          </Typography>
-        </Box>
+
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Chip
+            icon={<LayersIcon sx={{ fontSize: '1rem !important' }} />}
+            label={`${history.length} Broadcasted`}
+            sx={{
+              bgcolor: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)',
+              color: '#f59e0b',
+              fontWeight: 700,
+              border: '1px solid rgba(245,158,11,0.25)',
+              borderRadius: '12px'
+            }}
+          />
+          <Tooltip title="Refresh Ads History">
+            <IconButton
+              onClick={loadHistory}
+              sx={{
+                bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                borderRadius: '12px',
+                border: '1px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
+              }}
+            >
+              <RefreshIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       </Paper>
 
       <Grid container spacing={3}>
         {/* Ad Creator Form */}
-        <Grid item xs={12} md={7}>
+        <Grid item xs={12} lg={7}>
           <Paper
             elevation={0}
             component="form"
@@ -167,28 +207,59 @@ export default function CommunityAdsView() {
             sx={{
               p: 3,
               borderRadius: '24px',
-              border: `1px solid ${theme.palette.divider}`,
-              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+              bgcolor: isDark ? 'rgba(15,23,42,0.65)' : 'rgba(255,255,255,0.7)',
+              backdropFilter: 'blur(16px)',
               display: 'flex',
               flexDirection: 'column',
-              gap: 2
+              gap: 2.5
             }}
           >
-            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Create New In-Chat Promotion</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AutoAwesomeIcon sx={{ color: '#f59e0b', fontSize: 20 }} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                  Compose In-Chat Broadcast
+                </Typography>
+              </Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                Live App Broadcast
+              </Typography>
+            </Box>
 
             {/* Badge Picker */}
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {['Sponsored Promo', '🔥 Flash Deal', 'Limited Offer', '🎉 Community Reward'].map((b) => (
-                <Chip
-                  key={b}
-                  label={b}
-                  clickable
-                  onClick={() => setForm({ ...form, badge: b })}
-                  color={form.badge === b ? 'warning' : 'default'}
-                  variant={form.badge === b ? 'filled' : 'outlined'}
-                  sx={{ fontWeight: 700, borderRadius: '10px' }}
-                />
-              ))}
+            <Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, mb: 1, display: 'block' }}>
+                SPONSORSHIP BADGE
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {badgeOptions.map((b) => {
+                  const isSelected = form.badge === b;
+                  return (
+                    <Chip
+                      key={b}
+                      label={b}
+                      clickable
+                      onClick={() => setForm({ ...form, badge: b })}
+                      sx={{
+                        fontWeight: 700,
+                        borderRadius: '10px',
+                        px: 0.5,
+                        bgcolor: isSelected
+                          ? '#f59e0b'
+                          : isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                        color: isSelected ? '#000' : 'text.primary',
+                        border: '1px solid',
+                        borderColor: isSelected ? '#f59e0b' : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                        '&:hover': {
+                          bgcolor: isSelected ? '#d97706' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </Box>
             </Box>
 
             <TextField
@@ -197,7 +268,12 @@ export default function CommunityAdsView() {
               fullWidth
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '14px',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                }
+              }}
             />
 
             <TextField
@@ -208,29 +284,44 @@ export default function CommunityAdsView() {
               rows={3}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '14px',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                }
+              }}
             />
 
             <TextField
               size="small"
-              label="Banner Image URL (Optional)"
+              label="Banner Media URL (Optional)"
               fullWidth
               placeholder="https://... (.jpg, .png, .webp)"
               value={form.imageUrl}
               onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '14px',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                }
+              }}
             />
 
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   size="small"
-                  label="Button Label (CTA)"
+                  label="Button CTA Label"
                   fullWidth
                   placeholder="e.g. Claim Bonus, Install App"
                   value={form.ctaText}
                   onChange={(e) => setForm({ ...form, ctaText: e.target.value })}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '14px',
+                      bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                    }
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -241,7 +332,12 @@ export default function CommunityAdsView() {
                   placeholder="https://..."
                   value={form.ctaUrl}
                   onChange={(e) => setForm({ ...form, ctaUrl: e.target.value })}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '14px',
+                      bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                    }
+                  }}
                 />
               </Grid>
             </Grid>
@@ -252,101 +348,180 @@ export default function CommunityAdsView() {
               disabled={loading}
               startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <SendIcon />}
               sx={{
-                bgcolor: '#f59e0b',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: '#000',
                 borderRadius: '14px',
-                py: 1.2,
+                py: 1.3,
                 fontWeight: 800,
                 textTransform: 'none',
-                boxShadow: '0 8px 20px rgba(245,158,11,0.25)',
-                '&:hover': { bgcolor: '#d97706' }
+                boxShadow: '0 8px 24px rgba(245,158,11,0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #fbbf24 0%, #b45309 100%)',
+                  boxShadow: '0 12px 28px rgba(245,158,11,0.45)'
+                }
               }}
             >
-              Broadcast Ad to Community Lounge
+              {loading ? 'Broadcasting...' : 'Broadcast Ad to Community Lounge'}
             </Button>
           </Paper>
         </Grid>
 
         {/* Live Mobile Device Preview */}
-        <Grid item xs={12} md={5}>
+        <Grid item xs={12} lg={5}>
           <Paper
             elevation={0}
             sx={{
-              p: 2.5,
+              p: 3,
               borderRadius: '24px',
-              border: `1px solid ${theme.palette.divider}`,
-              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+              bgcolor: isDark ? 'rgba(15,23,42,0.65)' : 'rgba(255,255,255,0.7)',
+              backdropFilter: 'blur(16px)',
               display: 'flex',
               flexDirection: 'column',
-              gap: 1.5
+              gap: 2
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <SmartphoneIcon sx={{ color: 'primary.main', fontSize: 20 }} />
-              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>Mobile In-App Preview</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SmartphoneIcon sx={{ color: 'primary.main', fontSize: 20 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                  Mobile Device Mockup
+                </Typography>
+              </Box>
+              <Chip
+                label="LIVE SIMULATION"
+                size="small"
+                sx={{
+                  bgcolor: 'rgba(37,99,235,0.1)',
+                  color: '#3b82f6',
+                  fontWeight: 800,
+                  fontSize: '0.65rem',
+                  borderRadius: '8px'
+                }}
+              />
             </Box>
 
-            {/* Mobile Mock Bubble */}
-            <Paper
-              elevation={0}
+            {/* Simulated Phone Shell */}
+            <Box
               sx={{
-                p: 2,
-                borderRadius: '20px',
-                border: '1px solid #f59e0b',
+                p: 2.5,
+                borderRadius: '24px',
+                border: '2px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
                 background: isDark
-                  ? 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(30,41,59,0.8) 100%)'
-                  : 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
-                boxShadow: '0 12px 28px rgba(245,158,11,0.18)'
+                  ? 'linear-gradient(180deg, #0b1120 0%, #030712 100%)'
+                  : 'linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%)',
+                boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.2), 0 16px 36px rgba(0,0,0,0.2)'
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                <Chip
-                  label={form.badge}
-                  size="small"
-                  sx={{ bgcolor: '#f59e0b', color: '#000', fontWeight: 800, fontSize: '0.7rem' }}
-                />
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>Just now</Typography>
-              </Box>
+              {/* Speaker Notch */}
+              <Box
+                sx={{
+                  width: 60,
+                  height: 4,
+                  bgcolor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+                  borderRadius: '4px',
+                  mx: 'auto',
+                  mb: 2
+                }}
+              />
 
-              {form.imageUrl && (
-                <Box
-                  component="img"
-                  src={form.imageUrl}
-                  alt="preview"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                  sx={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: '12px', mb: 1.5 }}
-                />
-              )}
+              {/* Chat Bubble Container */}
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  borderRadius: '20px',
+                  border: '1px solid',
+                  borderColor: isDark ? 'rgba(245,158,11,0.4)' : '#f59e0b',
+                  background: isDark
+                    ? 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(30,41,59,0.9) 100%)'
+                    : 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
+                  boxShadow: '0 12px 28px rgba(245,158,11,0.2)'
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                  <Chip
+                    label={form.badge}
+                    size="small"
+                    sx={{
+                      bgcolor: '#f59e0b',
+                      color: '#000',
+                      fontWeight: 800,
+                      fontSize: '0.68rem',
+                      height: 22,
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                    Just now
+                  </Typography>
+                </Box>
 
-              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: isDark ? '#fbbf24' : '#b45309', lineHeight: 1.3 }}>
-                {form.title || 'Untitled Promo'}
-              </Typography>
+                {form.imageUrl && (
+                  <Box
+                    component="img"
+                    src={form.imageUrl}
+                    alt="preview"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                    sx={{
+                      width: '100%',
+                      maxHeight: 160,
+                      objectFit: 'cover',
+                      borderRadius: '14px',
+                      mb: 1.5,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}
+                  />
+                )}
 
-              <Typography variant="body2" sx={{ my: 1, color: 'text.primary', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                {form.description || 'Ad description will appear here...'}
-              </Typography>
-
-              {form.ctaUrl && (
-                <Button
-                  fullWidth
-                  variant="contained"
-                  size="small"
-                  endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+                <Typography
+                  variant="subtitle1"
                   sx={{
-                    borderRadius: '12px',
-                    bgcolor: '#f59e0b',
-                    color: '#000',
                     fontWeight: 800,
-                    textTransform: 'none',
-                    py: 1,
-                    mt: 1,
-                    boxShadow: 'none'
+                    color: isDark ? '#fbbf24' : '#b45309',
+                    lineHeight: 1.3,
+                    mb: 0.5
                   }}
                 >
-                  {form.ctaText || 'Open Action'}
-                </Button>
-              )}
-            </Paper>
+                  {form.title || 'Untitled Promo'}
+                </Typography>
+
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'text.primary',
+                    fontSize: '0.82rem',
+                    lineHeight: 1.5,
+                    mb: 1.5
+                  }}
+                >
+                  {form.description || 'Ad description will appear here...'}
+                </Typography>
+
+                {form.ctaUrl && (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    size="small"
+                    endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      borderRadius: '12px',
+                      bgcolor: '#f59e0b',
+                      color: '#000',
+                      fontWeight: 800,
+                      textTransform: 'none',
+                      py: 0.9,
+                      boxShadow: '0 4px 12px rgba(245,158,11,0.25)',
+                      '&:hover': { bgcolor: '#d97706' }
+                    }}
+                  >
+                    {form.ctaText || 'Open Action'}
+                  </Button>
+                )}
+              </Paper>
+            </Box>
           </Paper>
         </Grid>
       </Grid>
@@ -357,63 +532,142 @@ export default function CommunityAdsView() {
         sx={{
           p: 3,
           borderRadius: '24px',
-          border: `1px solid ${theme.palette.divider}`,
-          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+          bgcolor: isDark ? 'rgba(15,23,42,0.65)' : 'rgba(255,255,255,0.7)',
+          backdropFilter: 'blur(16px)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 2
+          gap: 2.5
         }}
       >
-        <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Broadcast History & Manage Active Ads</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+              Broadcast History & Active Ads
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Review and manage existing promotional items broadcasted in the community lounge.
+            </Typography>
+          </Box>
+        </Box>
 
         {historyLoading ? (
-          <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress size={28} /></Box>
+          <Box sx={{ p: 6, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={32} />
+          </Box>
         ) : history.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">No ads broadcasted yet.</Typography>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: '18px',
+              textAlign: 'center',
+              bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+              border: '1px dashed',
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              No sponsored ads broadcasted yet. Create your first campaign above!
+            </Typography>
+          </Paper>
         ) : (
-          <Grid container spacing={2}>
+          <Grid container spacing={2.5}>
             {history.map((ad) => (
               <Grid item xs={12} sm={6} md={4} key={ad.rowId}>
                 <Card
                   elevation={0}
                   sx={{
-                    borderRadius: '18px',
-                    border: `1px solid ${theme.palette.divider}`,
-                    bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
+                    borderRadius: '20px',
+                    border: '1px solid',
+                    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)',
+                    backdropFilter: 'blur(12px)',
                     display: 'flex',
                     flexDirection: 'column',
-                    height: '100%'
+                    height: '100%',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-3px)',
+                      boxShadow: '0 12px 24px rgba(0,0,0,0.15)'
+                    }
                   }}
                 >
                   {ad.imageUrl && (
-                    <CardMedia component="img" height="120" image={ad.imageUrl} alt={ad.title} />
+                    <CardMedia
+                      component="img"
+                      height="130"
+                      image={ad.imageUrl}
+                      alt={ad.title}
+                      sx={{ objectFit: 'cover' }}
+                    />
                   )}
-                  <CardContent sx={{ flex: 1, pb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                      <Chip label={ad.sender_badge || 'Promo'} size="small" sx={{ height: 20, fontSize: '0.65rem', fontWeight: 800 }} />
+                  <CardContent sx={{ flex: 1, pb: 1, pt: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                      <Chip
+                        label={ad.sender_badge || 'Promo'}
+                        size="small"
+                        sx={{
+                          height: 22,
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          bgcolor: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)',
+                          color: '#f59e0b',
+                          borderRadius: '8px'
+                        }}
+                      />
                       <Typography variant="caption" color="text.secondary">
                         {new Date(ad.created_at).toLocaleDateString()}
                       </Typography>
                     </Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }} noWrap>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }} noWrap>
                       {ad.title}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.78rem', mt: 0.5 }} maxLines={2}>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        fontSize: '0.8rem',
+                        lineHeight: 1.4,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >
                       {ad.description}
                     </Typography>
                   </CardContent>
-                  <CardActions sx={{ px: 2, pb: 1.5, pt: 0, justifyContent: 'space-between' }}>
+                  <Divider sx={{ borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+                  <CardActions sx={{ px: 2, py: 1.2, justifyContent: 'space-between' }}>
                     <Button
                       size="small"
-                      startIcon={<ReplayIcon />}
+                      startIcon={<ReplayIcon fontSize="small" />}
                       onClick={() => handleRebroadcast(ad)}
-                      sx={{ textTransform: 'none', fontWeight: 700 }}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        borderRadius: '10px',
+                        color: 'primary.main'
+                      }}
                     >
-                      Re-use
+                      Re-use Ad
                     </Button>
-                    <IconButton size="small" color="error" onClick={() => handleDeleteAd(ad)}>
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
+                    <Tooltip title="Delete Ad from Lounge">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteAd(ad)}
+                        sx={{
+                          color: '#ef4444',
+                          bgcolor: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.08)',
+                          borderRadius: '10px',
+                          '&:hover': { bgcolor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)' }
+                        }}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </CardActions>
                 </Card>
               </Grid>

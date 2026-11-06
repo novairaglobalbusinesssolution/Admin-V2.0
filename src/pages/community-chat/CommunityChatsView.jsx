@@ -347,13 +347,12 @@ export default function CommunityChatsView() {
       <Paper
         elevation={0}
         sx={{
-          p: 2,
-          borderRadius: '20px',
-          border: `1px solid ${theme.palette.divider}`,
-          background: isDark
-            ? 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.85) 100%)'
-            : 'linear-gradient(135deg, rgba(240,249,255,0.8) 0%, rgba(255,255,255,0.95) 100%)',
-          backdropFilter: 'blur(12px)',
+          p: 2.2,
+          borderRadius: '22px',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)',
+          bgcolor: isDark ? 'rgba(12, 17, 29, 0.7)' : 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(24px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -455,11 +454,13 @@ export default function CommunityChatsView() {
         sx={{
           flex: 1,
           borderRadius: '24px',
-          border: `1px solid ${theme.palette.divider}`,
-          bgcolor: isDark ? '#0c0f17' : '#f8fafc',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)',
+          bgcolor: isDark ? 'rgba(7, 9, 14, 0.75)' : 'rgba(248, 250, 252, 0.85)',
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
           backgroundImage: isDark
-            ? 'radial-gradient(rgba(255,255,255,0.03) 1px, transparent 0)'
-            : 'radial-gradient(rgba(0,0,0,0.04) 1px, transparent 0)',
+            ? 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 0)'
+            : 'radial-gradient(rgba(15,23,42,0.04) 1px, transparent 0)',
           backgroundSize: '24px 24px',
           overflowY: 'auto',
           p: { xs: 1.5, sm: 2.5 },
@@ -659,15 +660,19 @@ export default function CommunityChatsView() {
                           background: isAdmin
                             ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)'
                             : isDark
-                            ? '#1e293b'
-                            : '#ffffff',
+                            ? 'rgba(255, 255, 255, 0.05)'
+                            : 'rgba(255, 255, 255, 0.95)',
+                          backdropFilter: 'blur(10px)',
+                          WebkitBackdropFilter: 'blur(10px)',
                           color: isAdmin ? '#ffffff' : 'text.primary',
                           boxShadow: isAdmin
-                            ? '0 6px 20px rgba(37,99,235,0.3)'
+                            ? '0 6px 24px rgba(37,99,235,0.35)'
                             : isDark
-                            ? '0 6px 18px rgba(0,0,0,0.3)'
-                            : '0 4px 14px rgba(0,0,0,0.05)',
-                          border: !isAdmin ? `1px solid ${theme.palette.divider}` : 'none',
+                            ? '0 6px 20px rgba(0,0,0,0.35)'
+                            : '0 4px 14px rgba(0,0,0,0.04)',
+                          border: !isAdmin
+                            ? (isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)')
+                            : '1px solid rgba(255, 255, 255, 0.25)',
                           wordBreak: 'break-word',
                           position: 'relative'
                         }}
@@ -858,14 +863,16 @@ export default function CommunityChatsView() {
         component="form"
         onSubmit={handleSendMessage}
         sx={{
-          p: 1.5,
-          borderRadius: '20px',
-          border: `1px solid ${theme.palette.divider}`,
-          bgcolor: 'background.paper',
+          p: 1.8,
+          borderRadius: '22px',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(15, 23, 42, 0.08)',
+          bgcolor: isDark ? 'rgba(12, 17, 29, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
           display: 'flex',
           flexDirection: 'column',
           gap: 1.2,
-          boxShadow: isDark ? '0 10px 30px rgba(0,0,0,0.4)' : '0 10px 24px rgba(37,99,235,0.06)'
+          boxShadow: isDark ? '0 12px 35px rgba(0,0,0,0.5)' : '0 10px 28px rgba(37,99,235,0.06)'
         }}
       >
         {/* Media URL Input Drawer (Toggleable) */}
