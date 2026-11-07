@@ -33,6 +33,7 @@ import {
   Skeleton,
   Tooltip,
   CircularProgress,
+  InputAdornment,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -64,6 +65,12 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import BadgeIcon from '@mui/icons-material/Badge';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import SearchIcon from '@mui/icons-material/Search';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -83,8 +90,8 @@ export default function UserView() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Tabs State
-  const [tabValue, setTabValue] = useState(0);
+  // Tabs State (Uses string keys for seamless multi-type compatibility)
+  const [tabValue, setTabValue] = useState('tasks');
 
   // Settings State
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', phone: '', full_name: '', email: '', password: '', account_type: 'Manual' });
@@ -108,7 +115,7 @@ export default function UserView() {
   const [transactions, setTransactions] = useState([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
 
-  // Filters State
+  // Filters State for Individual Earner Submissions
   const [revSearch, setRevSearch] = useState('');
   const [revStatus, setRevStatus] = useState('');
   const [revPage, setRevPage] = useState(0);
@@ -127,14 +134,31 @@ export default function UserView() {
   const [appPage, setAppPage] = useState(0);
   const [appRowsPerPage, setAppRowsPerPage] = useState(10);
 
-  // Modal for Completed Bulker App reviews
+  // Bulker Assigned Tasks Filter State
+  const [assignedSearch, setAssignedSearch] = useState('');
+  const [assignedStatusFilter, setAssignedStatusFilter] = useState('all');
+  const [assignedPage, setAssignedPage] = useState(0);
+  const [assignedRowsPerPage, setAssignedRowsPerPage] = useState(10);
+
+  // Bulker Live Delivery List State
+  const [liveSearch, setLiveSearch] = useState('');
+  const [livePage, setLivePage] = useState(0);
+  const [liveRowsPerPage, setLiveRowsPerPage] = useState(10);
+
+  // Modal for Bulker App Users & Live Deliveries
   const [modalOpen, setModalOpen] = useState(false);
   const [modalUsers, setModalUsers] = useState([]);
   const [modalApp, setModalApp] = useState(null);
+  const [modalMode, setModalMode] = useState('all'); // 'all' | 'live'
+  const [modalSearch, setModalSearch] = useState('');
+  const [modalStatusFilter, setModalStatusFilter] = useState('all');
 
-  const handleOpenModal = (app, usersList) => {
+  const handleOpenModal = (app, usersList, mode = 'all') => {
     setModalApp(app);
-    setModalUsers(usersList);
+    setModalUsers(usersList || []);
+    setModalMode(mode);
+    setModalSearch('');
+    setModalStatusFilter('all');
     setModalOpen(true);
   };
 
@@ -308,8 +332,16 @@ export default function UserView() {
           shortBulkerId = parts[parts.length - 1];
         }
         const longBulkerId = `NOVAIRA/BULKER/${shortBulkerId}`;
+        const bulkerKeys = Array.from(new Set([
+          currentBulkerId,
+          shortBulkerId,
+          longBulkerId,
+          `NOVAIRA/BULKER/${shortBulkerId}`,
+          shortBulkerId?.toLowerCase(),
+          longBulkerId?.toLowerCase()
+        ].filter(Boolean)));
 
-        const { data: allApps } = await supabase.from('apps').select('*').order('app_date', { ascending: false }).limit(200);
+        const { data: allApps } = await supabase.from('apps').select('*').order('app_date', { ascending: false }).limit(500);
         const appsAssigned = allApps?.filter((app) => {
           let assigned = app.assigned_bulkers || [];
           while (typeof assigned === 'string') {
@@ -318,7 +350,7 @@ export default function UserView() {
           if (!Array.isArray(assigned)) assigned = [];
           return assigned.some((b) => {
             const bId = typeof b === 'string' ? b : b.bulker_id;
-            return [currentBulkerId, shortBulkerId, longBulkerId].includes(bId);
+            return bulkerKeys.some((k) => String(k).toLowerCase() === String(bId).toLowerCase());
           });
         });
         if (appsAssigned) {
@@ -334,40 +366,40 @@ export default function UserView() {
         const { data: profiles } = await supabase
           .from('profiles')
           .select('*')
-          .in('bulker_id', [currentBulkerId, shortBulkerId, longBulkerId])
+          .in('bulker_id', bulkerKeys)
           .order('created_at', { ascending: false })
-          .limit(200);
+          .limit(1000);
         if (profiles) setReferrals(profiles);
 
         const { data: hist } = await supabase
           .from('bulker_billing_history')
           .select('*')
-          .in('bulker_id', [currentBulkerId, shortBulkerId, longBulkerId])
+          .in('bulker_id', bulkerKeys)
           .order('change_date_time', { ascending: true })
-          .limit(100);
+          .limit(200);
         if (hist) setBillingHistory(hist);
 
         const { data: txns } = await supabase
           .from('individual_wallet_transactions')
           .select('id, transaction_id, amount, transaction_type, description, status, created_at, utr_id')
-          .in('earner_id', [currentBulkerId, shortBulkerId, longBulkerId])
+          .in('earner_id', bulkerKeys)
           .order('created_at', { ascending: false })
-          .limit(150);
+          .limit(200);
         if (txns) setTransactions(txns);
 
         let { data: revs } = await supabase
           .from('review_submit_data')
-          .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id, apps(task_id, app_name)')
-          .in('bulker_id', [currentBulkerId, shortBulkerId, longBulkerId])
+          .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id, apps(id, task_id, app_name, app_date, app_package)')
+          .in('bulker_id', bulkerKeys)
           .order('submitted_at', { ascending: false })
-          .limit(200);
+          .limit(2000);
 
         if (revs) {
           revsData = revs.map((r) => {
             const prof = profiles?.find((p) => p.earner_id === r.earner_id);
             return {
               ...r,
-              earner_name: prof ? `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || prof.phone : 'Unknown',
+              earner_name: prof ? `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || prof.phone : (r.earner_id || 'Unknown'),
             };
           });
         }
@@ -593,37 +625,198 @@ export default function UserView() {
     });
   }, [transactions, txnSearch, txnType]);
 
-  // Filtered Bulker Apps
-  const filteredBulkerApps = useMemo(() => {
-    return bulkerApps
-      .filter((app) => {
-        const q = appSearch.trim().toLowerCase();
-        if (!q) return true;
-        const formattedDate = formatKolkataDate(app.app_date).toLowerCase();
-        return (
-          app.task_id?.toString().toLowerCase().includes(q) ||
-          app.app_name?.toLowerCase().includes(q) ||
-          app.app_date?.toLowerCase().includes(q) ||
-          formattedDate.includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const timeA = a.app_date ? new Date(a.app_date).getTime() : 0;
-        const timeB = b.app_date ? new Date(b.app_date).getTime() : 0;
-        if (timeB !== timeA) return timeB - timeA;
-        return (Number(b.task_id) || 0) - (Number(a.task_id) || 0);
-      });
-  }, [bulkerApps, appSearch]);
+  // Grouped Bulker Apps (Unique Application Row - No duplicates)
+  const groupedBulkerApps = useMemo(() => {
+    if (type !== 'bulker') return [];
 
-  const handleCopyAppUsers = () => {
-    if (!modalApp) return;
-    const appDateStr = formatKolkataDate(modalApp.app_date);
-    let text = `${modalApp.app_name}\n${appDateStr}\nAPP ID : ${modalApp.task_id}\n\n`;
-    modalUsers.forEach((u) => {
-      text += `${(u.submitted_username || '').toUpperCase()}\n`;
+    const reviewsByApp = {};
+    reviews.forEach((r) => {
+      const keys = [r.app_id, r.apps?.id, r.apps?.task_id].filter(Boolean);
+      keys.forEach((k) => {
+        if (!reviewsByApp[k]) reviewsByApp[k] = [];
+        reviewsByApp[k].push(r);
+      });
     });
-    text += `\nTOTAL - ${modalUsers.length}`;
-    copyToClipboard(text, 'App Users List');
+
+    const seenAppIds = new Set();
+    const list = [];
+
+    (bulkerApps || []).forEach((app) => {
+      seenAppIds.add(String(app.id));
+      if (app.task_id) seenAppIds.add(String(app.task_id));
+
+      const appRevs = [
+        ...(reviewsByApp[app.id] || []),
+        ...(app.task_id && reviewsByApp[app.task_id] ? reviewsByApp[app.task_id] : [])
+      ];
+      const uniqueRevsMap = new Map();
+      appRevs.forEach((r) => uniqueRevsMap.set(r.id, r));
+      const finalRevs = Array.from(uniqueRevsMap.values());
+
+      const liveRevs = finalRevs.filter((r) => r.status === 'Approved' || r.status === 'Live');
+      const underReviewRevs = finalRevs.filter((r) => r.status === 'Under Review' || !r.status);
+      const rejectedRevs = finalRevs.filter((r) => r.status === 'Rejected');
+
+      list.push({
+        id: app.id,
+        task_id: app.task_id,
+        app_name: app.app_name,
+        app_package: app.app_package,
+        app_date: app.app_date,
+        reviews: finalRevs,
+        liveReviews: liveRevs,
+        underReviewReviews: underReviewRevs,
+        rejectedReviews: rejectedRevs,
+        totalUsers: finalRevs.length,
+        liveUsersCount: liveRevs.length,
+        hasLiveSubmissions: liveRevs.length > 0,
+        appRaw: app,
+      });
+    });
+
+    // Also include any apps from reviews not explicitly in bulkerApps
+    reviews.forEach((r) => {
+      const appId = r.app_id || r.apps?.task_id;
+      if (appId && !seenAppIds.has(String(appId))) {
+        seenAppIds.add(String(appId));
+        if (r.apps?.id) seenAppIds.add(String(r.apps.id));
+        if (r.apps?.task_id) seenAppIds.add(String(r.apps.task_id));
+
+        const appRevs = reviews.filter((x) =>
+          x.app_id === r.app_id ||
+          (r.apps?.task_id && x.apps?.task_id === r.apps.task_id) ||
+          (r.apps?.id && x.apps?.id === r.apps.id)
+        );
+        const uniqueRevsMap = new Map();
+        appRevs.forEach((x) => uniqueRevsMap.set(x.id, x));
+        const finalRevs = Array.from(uniqueRevsMap.values());
+
+        const liveRevs = finalRevs.filter((x) => x.status === 'Approved' || x.status === 'Live');
+        const underReviewRevs = finalRevs.filter((x) => x.status === 'Under Review' || !x.status);
+        const rejectedRevs = finalRevs.filter((x) => x.status === 'Rejected');
+
+        list.push({
+          id: r.app_id || r.id,
+          task_id: r.apps?.task_id || r.app_id,
+          app_name: r.apps?.app_name || 'Application Task',
+          app_package: r.apps?.app_package || '',
+          app_date: r.apps?.app_date || r.submitted_at,
+          reviews: finalRevs,
+          liveReviews: liveRevs,
+          underReviewReviews: underReviewRevs,
+          rejectedReviews: rejectedRevs,
+          totalUsers: finalRevs.length,
+          liveUsersCount: liveRevs.length,
+          hasLiveSubmissions: liveRevs.length > 0,
+          appRaw: r.apps || null,
+        });
+      }
+    });
+
+    return list.sort((a, b) => {
+      const timeA = a.app_date ? new Date(a.app_date).getTime() : 0;
+      const timeB = b.app_date ? new Date(b.app_date).getTime() : 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return (Number(b.task_id) || 0) - (Number(a.task_id) || 0);
+    });
+  }, [type, bulkerApps, reviews]);
+
+  const liveBulkerApps = useMemo(() => {
+    return groupedBulkerApps.filter((app) => app.liveUsersCount > 0);
+  }, [groupedBulkerApps]);
+
+  const totalLiveReviewsCount = useMemo(() => {
+    return groupedBulkerApps.reduce((acc, app) => acc + app.liveUsersCount, 0);
+  }, [groupedBulkerApps]);
+
+  // Filtered Grouped Bulker Apps (Tab 0: Assigned Tasks)
+  const filteredGroupedBulkerApps = useMemo(() => {
+    return groupedBulkerApps.filter((app) => {
+      const q = assignedSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        String(app.task_id || '').toLowerCase().includes(q) ||
+        String(app.app_name || '').toLowerCase().includes(q) ||
+        String(app.app_package || '').toLowerCase().includes(q) ||
+        app.reviews.some((r) =>
+          String(r.submitted_username || '').toLowerCase().includes(q) ||
+          String(r.earner_name || '').toLowerCase().includes(q) ||
+          String(r.earner_id || '').toLowerCase().includes(q)
+        );
+
+      let matchStatus = true;
+      if (assignedStatusFilter === 'has_submissions') {
+        matchStatus = app.totalUsers > 0;
+      } else if (assignedStatusFilter === 'has_live') {
+        matchStatus = app.liveUsersCount > 0;
+      } else if (assignedStatusFilter === 'under_review') {
+        matchStatus = app.underReviewReviews.length > 0;
+      } else if (assignedStatusFilter === 'no_submissions') {
+        matchStatus = app.totalUsers === 0;
+      }
+
+      return matchSearch && matchStatus;
+    });
+  }, [groupedBulkerApps, assignedSearch, assignedStatusFilter]);
+
+  // Filtered Live Delivery Bulker Apps (Tab 1: Live Delivery List)
+  const filteredLiveBulkerApps = useMemo(() => {
+    return liveBulkerApps.filter((app) => {
+      const q = liveSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        String(app.task_id || '').toLowerCase().includes(q) ||
+        String(app.app_name || '').toLowerCase().includes(q) ||
+        String(app.app_package || '').toLowerCase().includes(q) ||
+        app.liveReviews.some((r) =>
+          String(r.submitted_username || '').toLowerCase().includes(q) ||
+          String(r.earner_name || '').toLowerCase().includes(q) ||
+          String(r.earner_id || '').toLowerCase().includes(q)
+        );
+      return matchSearch;
+    });
+  }, [liveBulkerApps, liveSearch]);
+
+  // Filtered Users inside the Modal Popup
+  const filteredModalUsers = useMemo(() => {
+    return modalUsers.filter((u) => {
+      const q = modalSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        (u.submitted_username || '').toLowerCase().includes(q) ||
+        (u.earner_id || '').toLowerCase().includes(q) ||
+        (u.earner_name || '').toLowerCase().includes(q);
+      const matchStatus = modalStatusFilter === 'all' || u.status === modalStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [modalUsers, modalSearch, modalStatusFilter]);
+
+  // Copy app users handler (supports both All Handles and Live Delivery Format)
+  const handleCopyAppUsers = (targetApp = null, userList = null, isLiveOnly = false) => {
+    const currentApp = targetApp || modalApp;
+    const list = userList || modalUsers;
+    if (!currentApp) return;
+
+    const appName = String(currentApp.app_name || 'APPLICATION TASK').toUpperCase();
+    const appDateStr = formatKolkataDate(currentApp.app_date);
+    const taskId = String(currentApp.task_id || '').toUpperCase();
+    const totalCount = list.length;
+
+    let text = '';
+    if (isLiveOnly) {
+      const memberLines = list.length > 0
+        ? list.map((u) => (u.submitted_username || u.earner_id || 'UNKNOWN').trim().toUpperCase()).join('\n')
+        : 'NO LIVE USERS YET';
+      text = `${appName}\n${appDateStr}\n${taskId}\n\n${memberLines}\n\nTOTAL LIVE - ${totalCount}`;
+    } else {
+      let header = `${appName}\n${appDateStr}\nAPP ID : ${taskId}\n\n`;
+      const memberLines = list.length > 0
+        ? list.map((u) => (u.submitted_username || u.earner_id || 'UNKNOWN').trim().toUpperCase()).join('\n')
+        : 'NO USERS SUBMITTED';
+      text = `${header}${memberLines}\n\nTOTAL - ${totalCount}`;
+    }
+
+    copyToClipboard(text, isLiveOnly ? 'Live Delivery Report' : 'App Users List');
   };
 
   const getStatusBadge = (status) => {
@@ -896,98 +1089,188 @@ export default function UserView() {
           {/* Key Metrics Pods */}
           <Grid item xs={12} md={7}>
             <Grid container spacing={1.5}>
-              {type === 'individual' && (
-                <Grid item xs={6} sm={3}>
-                  <Box
-                    sx={{
-                      p: 1.8,
-                      borderRadius: '16px',
-                      bgcolor: 'rgba(16, 185, 129, 0.1)',
-                      border: '1px solid rgba(16, 185, 129, 0.25)',
-                    }}
-                  >
-                    <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
-                      Wallet Balance
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 850, color: '#10b981', mt: 0.3, fontSize: '1.25rem' }}>
-                      ₹{computedBalance.toFixed(2)}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-                      Disbursable funds
-                    </Typography>
-                  </Box>
-                </Grid>
-              )}
+              {type === 'bulker' ? (
+                <>
+                  <Grid item xs={6} sm={3}>
+                    <Box
+                      sx={{
+                        p: 1.8,
+                        borderRadius: '16px',
+                        bgcolor: 'rgba(99, 102, 241, 0.1)',
+                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: '#6366f1', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                        Assigned Tasks
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 850, color: '#6366f1', mt: 0.3, fontSize: '1.25rem' }}>
+                        {groupedBulkerApps.length} Apps
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                        Active campaigns
+                      </Typography>
+                    </Box>
+                  </Grid>
 
-              {type === 'individual' && (
-                <Grid item xs={6} sm={3}>
-                  <Box
-                    sx={{
-                      p: 1.8,
-                      borderRadius: '16px',
-                      bgcolor: isDark ? 'rgba(6, 182, 212, 0.08)' : 'rgba(6, 182, 212, 0.06)',
-                      border: '1px solid rgba(6, 182, 212, 0.22)',
-                    }}
-                  >
-                    <Typography variant="caption" sx={{ color: '#06b6d4', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
-                      Bulker Desk
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', mt: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {data.bulker_name || 'Direct / None'}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {data.bulker_id || 'Independent'}
-                    </Typography>
-                  </Box>
-                </Grid>
-              )}
+                  <Grid item xs={6} sm={3}>
+                    <Box
+                      sx={{
+                        p: 1.8,
+                        borderRadius: '16px',
+                        bgcolor: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: '#f59e0b', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                        Total Submissions
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 850, color: '#f59e0b', mt: 0.3, fontSize: '1.25rem' }}>
+                        {reviews.length} Reviews
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                        Team submissions
+                      </Typography>
+                    </Box>
+                  </Grid>
 
-              {type === 'individual' && (
-                <Grid item xs={6} sm={3}>
-                  <Box
-                    sx={{
-                      p: 1.8,
-                      borderRadius: '16px',
-                      bgcolor: isDark ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.06)',
-                      border: '1px solid rgba(139, 92, 246, 0.22)',
-                    }}
-                  >
-                    <Typography variant="caption" sx={{ color: '#8b5cf6', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
-                      Referral Network
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', mt: 0.3 }}>
-                      {referrals.length} Referrals
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      Code: {data.referral_code || 'None'}
-                    </Typography>
-                  </Box>
-                </Grid>
-              )}
+                  <Grid item xs={6} sm={3}>
+                    <Box
+                      sx={{
+                        p: 1.8,
+                        borderRadius: '16px',
+                        bgcolor: 'rgba(16, 185, 129, 0.1)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                        Live Deliveries
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 850, color: '#10b981', mt: 0.3, fontSize: '1.25rem' }}>
+                        {totalLiveReviewsCount} Live
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                        Verified deliverables
+                      </Typography>
+                    </Box>
+                  </Grid>
 
-              <Grid item xs={6} sm={type === 'individual' ? 3 : 6}>
-                <Box
-                  sx={{
-                    p: 1.8,
-                    borderRadius: '16px',
-                    bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)',
-                    border: isDark ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid rgba(15, 23, 42, 0.06)',
-                  }}
-                >
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
-                    Activity Radar
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.3 }}>
-                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: data.last_active_at ? '#10b981' : 'text.disabled' }} />
-                    <Typography variant="body2" sx={{ fontWeight: 750, color: data.last_active_at ? '#10b981' : 'text.secondary', fontSize: '0.8rem' }}>
-                      {data.last_active_at ? timeAgo(data.last_active_at) : 'Never'}
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block' }}>
-                    Joined {formatKolkataDate(data.created_at)}
-                  </Typography>
-                </Box>
-              </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Box
+                      sx={{
+                        p: 1.8,
+                        borderRadius: '16px',
+                        bgcolor: 'rgba(6, 182, 212, 0.1)',
+                        border: '1px solid rgba(6, 182, 212, 0.25)',
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: '#06b6d4', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                        Assigned Earners
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 850, color: '#06b6d4', mt: 0.3, fontSize: '1.25rem' }}>
+                        {referrals.length} Members
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                        Fleet strength
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </>
+              ) : (
+                <>
+                  {type === 'individual' && (
+                    <Grid item xs={6} sm={3}>
+                      <Box
+                        sx={{
+                          p: 1.8,
+                          borderRadius: '16px',
+                          bgcolor: 'rgba(16, 185, 129, 0.1)',
+                          border: '1px solid rgba(16, 185, 129, 0.25)',
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                          Wallet Balance
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 850, color: '#10b981', mt: 0.3, fontSize: '1.25rem' }}>
+                          ₹{computedBalance.toFixed(2)}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                          Disbursable funds
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  )}
+
+                  {type === 'individual' && (
+                    <Grid item xs={6} sm={3}>
+                      <Box
+                        sx={{
+                          p: 1.8,
+                          borderRadius: '16px',
+                          bgcolor: isDark ? 'rgba(6, 182, 212, 0.08)' : 'rgba(6, 182, 212, 0.06)',
+                          border: '1px solid rgba(6, 182, 212, 0.22)',
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ color: '#06b6d4', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                          Bulker Desk
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', mt: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {data.bulker_name || 'Direct / None'}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {data.bulker_id || 'Independent'}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  )}
+
+                  {type === 'individual' && (
+                    <Grid item xs={6} sm={3}>
+                      <Box
+                        sx={{
+                          p: 1.8,
+                          borderRadius: '16px',
+                          bgcolor: isDark ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.06)',
+                          border: '1px solid rgba(139, 92, 246, 0.22)',
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ color: '#8b5cf6', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                          Referral Network
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', mt: 0.3 }}>
+                          {referrals.length} Referrals
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Code: {data.referral_code || 'None'}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  )}
+
+                  <Grid item xs={6} sm={type === 'individual' ? 3 : 6}>
+                    <Box
+                      sx={{
+                        p: 1.8,
+                        borderRadius: '16px',
+                        bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)',
+                        border: isDark ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid rgba(15, 23, 42, 0.06)',
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.65rem', display: 'block' }}>
+                        Activity Radar
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.3 }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: data.last_active_at ? '#10b981' : 'text.disabled' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 750, color: data.last_active_at ? '#10b981' : 'text.secondary', fontSize: '0.8rem' }}>
+                          {data.last_active_at ? timeAgo(data.last_active_at) : 'Never'}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block' }}>
+                        Joined {formatKolkataDate(data.created_at)}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </>
+              )}
             </Grid>
           </Grid>
         </Grid>
@@ -1031,42 +1314,220 @@ export default function UserView() {
             }}
           >
             <Tab
+              value="tasks"
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <span>{type === 'bulker' ? 'Assigned Tasks' : 'Task Submissions'}</span>
-                  <Chip label={reviews.length} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800 }} />
+                  <Chip
+                    label={type === 'bulker' ? groupedBulkerApps.length : reviews.length}
+                    size="small"
+                    sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800 }}
+                  />
                 </Box>
               }
             />
-            <Tab
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <span>Wallet & Financial Ledger</span>
-                  <Chip label={transactions.length} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800 }} />
-                </Box>
-              }
-              sx={{ display: type === 'individual' || type === 'bulker' ? 'flex' : 'none' }}
-            />
-            <Tab label="Monthly Invoice" sx={{ display: type === 'bulker' ? 'flex' : 'none' }} />
-            <Tab label="Settings & Security" />
-            <Tab
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <span>{type === 'bulker' ? 'Assigned Earners' : 'Referral Network'}</span>
-                  <Chip label={referrals.length} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800 }} />
-                </Box>
-              }
-              sx={{ display: type === 'individual' || type === 'bulker' ? 'flex' : 'none' }}
-            />
+
+            {type === 'bulker' && (
+              <Tab
+                value="livelist"
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>Live Delivery List</span>
+                    <Chip
+                      label={`${totalLiveReviewsCount} Live`}
+                      size="small"
+                      color={totalLiveReviewsCount > 0 ? 'success' : 'default'}
+                      sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800 }}
+                    />
+                  </Box>
+                }
+              />
+            )}
+
+            {(type === 'individual' || type === 'bulker') && (
+              <Tab
+                value="ledger"
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>Wallet & Financial Ledger</span>
+                    <Chip label={transactions.length} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800 }} />
+                  </Box>
+                }
+              />
+            )}
+
+            {type === 'bulker' && <Tab value="invoice" label="Monthly Invoice" />}
+
+            <Tab value="settings" label="Settings & Security" />
+
+            {(type === 'individual' || type === 'bulker') && (
+              <Tab
+                value="earners"
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>{type === 'bulker' ? 'Assigned Earners' : 'Referral Network'}</span>
+                    <Chip label={referrals.length} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800 }} />
+                  </Box>
+                }
+              />
+            )}
           </Tabs>
         </Box>
 
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
           {/* TAB 0: Reviews & Submissions */}
-          <TabPanel value={tabValue} index={0}>
+          <TabPanel value={tabValue} index="tasks">
             {loadingRecords ? (
               <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress size={28} /></Box>
+            ) : type === 'bulker' ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {/* Search & Filter Bar */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+                  <TextField
+                    size="small"
+                    placeholder="Search Task ID, Application Name, Package, or Earner..."
+                    value={assignedSearch}
+                    onChange={(e) => { setAssignedSearch(e.target.value); setAssignedPage(0); }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ flexGrow: 1, minWidth: 260, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+                  />
+                  <FormControl size="small" sx={{ minWidth: 180 }}>
+                    <InputLabel>Filter Campaigns</InputLabel>
+                    <Select
+                      label="Filter Campaigns"
+                      value={assignedStatusFilter}
+                      onChange={(e) => { setAssignedStatusFilter(e.target.value); setAssignedPage(0); }}
+                      sx={{ borderRadius: '12px' }}
+                    >
+                      <MenuItem value="all">All Campaigns ({groupedBulkerApps.length})</MenuItem>
+                      <MenuItem value="has_submissions">With Submissions ({groupedBulkerApps.filter(a => a.totalUsers > 0).length})</MenuItem>
+                      <MenuItem value="has_live">With Live Deliveries ({groupedBulkerApps.filter(a => a.liveUsersCount > 0).length})</MenuItem>
+                      <MenuItem value="under_review">Has Under Review ({groupedBulkerApps.filter(a => a.underReviewReviews.length > 0).length})</MenuItem>
+                      <MenuItem value="no_submissions">No Submissions Yet ({groupedBulkerApps.filter(a => a.totalUsers === 0).length})</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+
+                {filteredGroupedBulkerApps.length === 0 ? (
+                  <Box sx={{ p: 6, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '18px' }}>
+                    <RateReviewIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
+                    <Typography variant="body2" color="text.secondary">No assigned applications match your search.</Typography>
+                  </Box>
+                ) : (
+                  <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '18px', overflow: 'hidden' }}>
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Task ID</TableCell>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Application Name & Package</TableCell>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Release Date</TableCell>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Submitted Handles & Audit Status</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Action</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {filteredGroupedBulkerApps.slice(assignedPage * assignedRowsPerPage, assignedPage * assignedRowsPerPage + assignedRowsPerPage).map((app) => (
+                          <TableRow key={app.id} hover>
+                            <TableCell sx={{ color: 'primary.main', fontWeight: 800, fontFamily: 'monospace' }}>
+                              #{app.task_id}
+                            </TableCell>
+
+                            <TableCell>
+                              <Typography sx={{ fontWeight: 750, fontSize: '0.85rem' }}>{app.app_name}</Typography>
+                              {app.app_package && (
+                                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', fontSize: '0.7rem' }}>
+                                  {app.app_package}
+                                </Typography>
+                              )}
+                            </TableCell>
+
+                            <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                              {formatKolkataDate(app.app_date)}
+                            </TableCell>
+
+                            <TableCell>
+                              {app.totalUsers === 0 ? (
+                                <Chip label="0 Submissions" size="small" variant="outlined" sx={{ color: 'text.disabled', height: 22, fontSize: '0.68rem', borderRadius: '6px' }} />
+                              ) : (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
+                                  <Chip
+                                    label={`${app.totalUsers} Total`}
+                                    size="small"
+                                    sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px', bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)' }}
+                                  />
+                                  {app.underReviewReviews.length > 0 && (
+                                    <Chip
+                                      label={`${app.underReviewReviews.length} Reviewing`}
+                                      size="small"
+                                      color="warning"
+                                      sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
+                                    />
+                                  )}
+                                  {app.liveReviews.length > 0 && (
+                                    <Chip
+                                      label={`${app.liveReviews.length} Approved/Live`}
+                                      size="small"
+                                      color="success"
+                                      sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
+                                    />
+                                  )}
+                                  {app.rejectedReviews.length > 0 && (
+                                    <Chip
+                                      label={`${app.rejectedReviews.length} Rejected`}
+                                      size="small"
+                                      color="error"
+                                      sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
+                                    />
+                                  )}
+                                </Box>
+                              )}
+                            </TableCell>
+
+                            <TableCell align="right">
+                              <Button
+                                size="small"
+                                variant="contained"
+                                disabled={app.totalUsers === 0}
+                                startIcon={<VisibilityIcon sx={{ fontSize: 14 }} />}
+                                onClick={() => handleOpenModal(app, app.reviews, 'all')}
+                                sx={{
+                                  borderRadius: '10px',
+                                  fontWeight: 800,
+                                  fontSize: '0.74rem',
+                                  textTransform: 'none',
+                                  boxShadow: 'none',
+                                  py: 0.6,
+                                  px: 1.6,
+                                  bgcolor: app.totalUsers > 0 ? 'primary.main' : undefined,
+                                }}
+                              >
+                                View Users ({app.totalUsers})
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <TablePagination
+                      component="div"
+                      count={filteredGroupedBulkerApps.length}
+                      page={assignedPage}
+                      onPageChange={(e, p) => setAssignedPage(p)}
+                      rowsPerPage={assignedRowsPerPage}
+                      onRowsPerPageChange={(e) => { setAssignedRowsPerPage(parseInt(e.target.value, 10)); setAssignedPage(0); }}
+                      rowsPerPageOptions={[10, 25, 50]}
+                    />
+                  </TableContainer>
+                )}
+              </Box>
             ) : (
+              /* INDIVIDUAL EARNER REVIEW SUBMISSIONS */
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {/* Search & Filter Bar */}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
@@ -1141,8 +1602,187 @@ export default function UserView() {
             )}
           </TabPanel>
 
-          {/* TAB 1: Wallet & Financial Ledger */}
-          <TabPanel value={tabValue} index={1}>
+          {/* TAB 1: Bulker Live Delivery List */}
+          {type === 'bulker' && (
+            <TabPanel value={tabValue} index="livelist">
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                {/* Live Delivery Telemetry Cards */}
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <Box sx={{ p: 2, borderRadius: '16px', bgcolor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                      <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
+                        Verified Live Reviews
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 900, color: '#10b981', mt: 0.5 }}>
+                        {totalLiveReviewsCount}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem' }}>
+                        Ready for sponsor submission
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <Box sx={{ p: 2, borderRadius: '16px', bgcolor: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.25)' }}>
+                      <Typography variant="caption" sx={{ color: '#06b6d4', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
+                        Live Active Applications
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 900, color: '#06b6d4', mt: 0.5 }}>
+                        {liveBulkerApps.length}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem' }}>
+                        Apps with approved deliverables
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <Box sx={{ p: 2, borderRadius: '16px', bgcolor: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+                      <Typography variant="caption" sx={{ color: '#6366f1', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
+                        Report Format Desk
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 900, color: '#6366f1', mt: 0.5 }}>
+                        1-CLICK
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem' }}>
+                        Formatted sponsor live list
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+
+                {/* Live Delivery Search Bar */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+                  <TextField
+                    size="small"
+                    placeholder="Search Live App, Task ID, or Live Earner Username..."
+                    value={liveSearch}
+                    onChange={(e) => { setLiveSearch(e.target.value); setLivePage(0); }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ flexGrow: 1, minWidth: 260, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+                  />
+                </Box>
+
+                {filteredLiveBulkerApps.length === 0 ? (
+                  <Box sx={{ p: 6, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '18px' }}>
+                    <FormatListBulletedIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
+                    <Typography variant="body2" color="text.secondary">No verified live delivery tasks found for this bulker.</Typography>
+                  </Box>
+                ) : (
+                  <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '18px', overflow: 'hidden' }}>
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Task ID</TableCell>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Application Name & Package</TableCell>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Release Date</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Verified Live Reviews</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Export Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {filteredLiveBulkerApps.slice(livePage * liveRowsPerPage, livePage * liveRowsPerPage + liveRowsPerPage).map((app) => (
+                          <TableRow key={app.id} hover>
+                            <TableCell sx={{ color: 'primary.main', fontWeight: 800, fontFamily: 'monospace' }}>
+                              #{app.task_id}
+                            </TableCell>
+
+                            <TableCell>
+                              <Typography sx={{ fontWeight: 750, fontSize: '0.85rem' }}>{app.app_name}</Typography>
+                              {app.app_package && (
+                                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', fontSize: '0.7rem' }}>
+                                  {app.app_package}
+                                </Typography>
+                              )}
+                            </TableCell>
+
+                            <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                              {formatKolkataDate(app.app_date)}
+                            </TableCell>
+
+                            <TableCell align="center">
+                              <Chip
+                                label={`${app.liveUsersCount} Live Reviews`}
+                                size="small"
+                                color="success"
+                                onClick={() => handleOpenModal(app, app.liveReviews, 'live')}
+                                sx={{
+                                  height: 24,
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  '&:hover': { transform: 'scale(1.04)' },
+                                  transition: 'transform 0.15s ease',
+                                }}
+                              />
+                            </TableCell>
+
+                            <TableCell align="right">
+                              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<VisibilityIcon sx={{ fontSize: 14 }} />}
+                                  onClick={() => handleOpenModal(app, app.liveReviews, 'live')}
+                                  sx={{
+                                    borderRadius: '10px',
+                                    fontWeight: 750,
+                                    fontSize: '0.74rem',
+                                    textTransform: 'none',
+                                    py: 0.6,
+                                  }}
+                                >
+                                  Live Users ({app.liveUsersCount})
+                                </Button>
+
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  startIcon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+                                  onClick={() => handleCopyAppUsers(app, app.liveReviews, true)}
+                                  sx={{
+                                    borderRadius: '10px',
+                                    fontWeight: 800,
+                                    fontSize: '0.74rem',
+                                    textTransform: 'none',
+                                    boxShadow: 'none',
+                                    bgcolor: '#10b981',
+                                    '&:hover': { bgcolor: '#059669' },
+                                    py: 0.6,
+                                  }}
+                                >
+                                  Copy Report
+                                </Button>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <TablePagination
+                      component="div"
+                      count={filteredLiveBulkerApps.length}
+                      page={livePage}
+                      onPageChange={(e, p) => setLivePage(p)}
+                      rowsPerPage={liveRowsPerPage}
+                      onRowsPerPageChange={(e) => { setLiveRowsPerPage(parseInt(e.target.value, 10)); setLivePage(0); }}
+                      rowsPerPageOptions={[10, 25, 50]}
+                    />
+                  </TableContainer>
+                )}
+              </Box>
+            </TabPanel>
+          )}
+
+          {/* TAB 2: Wallet & Financial Ledger */}
+          <TabPanel value={tabValue} index="ledger">
             {loadingRecords ? (
               <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress size={28} /></Box>
             ) : (
@@ -1282,47 +1922,82 @@ export default function UserView() {
             )}
           </TabPanel>
 
-          {/* TAB 2: Bulker Monthly Invoice */}
-          <TabPanel value={tabValue} index={2}>
+          {/* TAB 3: Bulker Monthly Invoice */}
+          <TabPanel value={tabValue} index="invoice">
             {type !== 'bulker' ? (
               <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">Only available for bulker partner accounts.</Typography></Box>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>Bulker Monthly Ledger Invoicing</Typography>
-                <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '18px' }}>
-                  <Table>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 800 }}>Bulker Monthly Ledger Invoicing</Typography>
+                    <Typography variant="caption" color="text.secondary">Detailed campaign deliverable breakdown and payable disbursements.</Typography>
+                  </Box>
+                  <Chip
+                    label={`Payable Total: ₹${(totalLiveReviewsCount * 10).toFixed(2)}`}
+                    color="success"
+                    sx={{ fontWeight: 900, fontSize: '0.82rem', height: 32, borderRadius: '10px' }}
+                  />
+                </Box>
+
+                <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '18px', overflow: 'hidden' }}>
+                  <Table size="small">
                     <TableHead sx={{ bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)' }}>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 800 }}>App Name</TableCell>
-                        <TableCell sx={{ fontWeight: 800 }}>Task ID</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 800 }}>Approved Users</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800 }}>Unit Rate</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800 }}>Subtotal</TableCell>
+                        <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Task ID</TableCell>
+                        <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Application Name</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Total Submissions</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Approved / Live</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Unit Rate</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Subtotal</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {filteredBulkerApps.map((app) => {
-                        const appReviews = reviews.filter((r) => r.apps?.task_id === app.task_id);
-                        const liveCount = appReviews.filter((r) => r.status === 'Approved' || r.status === 'Live').length;
-                        return (
+                      {groupedBulkerApps.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                            No assigned campaigns found for this bulker.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        groupedBulkerApps.map((app) => (
                           <TableRow key={app.id} hover>
-                            <TableCell sx={{ fontWeight: 700 }}>{app.app_name}</TableCell>
-                            <TableCell sx={{ color: 'primary.main', fontWeight: 800 }}>#{app.task_id}</TableCell>
+                            <TableCell sx={{ color: 'primary.main', fontWeight: 800, fontFamily: 'monospace' }}>
+                              #{app.task_id}
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: 700 }}>
+                              {app.app_name}
+                              {app.app_package && (
+                                <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.68rem' }}>
+                                  {app.app_package}
+                                </Typography>
+                              )}
+                            </TableCell>
                             <TableCell align="center">
                               <Button
                                 size="small"
-                                variant="contained"
-                                onClick={() => handleOpenModal(app, appReviews)}
-                                sx={{ borderRadius: '10px', fontWeight: 800, fontSize: '0.72rem' }}
+                                variant="outlined"
+                                disabled={app.totalUsers === 0}
+                                onClick={() => handleOpenModal(app, app.reviews, 'all')}
+                                sx={{ borderRadius: '8px', fontWeight: 750, fontSize: '0.7rem', py: 0.3 }}
                               >
-                                {appReviews.length} Users
+                                {app.totalUsers} Users
                               </Button>
                             </TableCell>
+                            <TableCell align="center">
+                              <Chip
+                                label={`${app.liveUsersCount} Live`}
+                                size="small"
+                                color={app.liveUsersCount > 0 ? 'success' : 'default'}
+                                onClick={() => app.liveUsersCount > 0 && handleOpenModal(app, app.liveReviews, 'live')}
+                                sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px', cursor: app.liveUsersCount > 0 ? 'pointer' : 'default' }}
+                              />
+                            </TableCell>
                             <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>₹10.00</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 850 }}>₹{(liveCount * 10).toFixed(2)}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 850 }}>₹{(app.liveUsersCount * 10).toFixed(2)}</TableCell>
                           </TableRow>
-                        );
-                      })}
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -1330,8 +2005,8 @@ export default function UserView() {
             )}
           </TabPanel>
 
-          {/* TAB 3: Settings & Security */}
-          <TabPanel value={tabValue} index={3}>
+          {/* TAB 4: Settings & Security */}
+          <TabPanel value={tabValue} index="settings">
             {type === 'individual' ? (
               <Grid container spacing={3} alignItems="stretch">
                 {/* Left Panel: Profile Info */}
@@ -1486,8 +2161,8 @@ export default function UserView() {
             )}
           </TabPanel>
 
-          {/* TAB 4: Referral Network */}
-          <TabPanel value={tabValue} index={4}>
+          {/* TAB 5: Assigned Earners / Referral Network */}
+          <TabPanel value={tabValue} index="earners">
             {referrals.length === 0 ? (
               <Box sx={{ p: 6, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '18px' }}>
                 <ShareIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
@@ -1551,51 +2226,235 @@ export default function UserView() {
         onClose={handleCloseModal}
         maxWidth="md"
         fullWidth
-        PaperProps={{ sx: { borderRadius: '24px', p: 1 } }}
+        PaperProps={{
+          sx: {
+            borderRadius: '24px',
+            backgroundImage: 'none',
+            bgcolor: isDark ? '#0f172a' : '#ffffff',
+            border: `1px solid ${theme.palette.divider}`,
+            boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.7)' : '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+          },
+        }}
       >
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2.5 }}>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>Audit List: {modalApp?.app_name}</Typography>
-            <Typography variant="caption" color="text.secondary">Task #{modalApp?.task_id} • Total completed: {modalUsers.length}</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button size="small" variant="outlined" startIcon={<ContentCopyIcon sx={{ fontSize: 14 }} />} onClick={handleCopyAppUsers} sx={{ borderRadius: '10px' }}>
-              Copy User Handles
-            </Button>
-            <IconButton size="small" onClick={handleCloseModal}><CloseIcon fontSize="small" /></IconButton>
+        <DialogTitle sx={{ p: 2.5, pb: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+                <Typography variant="h6" sx={{ fontWeight: 850, letterSpacing: '-0.02em' }}>
+                  {modalApp?.app_name || 'Campaign Submissions'}
+                </Typography>
+                <Chip
+                  label={`#${modalApp?.task_id || 'TASK'}`}
+                  size="small"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontWeight: 800,
+                    height: 22,
+                    fontSize: '0.72rem',
+                    bgcolor: 'rgba(59, 130, 246, 0.12)',
+                    color: '#3b82f6',
+                  }}
+                />
+                <Chip
+                  label={modalMode === 'live' ? 'VERIFIED LIVE ONLY' : 'ALL AUDIT SUBMISSIONS'}
+                  size="small"
+                  sx={{
+                    fontWeight: 800,
+                    height: 22,
+                    fontSize: '0.68rem',
+                    bgcolor: modalMode === 'live' ? 'rgba(16, 185, 129, 0.15)' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)',
+                    color: modalMode === 'live' ? '#10b981' : 'text.secondary',
+                    border: modalMode === 'live' ? '1px solid rgba(16, 185, 129, 0.3)' : undefined,
+                  }}
+                />
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.74rem' }}>
+                Release Date: {formatKolkataDate(modalApp?.app_date)} • Package: {modalApp?.app_package || 'N/A'}
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<ContentCopyIcon sx={{ fontSize: 15 }} />}
+                onClick={() => handleCopyAppUsers(modalApp, filteredModalUsers.length > 0 ? filteredModalUsers : modalUsers, modalMode === 'live')}
+                sx={{
+                  borderRadius: '10px',
+                  fontWeight: 800,
+                  fontSize: '0.74rem',
+                  textTransform: 'none',
+                  boxShadow: 'none',
+                  bgcolor: modalMode === 'live' ? '#10b981' : 'primary.main',
+                  '&:hover': { bgcolor: modalMode === 'live' ? '#059669' : undefined },
+                  py: 0.6,
+                  px: 1.5,
+                }}
+              >
+                {modalMode === 'live' ? 'Copy Live Report' : 'Copy Handles'}
+              </Button>
+              <IconButton size="small" onClick={handleCloseModal} sx={{ borderRadius: '10px' }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
           </Box>
         </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          <TableContainer sx={{ maxHeight: 420 }}>
-            <Table size="small">
-              <TableHead sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(15,23,42,0.02)' }}>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 800 }}>Earner Profile</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Submitted Handle</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Date</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 800 }}>Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {modalUsers.map((u) => (
-                  <TableRow key={u.id} hover>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{u.earner_name}</Typography>
-                      <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>{u.earner_id}</Typography>
-                    </TableCell>
-                    <TableCell>{u.submitted_username}</TableCell>
-                    <TableCell>{formatKolkataDate(u.submitted_at)}</TableCell>
-                    <TableCell align="center">
-                      <Chip label={u.status} size="small" color={u.status === 'Approved' ? 'success' : 'default'} sx={{ height: 20, fontSize: '0.68rem', fontWeight: 800 }} />
-                    </TableCell>
+
+        <DialogContent sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Modal Filter Bar */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+            <TextField
+              size="small"
+              placeholder="Search earner username, name, or earner ID..."
+              value={modalSearch}
+              onChange={(e) => setModalSearch(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ flexGrow: 1, minWidth: 240, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
+            />
+
+            <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+              <Chip
+                label={`All (${modalUsers.length})`}
+                size="small"
+                onClick={() => setModalStatusFilter('all')}
+                variant={modalStatusFilter === 'all' ? 'filled' : 'outlined'}
+                color={modalStatusFilter === 'all' ? 'primary' : 'default'}
+                sx={{ fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer', height: 26, borderRadius: '8px' }}
+              />
+              <Chip
+                label={`Live/Approved (${modalUsers.filter((u) => u.status === 'Approved' || u.status === 'Live').length})`}
+                size="small"
+                onClick={() => setModalStatusFilter(modalStatusFilter === 'Approved' ? 'all' : 'Approved')}
+                variant={modalStatusFilter === 'Approved' ? 'filled' : 'outlined'}
+                color="success"
+                sx={{ fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer', height: 26, borderRadius: '8px' }}
+              />
+              <Chip
+                label={`Under Review (${modalUsers.filter((u) => u.status === 'Under Review' || !u.status).length})`}
+                size="small"
+                onClick={() => setModalStatusFilter(modalStatusFilter === 'Under Review' ? 'all' : 'Under Review')}
+                variant={modalStatusFilter === 'Under Review' ? 'filled' : 'outlined'}
+                color="warning"
+                sx={{ fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer', height: 26, borderRadius: '8px' }}
+              />
+              <Chip
+                label={`Rejected (${modalUsers.filter((u) => u.status === 'Rejected').length})`}
+                size="small"
+                onClick={() => setModalStatusFilter(modalStatusFilter === 'Rejected' ? 'all' : 'Rejected')}
+                variant={modalStatusFilter === 'Rejected' ? 'filled' : 'outlined'}
+                color="error"
+                sx={{ fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer', height: 26, borderRadius: '8px' }}
+              />
+            </Box>
+          </Box>
+
+          {/* Submissions Table */}
+          {filteredModalUsers.length === 0 ? (
+            <Box sx={{ p: 5, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '16px' }}>
+              <PeopleAltIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
+              <Typography variant="body2" color="text.secondary">
+                No submitted earner handles match your search/filter criteria.
+              </Typography>
+            </Box>
+          ) : (
+            <TableContainer sx={{ maxHeight: 420, border: `1px solid ${theme.palette.divider}`, borderRadius: '16px' }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow sx={{ '& th': { bgcolor: isDark ? '#1e293b' : '#f8fafc', fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' } }}>
+                    <TableCell sx={{ width: 48 }}>#</TableCell>
+                    <TableCell>Submitted Handle</TableCell>
+                    <TableCell>Earner Profile</TableCell>
+                    <TableCell>Date & Time</TableCell>
+                    <TableCell align="center">Audit Status</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {filteredModalUsers.map((u, idx) => (
+                    <TableRow key={u.id || idx} hover>
+                      <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                        {idx + 1}
+                      </TableCell>
+
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography sx={{ fontWeight: 750, fontSize: '0.84rem' }}>
+                            {u.submitted_username || 'N/A'}
+                          </Typography>
+                          {u.submitted_username && (
+                            <Tooltip title="Copy username">
+                              <IconButton
+                                size="small"
+                                onClick={() => copyToClipboard(u.submitted_username, 'Username')}
+                                sx={{ p: 0.3, opacity: 0.6, '&:hover': { opacity: 1 } }}
+                              >
+                                <ContentCopyIcon sx={{ fontSize: 13 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Box>
+                      </TableCell>
+
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8rem' }}>
+                          {u.earner_name || 'Individual Earner'}
+                        </Typography>
+                        {u.earner_id && (
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.main', fontSize: '0.68rem', display: 'block' }}>
+                            {u.earner_id}
+                          </Typography>
+                        )}
+                      </TableCell>
+
+                      <TableCell sx={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                        {formatKolkataDate(u.submitted_at, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </TableCell>
+
+                      <TableCell align="center">
+                        <Chip
+                          label={u.status || 'Under Review'}
+                          size="small"
+                          color={u.status === 'Approved' || u.status === 'Live' ? 'success' : u.status === 'Rejected' ? 'error' : 'warning'}
+                          sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={handleCloseModal} variant="contained" sx={{ borderRadius: '12px', fontWeight: 750 }}>Close</Button>
+
+        <DialogActions sx={{ p: 2.5, pt: 1.5, borderTop: `1px solid ${theme.palette.divider}`, justifyContent: 'space-between' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+            Showing {filteredModalUsers.length} of {modalUsers.length} handles
+          </Typography>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button onClick={handleCloseModal} variant="outlined" sx={{ borderRadius: '12px', fontWeight: 750, textTransform: 'none' }}>
+              Close
+            </Button>
+            <Button
+              onClick={() => handleCopyAppUsers(modalApp, filteredModalUsers.length > 0 ? filteredModalUsers : modalUsers, modalMode === 'live')}
+              variant="contained"
+              startIcon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+              sx={{
+                borderRadius: '12px',
+                fontWeight: 800,
+                textTransform: 'none',
+                bgcolor: modalMode === 'live' ? '#10b981' : 'primary.main',
+                '&:hover': { bgcolor: modalMode === 'live' ? '#059669' : undefined },
+              }}
+            >
+              {modalMode === 'live' ? 'Copy Live Report' : 'Copy All Filtered'}
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
 
