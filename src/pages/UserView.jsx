@@ -338,10 +338,13 @@ export default function UserView() {
           longBulkerId,
           `NOVAIRA/BULKER/${shortBulkerId}`,
           shortBulkerId?.toLowerCase(),
-          longBulkerId?.toLowerCase()
+          shortBulkerId?.toUpperCase(),
+          longBulkerId?.toLowerCase(),
+          longBulkerId?.toUpperCase(),
+          finalData.id,
         ].filter(Boolean)));
 
-        const { data: allApps } = await supabase.from('apps').select('*').order('app_date', { ascending: false }).limit(500);
+        const { data: allApps } = await supabase.from('apps').select('*').order('app_date', { ascending: false }).limit(1000);
         const appsAssigned = allApps?.filter((app) => {
           let assigned = app.assigned_bulkers || [];
           while (typeof assigned === 'string') {
@@ -368,7 +371,7 @@ export default function UserView() {
           .select('*')
           .in('bulker_id', bulkerKeys)
           .order('created_at', { ascending: false })
-          .limit(1000);
+          .limit(2000);
         if (profiles) setReferrals(profiles);
 
         const { data: hist } = await supabase
@@ -376,7 +379,7 @@ export default function UserView() {
           .select('*')
           .in('bulker_id', bulkerKeys)
           .order('change_date_time', { ascending: true })
-          .limit(200);
+          .limit(500);
         if (hist) setBillingHistory(hist);
 
         const { data: txns } = await supabase
@@ -384,22 +387,66 @@ export default function UserView() {
           .select('id, transaction_id, amount, transaction_type, description, status, created_at, utr_id')
           .in('earner_id', bulkerKeys)
           .order('created_at', { ascending: false })
-          .limit(200);
+          .limit(500);
         if (txns) setTransactions(txns);
 
-        let { data: revs } = await supabase
-          .from('review_submit_data')
-          .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id, apps(id, task_id, app_name, app_date, app_package)')
-          .in('bulker_id', bulkerKeys)
-          .order('submitted_at', { ascending: false })
-          .limit(2000);
+        // Pre-indexed lookup maps for high-performance memory resolution
+        const appsMap = new Map();
+        (allApps || []).forEach((a) => {
+          appsMap.set(String(a.id), a);
+          if (a.task_id) appsMap.set(String(a.task_id), a);
+        });
 
-        if (revs) {
-          revsData = revs.map((r) => {
-            const prof = profiles?.find((p) => p.earner_id === r.earner_id);
+        const profileNameMap = new Map();
+        (profiles || []).forEach((p) => {
+          const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.phone || p.earner_id;
+          profileNameMap.set(p.earner_id, name);
+        });
+
+        // 1. Get exact total count of reviews for this bulker
+        const { count: totalReviewsCount } = await supabase
+          .from('review_submit_data')
+          .select('*', { count: 'exact', head: true })
+          .in('bulker_id', bulkerKeys);
+
+        // 2. Fetch ALL real reviews in parallel chunks (PostgREST 1000 limit bypass)
+        const totalToFetch = totalReviewsCount || 0;
+        const pageSize = 1000;
+        const numPages = Math.min(Math.ceil(totalToFetch / pageSize), 25);
+        const reviewPromises = [];
+
+        for (let i = 0; i < numPages; i++) {
+          const from = i * pageSize;
+          const to = from + pageSize - 1;
+          reviewPromises.push(
+            supabase
+              .from('review_submit_data')
+              .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id')
+              .in('bulker_id', bulkerKeys)
+              .range(from, to)
+              .order('submitted_at', { ascending: false })
+          );
+        }
+
+        const reviewResults = await Promise.all(reviewPromises);
+        let rawReviews = [];
+        reviewResults.forEach((res) => {
+          if (res.data) rawReviews.push(...res.data);
+        });
+
+        if (rawReviews.length > 0) {
+          revsData = rawReviews.map((r) => {
+            const matchedApp = appsMap.get(String(r.app_id));
             return {
               ...r,
-              earner_name: prof ? `${prof.first_name || ''} ${prof.last_name || ''}`.trim() || prof.phone : (r.earner_id || 'Unknown'),
+              earner_name: profileNameMap.get(r.earner_id) || r.earner_id || 'Unknown',
+              apps: matchedApp || {
+                id: r.app_id,
+                task_id: r.app_id,
+                app_name: 'Application Task',
+                app_date: r.submitted_at,
+                app_package: '',
+              },
             };
           });
         }
@@ -655,7 +702,7 @@ export default function UserView() {
 
       const liveRevs = finalRevs.filter((r) => r.status === 'Approved' || r.status === 'Live');
       const underReviewRevs = finalRevs.filter((r) => r.status === 'Under Review' || !r.status);
-      const rejectedRevs = finalRevs.filter((r) => r.status === 'Rejected');
+      const rejectedRevs = finalRevs.filter((r) => r.status === 'Rejected' || r.status === 'Not Live');
 
       list.push({
         id: app.id,
@@ -693,7 +740,7 @@ export default function UserView() {
 
         const liveRevs = finalRevs.filter((x) => x.status === 'Approved' || x.status === 'Live');
         const underReviewRevs = finalRevs.filter((x) => x.status === 'Under Review' || !x.status);
-        const rejectedRevs = finalRevs.filter((x) => x.status === 'Rejected');
+        const rejectedRevs = finalRevs.filter((x) => x.status === 'Rejected' || x.status === 'Not Live');
 
         list.push({
           id: r.app_id || r.id,
@@ -786,7 +833,14 @@ export default function UserView() {
         (u.submitted_username || '').toLowerCase().includes(q) ||
         (u.earner_id || '').toLowerCase().includes(q) ||
         (u.earner_name || '').toLowerCase().includes(q);
-      const matchStatus = modalStatusFilter === 'all' || u.status === modalStatusFilter;
+      let matchStatus = true;
+      if (modalStatusFilter === 'Approved') {
+        matchStatus = u.status === 'Approved' || u.status === 'Live';
+      } else if (modalStatusFilter === 'Under Review') {
+        matchStatus = u.status === 'Under Review' || !u.status;
+      } else if (modalStatusFilter === 'Rejected') {
+        matchStatus = u.status === 'Rejected' || u.status === 'Not Live';
+      }
       return matchSearch && matchStatus;
     });
   }, [modalUsers, modalSearch, modalStatusFilter]);
@@ -2344,7 +2398,7 @@ export default function UserView() {
                 sx={{ fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer', height: 26, borderRadius: '8px' }}
               />
               <Chip
-                label={`Rejected (${modalUsers.filter((u) => u.status === 'Rejected').length})`}
+                label={`Rejected / Not Live (${modalUsers.filter((u) => u.status === 'Rejected' || u.status === 'Not Live').length})`}
                 size="small"
                 onClick={() => setModalStatusFilter(modalStatusFilter === 'Rejected' ? 'all' : 'Rejected')}
                 variant={modalStatusFilter === 'Rejected' ? 'filled' : 'outlined'}
@@ -2419,7 +2473,7 @@ export default function UserView() {
                         <Chip
                           label={u.status || 'Under Review'}
                           size="small"
-                          color={u.status === 'Approved' || u.status === 'Live' ? 'success' : u.status === 'Rejected' ? 'error' : 'warning'}
+                          color={u.status === 'Approved' || u.status === 'Live' ? 'success' : u.status === 'Rejected' || u.status === 'Not Live' ? 'error' : 'warning'}
                           sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
                         />
                       </TableCell>
