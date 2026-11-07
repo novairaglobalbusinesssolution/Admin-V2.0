@@ -1417,7 +1417,7 @@ export default function UserView() {
               />
             )}
 
-            {(type === 'individual' || type === 'bulker') && (
+            {type === 'individual' && (
               <Tab
                 value="ledger"
                 label={
@@ -1428,8 +1428,6 @@ export default function UserView() {
                 }
               />
             )}
-
-            {type === 'bulker' && <Tab value="invoice" label="Monthly Invoice" />}
 
             <Tab value="settings" label="Settings & Security" />
 
@@ -1854,229 +1852,148 @@ export default function UserView() {
             </TabPanel>
           )}
 
-          {/* TAB 2: Wallet & Financial Ledger */}
-          <TabPanel value={tabValue} index="ledger">
-            {loadingRecords ? (
-              <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress size={28} /></Box>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {/* 4 Frosted Financial Summary Cards */}
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
-                      <Typography variant="caption" sx={{ color: '#3b82f6', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
-                        Current Balance
-                      </Typography>
-                      <Typography variant="h5" sx={{ fontWeight: 900, color: '#3b82f6', mt: 0.5 }}>
-                        ₹{computedBalance.toFixed(2)}
-                      </Typography>
-                    </Box>
+          {/* TAB: Wallet & Financial Ledger (Individual Earners Only) */}
+          {type === 'individual' && (
+            <TabPanel value={tabValue} index="ledger">
+              {loadingRecords ? (
+                <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress size={28} /></Box>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {/* 4 Frosted Financial Summary Cards */}
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                        <Typography variant="caption" sx={{ color: '#3b82f6', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
+                          Current Balance
+                        </Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 900, color: '#3b82f6', mt: 0.5 }}>
+                          ₹{computedBalance.toFixed(2)}
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                        <Typography variant="caption" sx={{ color: '#f59e0b', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
+                          Pending Withdrawal
+                        </Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 900, color: '#f59e0b', mt: 0.5 }}>
+                          ₹{pendingDebited.toFixed(2)}
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                        <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
+                          Total Lifetime Earned
+                        </Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 900, color: '#10b981', mt: 0.5 }}>
+                          ₹{totalEarned.toFixed(2)}
+                        </Typography>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                        <Typography variant="caption" sx={{ color: '#ef4444', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
+                          Total Paid Out
+                        </Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 900, color: '#ef4444', mt: 0.5 }}>
+                          ₹{totalDebited.toFixed(2)}
+                        </Typography>
+                      </Box>
+                    </Grid>
                   </Grid>
 
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
-                      <Typography variant="caption" sx={{ color: '#f59e0b', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
-                        Pending Withdrawal
-                      </Typography>
-                      <Typography variant="h5" sx={{ fontWeight: 900, color: '#f59e0b', mt: 0.5 }}>
-                        ₹{pendingDebited.toFixed(2)}
-                      </Typography>
-                    </Box>
-                  </Grid>
-
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                      <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
-                        Total Lifetime Earned
-                      </Typography>
-                      <Typography variant="h5" sx={{ fontWeight: 900, color: '#10b981', mt: 0.5 }}>
-                        ₹{totalEarned.toFixed(2)}
-                      </Typography>
-                    </Box>
-                  </Grid>
-
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2.2, borderRadius: '18px', bgcolor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
-                      <Typography variant="caption" sx={{ color: '#ef4444', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.68rem', display: 'block' }}>
-                        Total Paid Out
-                      </Typography>
-                      <Typography variant="h5" sx={{ fontWeight: 900, color: '#ef4444', mt: 0.5 }}>
-                        ₹{totalDebited.toFixed(2)}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-
-                {/* Filter & Search Bar */}
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
-                  <TextField
-                    size="small"
-                    placeholder="Search Transaction ID, Description, UTR..."
-                    value={txnSearch}
-                    onChange={(e) => { setTxnSearch(e.target.value); setTxnPage(0); }}
-                    sx={{ flexGrow: 1, minWidth: 260, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
-                  />
-                  <FormControl size="small" sx={{ minWidth: 150 }}>
-                    <Select value={txnType} onChange={(e) => setTxnType(e.target.value)} displayEmpty sx={{ borderRadius: '12px' }}>
-                      <MenuItem value="">All Transaction Types</MenuItem>
-                      <MenuItem value="Credit">Credit (Income)</MenuItem>
-                      <MenuItem value="Debit">Debit (Withdrawal)</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
-
-                {/* Glass Ledger Table */}
-                {filteredTransactions.length === 0 ? (
-                  <Box sx={{ p: 6, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '18px' }}>
-                    <AccountBalanceWalletIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
-                    <Typography variant="body2" color="text.secondary">No wallet transactions match your criteria.</Typography>
-                  </Box>
-                ) : (
-                  <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '18px', overflow: 'hidden' }}>
-                    <Table size="small">
-                      <TableHead sx={{ bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)' }}>
-                        <TableRow>
-                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Date & Time</TableCell>
-                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Transaction ID</TableCell>
-                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Description / Reason</TableCell>
-                          <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Type</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Amount</TableCell>
-                          <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Status</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {filteredTransactions.slice(txnPage * txnRowsPerPage, txnPage * txnRowsPerPage + txnRowsPerPage).map((txn) => (
-                          <TableRow key={txn.id} hover>
-                            <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
-                              {formatKolkataDate(txn.created_at, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                            </TableCell>
-                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>
-                              {txn.transaction_id}
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 650, fontSize: '0.82rem' }}>
-                              {txn.description || 'Wallet balance adjustment'}
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={txn.transaction_type}
-                                size="small"
-                                color={txn.transaction_type === 'Credit' ? 'success' : 'error'}
-                                sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
-                              />
-                            </TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 850, fontSize: '0.9rem', color: txn.transaction_type === 'Credit' ? 'success.main' : 'error.main' }}>
-                              {txn.transaction_type === 'Credit' ? '+' : '-'}₹{parseFloat(txn.amount).toFixed(2)}
-                            </TableCell>
-                            <TableCell align="center">
-                              <Chip
-                                label={txn.status || 'Completed'}
-                                size="small"
-                                color={txn.status === 'Completed' ? 'success' : txn.status === 'Pending' ? 'warning' : 'error'}
-                                variant="outlined"
-                                sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    <TablePagination
-                      component="div"
-                      count={filteredTransactions.length}
-                      page={txnPage}
-                      onPageChange={(e, p) => setTxnPage(p)}
-                      rowsPerPage={txnRowsPerPage}
-                      onRowsPerPageChange={(e) => { setTxnRowsPerPage(parseInt(e.target.value, 10)); setTxnPage(0); }}
-                      rowsPerPageOptions={[10, 25, 50]}
+                  {/* Filter & Search Bar */}
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+                    <TextField
+                      size="small"
+                      placeholder="Search Transaction ID, Description, UTR..."
+                      value={txnSearch}
+                      onChange={(e) => { setTxnSearch(e.target.value); setTxnPage(0); }}
+                      sx={{ flexGrow: 1, minWidth: 260, '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
                     />
-                  </TableContainer>
-                )}
-              </Box>
-            )}
-          </TabPanel>
-
-          {/* TAB 3: Bulker Monthly Invoice */}
-          <TabPanel value={tabValue} index="invoice">
-            {type !== 'bulker' ? (
-              <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">Only available for bulker partner accounts.</Typography></Box>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
-                  <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 800 }}>Bulker Monthly Ledger Invoicing</Typography>
-                    <Typography variant="caption" color="text.secondary">Detailed campaign deliverable breakdown and payable disbursements.</Typography>
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                      <Select value={txnType} onChange={(e) => setTxnType(e.target.value)} displayEmpty sx={{ borderRadius: '12px' }}>
+                        <MenuItem value="">All Transaction Types</MenuItem>
+                        <MenuItem value="Credit">Credit (Income)</MenuItem>
+                        <MenuItem value="Debit">Debit (Withdrawal)</MenuItem>
+                      </Select>
+                    </FormControl>
                   </Box>
-                  <Chip
-                    label={`Payable Total: ₹${(totalLiveReviewsCount * 10).toFixed(2)}`}
-                    color="success"
-                    sx={{ fontWeight: 900, fontSize: '0.82rem', height: 32, borderRadius: '10px' }}
-                  />
-                </Box>
 
-                <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '18px', overflow: 'hidden' }}>
-                  <Table size="small">
-                    <TableHead sx={{ bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)' }}>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Task ID</TableCell>
-                        <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Application Name</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Total Submissions</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Approved / Live</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Unit Rate</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Subtotal</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {groupedBulkerApps.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                            No assigned campaigns found for this bulker.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        groupedBulkerApps.map((app) => (
-                          <TableRow key={app.id} hover>
-                            <TableCell sx={{ color: 'primary.main', fontWeight: 800, fontFamily: 'monospace' }}>
-                              #{app.task_id}
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 700 }}>
-                              {app.app_name}
-                              {app.app_package && (
-                                <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.68rem' }}>
-                                  {app.app_package}
-                                </Typography>
-                              )}
-                            </TableCell>
-                            <TableCell align="center">
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                disabled={app.totalUsers === 0}
-                                onClick={() => handleOpenModal(app, app.reviews, 'all')}
-                                sx={{ borderRadius: '8px', fontWeight: 750, fontSize: '0.7rem', py: 0.3 }}
-                              >
-                                {app.totalUsers} Users
-                              </Button>
-                            </TableCell>
-                            <TableCell align="center">
-                              <Chip
-                                label={`${app.liveUsersCount} Live`}
-                                size="small"
-                                color={app.liveUsersCount > 0 ? 'success' : 'default'}
-                                onClick={() => app.liveUsersCount > 0 && handleOpenModal(app, app.liveReviews, 'live')}
-                                sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px', cursor: app.liveUsersCount > 0 ? 'pointer' : 'default' }}
-                              />
-                            </TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>₹10.00</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 850 }}>₹{(app.liveUsersCount * 10).toFixed(2)}</TableCell>
+                  {/* Glass Ledger Table */}
+                  {filteredTransactions.length === 0 ? (
+                    <Box sx={{ p: 6, textAlign: 'center', border: `1px dashed ${theme.palette.divider}`, borderRadius: '18px' }}>
+                      <AccountBalanceWalletIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
+                      <Typography variant="body2" color="text.secondary">No wallet transactions match your criteria.</Typography>
+                    </Box>
+                  ) : (
+                    <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '18px', overflow: 'hidden' }}>
+                      <Table size="small">
+                        <TableHead sx={{ bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)' }}>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Transaction ID</TableCell>
+                            <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Description / Reason</TableCell>
+                            <TableCell sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Type</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Amount</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase' }}>Status</TableCell>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-          </TabPanel>
+                        </TableHead>
+                        <TableBody>
+                          {filteredTransactions.slice(txnPage * txnRowsPerPage, txnPage * txnRowsPerPage + txnRowsPerPage).map((txn) => (
+                            <TableRow key={txn.id} hover>
+                              <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                                {formatKolkataDate(txn.created_at, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>
+                                {txn.transaction_id}
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 650, fontSize: '0.82rem' }}>
+                                {txn.description || 'Wallet balance adjustment'}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={txn.transaction_type}
+                                  size="small"
+                                  color={txn.transaction_type === 'Credit' ? 'success' : 'error'}
+                                  sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
+                                />
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 850, fontSize: '0.9rem', color: txn.transaction_type === 'Credit' ? 'success.main' : 'error.main' }}>
+                                {txn.transaction_type === 'Credit' ? '+' : '-'}₹{parseFloat(txn.amount).toFixed(2)}
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={txn.status || 'Completed'}
+                                  size="small"
+                                  color={txn.status === 'Completed' ? 'success' : txn.status === 'Pending' ? 'warning' : 'error'}
+                                  variant="outlined"
+                                  sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, borderRadius: '6px' }}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <TablePagination
+                        component="div"
+                        count={filteredTransactions.length}
+                        page={txnPage}
+                        onPageChange={(e, p) => setTxnPage(p)}
+                        rowsPerPage={txnRowsPerPage}
+                        onRowsPerPageChange={(e) => { setTxnRowsPerPage(parseInt(e.target.value, 10)); setTxnPage(0); }}
+                        rowsPerPageOptions={[10, 25, 50]}
+                      />
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+            </TabPanel>
+          )}
 
           {/* TAB 4: Settings & Security */}
           <TabPanel value={tabValue} index="settings">
