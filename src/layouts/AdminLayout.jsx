@@ -43,6 +43,15 @@ import PushPinIcon from '@mui/icons-material/PushPin';
 import SecurityIcon from '@mui/icons-material/Security';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import SearchIcon from '@mui/icons-material/Search';
+import BusinessIcon from '@mui/icons-material/Business';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import PersonIcon from '@mui/icons-material/Person';
+import PaidIcon from '@mui/icons-material/Paid';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
+import TuneIcon from '@mui/icons-material/Tune';
+import SettingsApplicationsIcon from '@mui/icons-material/SettingsApplications';
+import PaymentsIcon from '@mui/icons-material/Payments';
 import OmniSearchModal from '../components/OmniSearchModal';
 import { supabase } from '../supabaseClient';
 
@@ -527,52 +536,97 @@ export default function AdminLayout() {
     </Box>
   );
 
-  const renderExpandableMenu = (title, items) => {
+  const renderExpandableMenu = (title, items, categoryIcon, categoryColor = '#3b82f6') => {
     const isExpanded = expandedPaymentMenu === title.toLowerCase();
     const isChildActive = items.some((item) => location.pathname === item.path);
     const isDark = theme.palette.mode === 'dark';
 
     return (
-      <Box key={title} sx={{ mb: 0.5 }}>
+      <Box key={title} sx={{ mb: 0.6 }}>
         <ListItem disablePadding sx={{ mb: 0.2 }}>
           <ListItemButton
             onClick={() => handleTogglePaymentMenu(title.toLowerCase())}
             sx={{
               borderRadius: '16px',
               mx: 1.25,
-              minHeight: '42px',
-              py: 0.75,
-              px: 1.6,
+              minHeight: '44px',
+              py: 0.8,
+              px: 1.5,
               transition: 'all 0.25s ease',
               backgroundImage: isChildActive
                 ? (isDark
-                  ? 'linear-gradient(135deg, rgba(37,99,235,0.18), rgba(147,197,253,0.06))'
-                  : 'linear-gradient(135deg, rgba(37,99,235,0.12), rgba(147,197,253,0.05))')
+                  ? `linear-gradient(135deg, ${categoryColor}25, ${categoryColor}08)`
+                  : `linear-gradient(135deg, ${categoryColor}18, ${categoryColor}06)`)
                 : 'none',
-              color: isChildActive ? (isDark ? '#93c5fd' : '#1d4ed8') : 'inherit',
-              boxShadow: isChildActive ? 'inset 0 0 0 1px rgba(96,165,250,0.25)' : 'none',
+              color: isChildActive ? (isDark ? '#fff' : categoryColor) : (isDark ? '#e2e8f0' : '#334155'),
+              boxShadow: isChildActive ? `inset 0 0 0 1px ${categoryColor}40` : 'none',
               '&:hover': {
-                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.04)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.04)',
                 transform: 'translateX(3px)',
               },
             }}
           >
-            <ListItemText primary={title} primaryTypographyProps={{ fontWeight: isChildActive ? 800 : 650, fontSize: '0.78rem', letterSpacing: '0.02em' }} />
-            <Box sx={{
-              transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-              transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
+            <Box
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: '9px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mr: 1.25,
+                bgcolor: isChildActive
+                  ? categoryColor
+                  : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)'),
+                color: isChildActive ? '#fff' : (isDark ? '#94a3b8' : '#64748b'),
+                boxShadow: isChildActive ? `0 2px 10px ${categoryColor}50` : 'none',
+                transition: 'all 0.25s ease',
+              }}
+            >
+              {categoryIcon}
+            </Box>
+            <ListItemText
+              primary={title}
+              primaryTypographyProps={{
+                fontWeight: isChildActive ? 800 : 700,
+                fontSize: '0.78rem',
+                letterSpacing: '0.04em',
+              }}
+            />
+            <Chip
+              label={items.length}
+              size="small"
+              sx={{
+                height: 18,
+                minWidth: 18,
+                fontSize: '0.62rem',
+                fontWeight: 800,
+                mr: 0.8,
+                bgcolor: isChildActive
+                  ? (isDark ? 'rgba(255,255,255,0.15)' : `${categoryColor}20`)
+                  : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'),
+                color: isChildActive ? (isDark ? '#fff' : categoryColor) : 'text.secondary',
+              }}
+            />
+            <Box
+              sx={{
+                transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
               <ExpandMore fontSize="small" sx={{ opacity: 0.7 }} />
             </Box>
           </ListItemButton>
         </ListItem>
         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding sx={{ pl: 1.2, pt: 0.4 }}>
+          <List component="div" disablePadding sx={{ pl: 1.5, pt: 0.4 }}>
             {items.map((item) => {
               const isActive = location.pathname === item.path;
-              const textColor = isActive ? (isDark ? '#93c5fd' : '#1d4ed8') : (isDark ? '#94a3b8' : '#64748b');
+              const textColor = isActive
+                ? (isDark ? '#fff' : categoryColor)
+                : (isDark ? '#94a3b8' : '#64748b');
 
               return (
                 <ListItem key={item.text} disablePadding sx={{ mb: 0.35 }}>
@@ -582,27 +636,56 @@ export default function AdminLayout() {
                       if (isMobile) setMobileOpen(false);
                     }}
                     sx={{
-                      borderRadius: '14px',
-                      mx: 1.5,
-                      minHeight: '36px',
+                      borderRadius: '12px',
+                      mx: 1.2,
+                      minHeight: '38px',
                       py: 0.55,
-                      px: 1.5,
+                      px: 1.4,
                       position: 'relative',
                       transition: 'all 0.25s ease',
                       backgroundImage: isActive
                         ? (isDark
-                          ? 'linear-gradient(135deg, rgba(37,99,235,0.18), rgba(147,197,253,0.05))'
-                          : 'linear-gradient(135deg, rgba(37,99,235,0.10), rgba(147,197,253,0.05))')
+                          ? `linear-gradient(135deg, ${categoryColor}30, ${categoryColor}10)`
+                          : `linear-gradient(135deg, ${categoryColor}18, ${categoryColor}05)`)
                         : 'none',
                       color: textColor,
+                      boxShadow: isActive ? `inset 0 0 0 1px ${categoryColor}35` : 'none',
                       '&:hover': {
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.04)',
-                        transform: 'translateX(4px)'
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.04)',
+                        transform: 'translateX(4px)',
                       },
                     }}
                   >
-                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: isActive ? 'primary.main' : 'text.disabled', mr: 1.2, transition: 'all 0.2s ease' }} />
-                    <ListItemText primary={item.text} primaryTypographyProps={{ fontWeight: isActive ? 750 : 550, fontSize: '0.74rem' }} />
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        mr: 1.2,
+                        color: isActive ? categoryColor : 'text.secondary',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      {item.icon}
+                    </Box>
+                    <ListItemText
+                      primary={item.text}
+                      primaryTypographyProps={{
+                        fontWeight: isActive ? 800 : 600,
+                        fontSize: '0.75rem',
+                      }}
+                    />
+                    {isActive && (
+                      <Box
+                        sx={{
+                          width: 5,
+                          height: 18,
+                          borderRadius: '3px',
+                          bgcolor: categoryColor,
+                          boxShadow: `0 0 8px ${categoryColor}`,
+                        }}
+                      />
+                    )}
                   </ListItemButton>
                 </ListItem>
               );
@@ -613,22 +696,29 @@ export default function AdminLayout() {
     );
   };
 
-  const paymentSubMenuItems = [
-    { text: 'User Wallet', path: '/payments/wallet' },
-    { text: 'Withdrawals Request', path: '/payments/withdrawals' },
-    { text: 'Gift Cards', path: '/payments/gift-cards' },
-    { text: 'Settings Payments', path: '/payments/settings-payments' },
+  const clientSubMenuItems = [
+    { text: 'Invoices', path: '/payments/clients/invoices', icon: <ReceiptLongIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Payments', path: '/payments/clients/payments', icon: <PaymentsIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Settings', path: '/payments/clients/settings', icon: <SettingsApplicationsIcon sx={{ fontSize: 16 }} /> },
   ];
 
-  const clientSubMenuItems = [
-    { text: 'Invoices', path: '/payments/clients/invoices' },
-    { text: 'Payments', path: '/payments/clients/payments' },
-    { text: 'Settings', path: '/payments/clients/settings' },
+  const individualSubMenuItems = [
+    { text: 'User Wallet', path: '/payments/individuals/wallet', icon: <AccountBalanceWalletIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Withdrawals Request', path: '/payments/individuals/withdrawals', icon: <PaidIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Gift Cards', path: '/payments/individuals/gift-cards', icon: <CardGiftcardIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Settings Payments', path: '/payments/individuals/settings-payments', icon: <TuneIcon sx={{ fontSize: 16 }} /> },
   ];
 
   const bulkerSubMenuItems = [
-    { text: 'User Wallet', path: '/payments/bulkers/wallet' },
-    { text: 'Invoices', path: '/payments/bulkers/invoices' },
+    { text: 'User Wallet', path: '/payments/bulkers/wallet', icon: <AccountBalanceWalletIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Invoices', path: '/payments/bulkers/invoices', icon: <ReceiptLongIcon sx={{ fontSize: 16 }} /> },
+  ];
+
+  const providerSubMenuItems = [
+    { text: 'User Wallet', path: '/payments/providers/wallet', icon: <AccountBalanceWalletIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Withdrawals Request', path: '/payments/providers/withdrawals', icon: <PaidIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Gift Cards', path: '/payments/providers/gift-cards', icon: <CardGiftcardIcon sx={{ fontSize: 16 }} /> },
+    { text: 'Settings Payments', path: '/payments/providers/settings-payments', icon: <TuneIcon sx={{ fontSize: 16 }} /> },
   ];
 
   const paymentsDrawer = (
@@ -668,14 +758,14 @@ export default function AdminLayout() {
         <Divider sx={{ my: 1, mx: 2, opacity: 0.5 }} />
 
         <Typography variant="overline" sx={{ px: 3, mb: 0.8, mt: 1.5, fontWeight: 700, color: 'text.disabled', fontSize: '0.6rem', display: 'block', letterSpacing: 0.7 }}>
-          TRANSACTIONS
+          TRANSACTIONS & ACCOUNTS
         </Typography>
 
         <List sx={{ pt: 0 }}>
-          {renderExpandableMenu('CLIENTS', clientSubMenuItems)}
-          {renderExpandableMenu('INDIVIDUALS', paymentSubMenuItems.map((m) => ({ ...m, path: `/payments/individuals${m.path.replace('/payments', '')}` })))}
-          {renderExpandableMenu('BULKERS', bulkerSubMenuItems)}
-          {renderExpandableMenu('PROVIDERS', paymentSubMenuItems.map((m) => ({ ...m, path: `/payments/providers${m.path.replace('/payments', '')}` })))}
+          {renderExpandableMenu('CLIENTS', clientSubMenuItems, <BusinessIcon sx={{ fontSize: 16 }} />, '#3b82f6')}
+          {renderExpandableMenu('INDIVIDUALS', individualSubMenuItems, <PersonIcon sx={{ fontSize: 16 }} />, '#10b981')}
+          {renderExpandableMenu('BULKERS', bulkerSubMenuItems, <StorefrontIcon sx={{ fontSize: 16 }} />, '#8b5cf6')}
+          {renderExpandableMenu('PROVIDERS', providerSubMenuItems, <AccountBalanceIcon sx={{ fontSize: 16 }} />, '#f59e0b')}
         </List>
 
         <Divider sx={{ my: 1, mx: 2, opacity: 0.5 }} />
