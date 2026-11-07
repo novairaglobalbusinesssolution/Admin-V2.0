@@ -202,10 +202,12 @@ export default function BulkerInvoiceDetails() {
 
   const { invoices } = calculatedFinances;
 
-  // Auto-select latest month if not chosen
+  // Auto-select latest month if not chosen or if previous selection is no longer valid
   useEffect(() => {
-    if (!selectedMonth && invoices.monthKeys.length > 0) {
-      setSelectedMonth(invoices.monthKeys[0]);
+    if (invoices.monthKeys.length > 0) {
+      if (!selectedMonth || !invoices.monthKeys.includes(selectedMonth)) {
+        setSelectedMonth(invoices.monthKeys[0]);
+      }
     }
   }, [invoices.monthKeys, selectedMonth]);
 

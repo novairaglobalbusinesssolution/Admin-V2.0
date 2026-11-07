@@ -35,6 +35,30 @@ export const getBulkerIdVariants = (bulkerId) => {
   return Array.from(new Set([raw, clean, prefixed]));
 };
 
+/**
+ * Resolves the monthly billing cycle key (YYYY-MM) based strictly on APP DATE (app.app_date or app.created_at).
+ * E.g., if an app was released on 2026-10-30, its deliverables belong to October ('2026-10'), even if submitted later.
+ */
+export const getAppMonthKey = (app, fallbackDateStr) => {
+  const rawDate = app?.app_date || app?.created_at || fallbackDateStr;
+  if (!rawDate) return '2026-10';
+  const str = String(rawDate).trim();
+  if (/^\d{4}-\d{2}/.test(str)) {
+    return str.substring(0, 7);
+  }
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${year}-${month}`;
+    }
+  } catch {
+    // fallback
+  }
+  return str.substring(0, 7) || '2026-10';
+};
+
 export const getModeAtDate = (dateStr, billingHistory = [], fallbackAccountType = 'Wallet System') => {
   if (!billingHistory || billingHistory.length === 0) {
     return fallbackAccountType || 'Wallet System';
@@ -146,9 +170,9 @@ export const calculateBulkerFinances = ({
       walletAppBreakdown[r.app_id].liveCount += 1;
       walletAppBreakdown[r.app_id].totalEarned += getAmount;
     } else {
-      // Manual Mode
+      // Manual Mode (Monthly Invoice is strictly grouped by APP DATE of the application)
       manualLiveReviews += 1;
-      const mKey = r.submitted_at ? r.submitted_at.substring(0, 7) : '2026-10';
+      const mKey = getAppMonthKey(app, r.submitted_at);
 
       if (!manualByMonth[mKey]) {
         manualByMonth[mKey] = {

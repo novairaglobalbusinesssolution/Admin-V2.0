@@ -17,7 +17,7 @@ import {
   calculateBulkerFinances,
 } from './bulkerPaymentCalculations';
 
-const CACHE_KEY = 'NV_BULKER_FINANCES_MASTER_CACHE_V2';
+const CACHE_KEY = 'NV_BULKER_FINANCES_MASTER_CACHE_V3';
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 Minutes Cache TTL
 
 // In-Memory Module Cache (Instant 0ms access within active React lifecycle)
@@ -128,7 +128,7 @@ export const getBulkerFinances = async ({ forceRefresh = false } = {}) => {
 
         supabase
           .from('apps')
-          .select('id, app_name, task_id, members_reward, assigned_bulkers'),
+          .select('id, app_name, task_id, members_reward, assigned_bulkers, app_date, created_at'),
 
         // Count of bulker transactions
         supabase
