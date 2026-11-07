@@ -1120,11 +1120,11 @@ export default function Withdrawals() {
         </Paper>
       )}
 
-      {/* PAY & SETTLE MODAL */}
+      {/* PAY & SETTLE MODAL (2-COLUMN COMPACT LAYOUT - NO SCROLL) */}
       <Dialog
         open={payModalOpen}
         onClose={() => !actionLoading && setPayModalOpen(false)}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
         slotProps={{
           backdrop: {
@@ -1140,196 +1140,338 @@ export default function Withdrawals() {
             border: `1px solid ${theme.palette.divider}`,
             bgcolor: 'background.paper',
             p: 1,
+            maxHeight: '92vh',
+            overflow: 'hidden',
           },
         }}
       >
-        <DialogTitle sx={{ pb: 0.5, fontWeight: 900, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: 1.2 }}>
-          <Box
-            sx={{
-              width: 36,
-              height: 36,
-              borderRadius: '10px',
-              bgcolor: 'rgba(16, 185, 129, 0.15)',
-              color: '#10b981',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <PaymentsIcon />
+        <DialogTitle sx={{ pb: 1, pt: 1.5, px: 2.5, fontWeight: 900, fontSize: '1.15rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: '10px',
+                bgcolor: 'rgba(16, 185, 129, 0.15)',
+                color: '#10b981',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <PaymentsIcon fontSize="small" />
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 850, lineHeight: 1.2 }}>
+                Process Payout Settlement
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Verify beneficiary credentials and record UTR transaction
+              </Typography>
+            </Box>
           </Box>
-          Process Payout Settlement
-        </DialogTitle>
-        <DialogContent sx={{ pt: '12px !important' }}>
           {selectedTx && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.2 }}>
-              {/* Amount Banner */}
-              <Box
-                sx={{
-                  p: 2.2,
-                  borderRadius: '18px',
-                  bgcolor: isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Box>
-                  <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.68rem', display: 'block' }}>
-                    Net Disbursement Amount
-                  </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 900, color: '#10b981', mt: 0.3 }}>
-                    ₹{selectedTx.amount}
-                  </Typography>
-                </Box>
-                <Chip
-                  label={selectedTx.payoutData?.account_type || 'BANK'}
-                  size="small"
-                  sx={{
-                    fontWeight: 800,
-                    fontSize: '0.7rem',
-                    bgcolor: 'rgba(16, 185, 129, 0.2)',
-                    color: '#10b981',
-                  }}
-                />
-              </Box>
+            <Chip
+              label={selectedTx.payoutData?.account_type === 'UPI' ? 'UPI INSTANT QR' : 'BANK IMPS / NEFT'}
+              size="small"
+              sx={{
+                fontWeight: 800,
+                fontSize: '0.66rem',
+                bgcolor: selectedTx.payoutData?.account_type === 'UPI' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                color: selectedTx.payoutData?.account_type === 'UPI' ? '#8b5cf6' : '#3b82f6',
+                border: `1px solid ${selectedTx.payoutData?.account_type === 'UPI' ? 'rgba(139, 92, 246, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+              }}
+            />
+          )}
+        </DialogTitle>
 
-              {/* Beneficiary Details Pod */}
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  borderRadius: '18px',
-                  bgcolor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(15, 23, 42, 0.02)',
-                }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.2 }}>
-                  <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.04em' }}>
-                    Beneficiary Account
-                  </Typography>
-                  <Button
-                    size="small"
-                    startIcon={<ContentCopyIcon sx={{ fontSize: '12px !important' }} />}
-                    onClick={() => {
-                      const txt = `${selectedTx.payoutData?.account_name} | ${selectedTx.payoutData?.account_number} | ${selectedTx.payoutData?.ifsc_code || ''}`;
-                      copyToClipboard(txt, 'all_details', 'All Beneficiary Info');
+        <DialogContent sx={{ pt: '10px !important', px: 2.5, pb: 1.5, overflowY: 'auto' }}>
+          {selectedTx && (
+            <Grid container spacing={2.5} alignItems="stretch">
+              {/* LEFT COLUMN: QR CODE (UPI) OR BANK BADGE */}
+              <Grid item xs={12} md={5}>
+                {selectedTx.payoutData?.account_type === 'UPI' ? (
+                  <Box
+                    sx={{
+                      height: '100%',
+                      p: 2,
+                      borderRadius: '20px',
+                      border: '1px solid rgba(139, 92, 246, 0.25)',
+                      bgcolor: isDark ? 'rgba(139, 92, 246, 0.06)' : 'rgba(139, 92, 246, 0.04)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      textAlign: 'center',
                     }}
-                    sx={{ textTransform: 'none', fontSize: '0.7rem', py: 0.2 }}
                   >
-                    Copy All
-                  </Button>
-                </Box>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.3 }}>
+                      Scan & Pay via Any UPI App
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem', mb: 1.5, display: 'block' }}>
+                      GPay • PhonePe • Paytm • BHIM
+                    </Typography>
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
-                      Account Name
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 750 }}>
-                      {selectedTx.payoutData?.account_name || 'N/A'}
-                    </Typography>
-                  </Box>
+                    {/* QR Code Container */}
+                    <Box
+                      sx={{
+                        p: 1.2,
+                        bgcolor: '#fff',
+                        borderRadius: '16px',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                        border: '2px solid rgba(139, 92, 246, 0.2)',
+                        lineHeight: 0,
+                      }}
+                    >
+                      <img
+                        src={generateUPIQR(selectedTx.payoutData, selectedTx.amount)}
+                        alt="UPI QR Code"
+                        style={{ width: '160px', height: '160px', display: 'block', borderRadius: '8px' }}
+                      />
+                    </Box>
 
-                  <Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
-                      Account / UPI ID
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 800, color: isDark ? '#93c5fd' : '#1d4ed8' }}>
-                        {selectedTx.payoutData?.account_number || 'N/A'}
+                    <Chip
+                      label={`Amount: ₹${selectedTx.amount}`}
+                      size="small"
+                      sx={{
+                        mt: 1.5,
+                        fontWeight: 900,
+                        fontSize: '0.75rem',
+                        bgcolor: 'rgba(16, 185, 129, 0.15)',
+                        color: '#10b981',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                      }}
+                    />
+
+                    {/* UPI String Quick Action */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 1 }}>
+                      <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.72rem', color: isDark ? '#c4b5fd' : '#7c3aed' }}>
+                        {selectedTx.payoutData?.account_number}
                       </Typography>
-                      <IconButton size="small" onClick={() => copyToClipboard(selectedTx.payoutData?.account_number, 'modal_acc', 'Account')}>
-                        {copiedKey === 'modal_acc' ? <DoneIcon sx={{ fontSize: 12, color: '#10b981' }} /> : <ContentCopyIcon sx={{ fontSize: 12 }} />}
-                      </IconButton>
+                      <Tooltip title="Copy UPI VPA">
+                        <IconButton
+                          size="small"
+                          onClick={() => copyToClipboard(selectedTx.payoutData?.account_number, 'modal_qr_vpa', 'UPI ID')}
+                          sx={{ p: 0.3 }}
+                        >
+                          {copiedKey === 'modal_qr_vpa' ? <DoneIcon sx={{ fontSize: 13, color: '#10b981' }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box
+                    sx={{
+                      height: '100%',
+                      p: 2.5,
+                      borderRadius: '20px',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      bgcolor: isDark ? 'rgba(59, 130, 246, 0.06)' : 'rgba(59, 130, 246, 0.04)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                        <Box
+                          sx={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: '12px',
+                            bgcolor: 'rgba(59, 130, 246, 0.15)',
+                            color: '#3b82f6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <AccountBalanceIcon fontSize="small" />
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: '#3b82f6', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.68rem', display: 'block' }}>
+                            Bank IMPS / NEFT
+                          </Typography>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                            {selectedTx.payoutData?.bank_name || 'Commercial Bank'}
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      <Divider sx={{ my: 1.5, opacity: 0.5 }} />
+
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
+                            A/C NUMBER
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 850, fontSize: '0.9rem', color: isDark ? '#93c5fd' : '#1d4ed8' }}>
+                              {selectedTx.payoutData?.account_number || 'N/A'}
+                            </Typography>
+                            <IconButton size="small" onClick={() => copyToClipboard(selectedTx.payoutData?.account_number, 'bank_acc_left', 'A/C Number')}>
+                              {copiedKey === 'bank_acc_left' ? <DoneIcon sx={{ fontSize: 13, color: '#10b981' }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
+                            </IconButton>
+                          </Box>
+                        </Box>
+
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
+                            IFSC CODE
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 850, fontSize: '0.9rem' }}>
+                              {selectedTx.payoutData?.ifsc_code || 'N/A'}
+                            </Typography>
+                            <IconButton size="small" onClick={() => copyToClipboard(selectedTx.payoutData?.ifsc_code, 'bank_ifsc_left', 'IFSC Code')}>
+                              {copiedKey === 'bank_ifsc_left' ? <DoneIcon sx={{ fontSize: 13, color: '#10b981' }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Box>
+
+                    <Alert severity="info" sx={{ mt: 2, borderRadius: '12px', fontSize: '0.72rem', py: 0.5 }}>
+                      Disburse via corporate netbanking portal, then enter UTR on the right.
+                    </Alert>
+                  </Box>
+                )}
+              </Grid>
+
+              {/* RIGHT COLUMN: BENEFICIARY DETAILS & UTR SUBMIT FORM */}
+              <Grid item xs={12} md={7}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.8, height: '100%', justifyContent: 'space-between' }}>
+                  {/* Amount Pod */}
+                  <Box
+                    sx={{
+                      p: 1.8,
+                      borderRadius: '16px',
+                      bgcolor: isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.66rem', display: 'block' }}>
+                        Disbursement Amount
+                      </Typography>
+                      <Typography variant="h4" sx={{ fontWeight: 900, color: '#10b981', mt: 0.2 }}>
+                        ₹{selectedTx.amount}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
+                        Earner ID
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 750, color: isDark ? '#93c5fd' : '#1d4ed8' }}>
+                        {selectedTx.earner_id}
+                      </Typography>
                     </Box>
                   </Box>
 
-                  {selectedTx.payoutData?.account_type !== 'UPI' && (
-                    <>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
-                          Bank Name
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                          {selectedTx.payoutData?.bank_name || 'N/A'}
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.68rem' }}>
-                          IFSC Code
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 800 }}>
-                            {selectedTx.payoutData?.ifsc_code || 'N/A'}
-                          </Typography>
-                          <IconButton size="small" onClick={() => copyToClipboard(selectedTx.payoutData?.ifsc_code, 'modal_ifsc', 'IFSC')}>
-                            {copiedKey === 'modal_ifsc' ? <DoneIcon sx={{ fontSize: 12, color: '#10b981' }} /> : <ContentCopyIcon sx={{ fontSize: 12 }} />}
-                          </IconButton>
-                        </Box>
-                      </Box>
-                    </>
-                  )}
-                </Box>
-              </Paper>
-
-              {/* UPI Instant QR Code Box */}
-              {selectedTx.payoutData?.account_type === 'UPI' && (
-                <Box
-                  sx={{
-                    textAlign: 'center',
-                    p: 2.2,
-                    borderRadius: '18px',
-                    border: '1px solid rgba(139, 92, 246, 0.25)',
-                    bgcolor: isDark ? 'rgba(139, 92, 246, 0.06)' : 'rgba(139, 92, 246, 0.04)',
-                  }}
-                >
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#8b5cf6', mb: 0.5 }}>
-                    Scan & Pay via UPI App
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                    Open GPay, PhonePe, Paytm, or BHIM to scan directly with ₹{selectedTx.amount} prefilled.
-                  </Typography>
-
-                  <Box
+                  {/* Beneficiary Details Pod */}
+                  <Paper
+                    variant="outlined"
                     sx={{
-                      p: 1.5,
-                      display: 'inline-block',
-                      bgcolor: '#fff',
+                      p: 1.8,
                       borderRadius: '16px',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                      bgcolor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(15, 23, 42, 0.02)',
                     }}
                   >
-                    <img
-                      src={generateUPIQR(selectedTx.payoutData, selectedTx.amount)}
-                      alt="UPI QR Code"
-                      style={{ width: '180px', height: '180px', display: 'block' }}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.04em', fontSize: '0.68rem' }}>
+                        Beneficiary Info
+                      </Typography>
+                      <Button
+                        size="small"
+                        startIcon={<ContentCopyIcon sx={{ fontSize: '11px !important' }} />}
+                        onClick={() => {
+                          const txt = `${selectedTx.payoutData?.account_name} | ${selectedTx.payoutData?.account_number} | ${selectedTx.payoutData?.ifsc_code || ''}`;
+                          copyToClipboard(txt, 'all_details', 'All Beneficiary Info');
+                        }}
+                        sx={{ textTransform: 'none', fontSize: '0.68rem', py: 0.1, px: 1, minHeight: 22 }}
+                      >
+                        Copy All
+                      </Button>
+                    </Box>
+
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.65rem' }}>
+                          Account Holder Name
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 750, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {selectedTx.payoutData?.account_name || selectedTx.user_name}
+                        </Typography>
+                      </Grid>
+
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.65rem' }}>
+                          Account / UPI VPA
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.82rem', color: isDark ? '#93c5fd' : '#1d4ed8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {selectedTx.payoutData?.account_number || 'N/A'}
+                          </Typography>
+                          <IconButton size="small" onClick={() => copyToClipboard(selectedTx.payoutData?.account_number, 'modal_acc_right', 'Account')} sx={{ p: 0.2 }}>
+                            {copiedKey === 'modal_acc_right' ? <DoneIcon sx={{ fontSize: 11, color: '#10b981' }} /> : <ContentCopyIcon sx={{ fontSize: 11 }} />}
+                          </IconButton>
+                        </Box>
+                      </Grid>
+
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.65rem' }}>
+                          Phone Number
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 650, fontSize: '0.78rem' }}>
+                          {selectedTx.phone || 'N/A'}
+                        </Typography>
+                      </Grid>
+
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.65rem' }}>
+                          Assigned Bulker
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 650, fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {selectedTx.bulker_name || 'Direct'}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+
+                  {/* UTR Input Section */}
+                  <Box>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 0.6, fontSize: '0.72rem' }}>
+                      BANK SETTLEMENT REFERENCE (UTR ID) *
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder="Paste 12-digit UTR ID (e.g. 402918274619)"
+                      value={utrInput}
+                      onChange={(e) => setUtrInput(e.target.value)}
+                      required
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: '14px',
+                          fontWeight: 800,
+                          fontSize: '0.88rem',
+                        },
+                      }}
                     />
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.66rem', mt: 0.5, display: 'block' }}>
+                      An automated push notification with this UTR will be dispatched to the earner app immediately.
+                    </Typography>
                   </Box>
                 </Box>
-              )}
-
-              {/* UTR Input Field */}
-              <TextField
-                fullWidth
-                size="small"
-                label="Bank Reference / UTR ID"
-                variant="outlined"
-                value={utrInput}
-                onChange={(e) => setUtrInput(e.target.value)}
-                placeholder="e.g. 402918274619 or UTR1928374"
-                required
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '14px',
-                    fontWeight: 750,
-                  },
-                }}
-              />
-            </Box>
+              </Grid>
+            </Grid>
           )}
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+
+        <DialogActions sx={{ px: 2.5, pb: 2, pt: 1, gap: 1 }}>
           <Button
             variant="outlined"
             onClick={() => setPayModalOpen(false)}
@@ -1347,6 +1489,8 @@ export default function Withdrawals() {
               borderRadius: '12px',
               textTransform: 'none',
               fontWeight: 850,
+              px: 2.5,
+              py: 1,
               background: 'linear-gradient(135deg, #10b981, #059669)',
               boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)',
             }}
