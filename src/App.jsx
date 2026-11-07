@@ -32,6 +32,8 @@ import BulkerWalletList from './pages/BulkerWalletList';
 import BulkerWalletDetails from './pages/BulkerWalletDetails';
 import BulkerInvoicesList from './pages/BulkerInvoicesList';
 import BulkerInvoiceDetails from './pages/BulkerInvoiceDetails';
+import ProviderInvoicesList from './pages/ProviderInvoicesList';
+import ProviderInvoiceDetails from './pages/ProviderInvoiceDetails';
 import SettingsPayments from './pages/SettingsPayments';
 import GiftCards from './pages/GiftCards';
 import Withdrawals from './pages/Withdrawals';
@@ -284,6 +286,11 @@ function App() {
                 <Route path="payments/bulkers/wallet/:bulkerId" element={<BulkerWalletDetails />} />
                 <Route path="payments/bulkers/invoices" element={<BulkerInvoicesList />} />
                 <Route path="payments/bulkers/invoices/:bulkerId" element={<BulkerInvoiceDetails />} />
+                <Route path="payments/providers" element={<Navigate to="/payments/providers/invoices" replace />} />
+                <Route path="payments/providers/invoices" element={<ProviderInvoicesList />} />
+                <Route path="payments/providers/invoices/:providerId" element={<ProviderInvoiceDetails />} />
+                <Route path="payments/providers/bills" element={<Navigate to="/payments/providers/invoices" replace />} />
+                <Route path="payments/providers/bills/:providerId" element={<ProviderInvoiceDetails />} />
                 <Route path="payments/clients/invoices" element={<ClientInvoicesList />} />
                 <Route path="payments/clients/invoices/:clientId" element={<ClientInvoiceDetails />} />
                 <Route path="payments/clients/invoices/:clientId/create" element={<CreateInvoice />} />
