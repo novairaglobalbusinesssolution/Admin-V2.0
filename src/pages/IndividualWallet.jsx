@@ -15,6 +15,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CloseIcon from '@mui/icons-material/Close';
 import { supabase } from '../supabaseClient';
+import { getApiBaseUrl, getApiHeaders } from '../utils/apiConfig';
 
 const fetchAllRows = async (createQuery) => {
   const pageSize = 1000;
@@ -158,10 +159,10 @@ export default function IndividualWallet() {
 
         // Send Push Notification
         try {
-          const baseUrl = import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com';
+          const baseUrl = getApiBaseUrl();
           fetch(`${baseUrl}/api/send-notification`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({
               earner_id: selectedUser.earner_id,
               title: trxType === 'Credit' ? 'Wallet Credited' : 'Wallet Debited',

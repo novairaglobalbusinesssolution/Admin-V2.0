@@ -54,21 +54,36 @@ export default function PushNotifications() {
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('earner_id, first_name, last_name, email, phone, fcm_token')
-        .order('created_at', { ascending: false });
+      // Fetch up to 5000 users and specifically ensure TEST_ACCOUNT_ID is included
+      const [{ data, error }, { data: testUserData }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('earner_id, first_name, last_name, email, phone, fcm_token')
+          .order('created_at', { ascending: false })
+          .limit(5000),
+        supabase
+          .from('profiles')
+          .select('earner_id, first_name, last_name, email, phone, fcm_token')
+          .eq('earner_id', TEST_ACCOUNT_ID)
+          .maybeSingle()
+      ]);
 
-      if (!error && data && data.length > 0) {
-        setUsers(data);
-      } else {
+      let allUsers = data || [];
+      if (allUsers.length === 0) {
         const apiBase = getApiBaseUrl();
         const res = await fetch(`${apiBase}/api/users`, { headers: getApiHeaders() });
         const json = await res.json();
         if (json.status === 'success') {
-          setUsers(json.data || []);
+          allUsers = json.data || [];
         }
       }
+
+      // Prepend or guarantee test account is in the users array
+      if (testUserData && !allUsers.some(u => u.earner_id === testUserData.earner_id)) {
+        allUsers = [testUserData, ...allUsers];
+      }
+
+      setUsers(allUsers);
     } catch (e) {
       console.error('fetchUsers error:', e);
       setSnack({ open: true, message: `Failed to load users: ${e.message}`, type: 'error' });
@@ -81,9 +96,25 @@ export default function PushNotifications() {
     return users.filter(u => !!u.fcm_token).length;
   }, [users]);
 
-  // Quick 1-click test selector for user's test account
-  const handleSelectTestAccount = () => {
-    const testUser = users.find(u => u.earner_id === TEST_ACCOUNT_ID);
+  // Quick 1-click test selector for user's test account (always resilient)
+  const handleSelectTestAccount = async () => {
+    let testUser = users.find(u => u.earner_id === TEST_ACCOUNT_ID);
+    if (!testUser) {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('earner_id, first_name, last_name, email, phone, fcm_token')
+          .eq('earner_id', TEST_ACCOUNT_ID)
+          .maybeSingle();
+        if (data) {
+          testUser = data;
+          setUsers(prev => [data, ...prev]);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     if (testUser) {
       setTargetType('selected');
       setSelectedUsers([testUser]);
@@ -92,7 +123,7 @@ export default function PushNotifications() {
       setNotiType('system');
       setSnack({ open: true, message: `Selected test account: ${testUser.earner_id} (${testUser.first_name || 'Subhadeep'})`, type: 'info' });
     } else {
-      setSnack({ open: true, message: `Test earner ${TEST_ACCOUNT_ID} not found in user list`, type: 'warning' });
+      setSnack({ open: true, message: `Test earner ${TEST_ACCOUNT_ID} could not be loaded`, type: 'warning' });
     }
   };
 

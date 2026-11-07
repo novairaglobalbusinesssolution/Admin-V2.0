@@ -7,6 +7,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { supabase } from '../supabaseClient';
+import { getApiBaseUrl, getApiHeaders } from '../utils/apiConfig';
 
 // MUI Icons
 import AndroidIcon from '@mui/icons-material/Android';
@@ -360,9 +361,10 @@ export default function AddComment() {
           }
         }
 
-        await fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-bulk-notification`, {
+        const baseUrl = getApiBaseUrl();
+        await fetch(`${baseUrl}/api/send-bulk-notification`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({
             app_id: selectedApp.id,
             bulker_ids: assignedBulkerIds,

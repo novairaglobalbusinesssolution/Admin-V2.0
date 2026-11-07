@@ -36,6 +36,7 @@ import {
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { getApiBaseUrl, getApiHeaders } from '../utils/apiConfig';
 
 // Material Icons
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -416,14 +417,14 @@ export default function UserView() {
       setData({ ...data, status: nextStatus });
 
       if (type === 'individual') {
-        const backendUrl = import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com';
+        const backendUrl = getApiBaseUrl();
         const notificationBody = nextStatus === 'Active'
           ? 'Your Novaira account is active again.'
           : 'Your Novaira account has been suspended. Please contact support if you believe this is a mistake.';
 
         fetch(`${backendUrl}/api/send-notification`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({
             earner_id: data.earner_id,
             fcm_token: data.fcm_token || null,

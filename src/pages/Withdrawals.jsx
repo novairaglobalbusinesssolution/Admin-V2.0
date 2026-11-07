@@ -11,6 +11,7 @@ import {
   PersonOutlined as PersonIcon
 } from '@mui/icons-material';
 import { supabase } from '../supabaseClient';
+import { getApiBaseUrl, getApiHeaders } from '../utils/apiConfig';
 import { Snackbar, Alert } from '@mui/material';
 
 export default function Withdrawals() {
@@ -214,9 +215,9 @@ export default function Withdrawals() {
       }
       
       // Send push notification
-      fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-notification`, {
+      fetch(`${getApiBaseUrl()}/api/send-notification`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(),
         body: JSON.stringify({
           earner_id: selectedTx.earner_id,
           fcm_token: selectedTx.profile?.fcm_token || null,
@@ -268,9 +269,9 @@ export default function Withdrawals() {
       }
       
       // Send push notification
-      fetch(`${import.meta.env.VITE_API_URL || 'https://admin-v2-backend.onrender.com'}/api/send-notification`, {
+      fetch(`${getApiBaseUrl()}/api/send-notification`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(),
         body: JSON.stringify({
           earner_id: selectedTx.earner_id,
           fcm_token: selectedTx.profile?.fcm_token || null,
