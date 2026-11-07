@@ -135,6 +135,7 @@ export const calculateBulkerFinances = ({
           appId: r.app_id,
           appName: app ? app.app_name : 'Unknown Application',
           taskId: app ? app.task_id : '-',
+          appDate: app ? (app.app_date || app.created_at || null) : null,
           assignedAmount,
           memberAmount,
           getAmount,
@@ -166,6 +167,7 @@ export const calculateBulkerFinances = ({
           appId: r.app_id,
           appName: app ? app.app_name : 'Unknown Application',
           taskId: app ? app.task_id : '-',
+          appDate: app ? (app.app_date || app.created_at || null) : null,
           assignedAmount,
           liveCount: 0,
           appTotal: 0

@@ -6,7 +6,7 @@ import {
   MenuItem, Button, IconButton, Chip, Avatar, Stack, CircularProgress,
   Divider, useTheme, Snackbar, FormControl, Select, Dialog,
   DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel,
-  InputAdornment
+  InputAdornment, Tooltip
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -15,11 +15,18 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CloseIcon from '@mui/icons-material/Close';
 import PrintIcon from '@mui/icons-material/Print';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import PaymentIcon from '@mui/icons-material/Payment';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import BusinessIcon from '@mui/icons-material/Business';
+import PhoneIcon from '@mui/icons-material/Phone';
+import EmailIcon from '@mui/icons-material/Email';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '../supabaseClient';
@@ -47,7 +54,7 @@ export default function BulkerInvoiceDetails() {
   // Active month for invoice display (YYYY-MM format)
   const [selectedMonth, setSelectedMonth] = useState('');
 
-  // Pay Invoice Modal State (Wallet Transaction & Company Fund Sync Option)
+  // Pay Invoice Modal State
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('DIRECT_BANK_TRANSFER');
@@ -62,10 +69,24 @@ export default function BulkerInvoiceDetails() {
     setToast({ open: true, type, title, message });
   };
 
-  const copyToClipboard = (text) => {
+  const copyToClipboard = (text, label = 'Copied') => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    showToast('success', 'Copied!', text);
+    showToast('success', `${label} Copied!`, text);
+  };
+
+  const formatKolkataDate = (dateStr) => {
+    if (!dateStr) return '—';
+    try {
+      return new Date(dateStr).toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return dateStr;
+    }
   };
 
   const fetchBulkerAndInvoices = async () => {
@@ -105,7 +126,7 @@ export default function BulkerInvoiceDetails() {
 
       setBulker(bData);
 
-      // 2. Fetch billing history, reviews, apps, and transactions
+      // 2. Fetch billing history, transactions, apps, and reviews
       const targetVariants = getBulkerIdVariants(bData?.bulker_id || identifier);
 
       const [histRes, txRes, appsRes] = await Promise.all([
@@ -121,7 +142,8 @@ export default function BulkerInvoiceDetails() {
           .order('created_at', { ascending: false }),
         supabase
           .from('apps')
-          .select('id, app_name, task_id, members_reward, assigned_bulkers')
+          .select('id, app_name, task_id, members_reward, assigned_bulkers, app_date, created_at')
+          .range(0, 4999)
       ]);
 
       // Fetch all reviews for this bulker without 1000 row truncation limit
@@ -167,7 +189,7 @@ export default function BulkerInvoiceDetails() {
     fetchBulkerAndInvoices();
   }, [identifier]);
 
-  // Calculate monthly invoice metrics using exact formula
+  // Calculate monthly invoice metrics
   const calculatedFinances = useMemo(() => {
     return calculateBulkerFinances({
       bulker,
@@ -241,7 +263,6 @@ export default function BulkerInvoiceDetails() {
 
   // Active Payment Status string
   const activePaymentStatus = isFullyPaid ? 'PAID' : isPartiallyPaid ? 'PARTIAL' : 'PENDING';
-  const isInvoicePaid = isFullyPaid; // For backward compatibility where needed
 
   // Collect all UTR / transaction IDs
   const allUtrList = matchedPaymentTransactions
@@ -257,13 +278,12 @@ export default function BulkerInvoiceDetails() {
 
   const activePaymentDate = matchedPaymentTransactions.length > 0
     ? matchedPaymentTransactions
-        .map((tx) => (tx.created_at ? new Date(tx.created_at).toLocaleDateString('en-IN') : ''))
+        .map((tx) => (tx.created_at ? formatKolkataDate(tx.created_at) : ''))
         .filter(Boolean)
         .join(', ')
     : 'Awaiting Payment';
 
   const handleOpenPayModal = () => {
-    // Default payout amount to the remaining balance (if any) or full gross total
     const defaultPayAmount = remainingBalance > 0 ? remainingBalance : grossTotal;
     setPayAmount(defaultPayAmount > 0 ? String(defaultPayAmount) : '');
     setPayMethod('DIRECT_BANK_TRANSFER');
@@ -300,7 +320,7 @@ export default function BulkerInvoiceDetails() {
         payment_method: payMethod,
         utr_number: payUtr || null,
         synced_to_company_fund: Boolean(syncToCompanyFund),
-        processed_by: 'Admin Portal'
+        processed_by: 'Admin Treasury Desk'
       };
 
       const walletPayload = {
@@ -324,7 +344,7 @@ export default function BulkerInvoiceDetails() {
         throw wErr;
       }
 
-      // 2. If syncToCompanyFund is false, ensure any trigger insertion is cleaned up from company_fund_transactions
+      // 2. If syncToCompanyFund is false, ensure trigger insertion is cleaned up from company_fund_transactions
       if (!syncToCompanyFund) {
         await supabase
           .from('company_fund_transactions')
@@ -371,7 +391,7 @@ export default function BulkerInvoiceDetails() {
     });
   };
 
-  // Direct Programmatic Vector A4 PDF Bill Generation (No screenshots or print preview)
+  // Direct Programmatic Vector A4 PDF Bill Generation
   const handleDownloadVectorPdf = async () => {
     setDownloadingPdf(true);
     showToast('success', 'Generating PDF...', 'Compiling vector A4 corporate bill.');
@@ -387,7 +407,7 @@ export default function BulkerInvoiceDetails() {
       const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
       const margin = 14;
 
-      // 1. Try embedding the Mandala Logo
+      // 1. Try embedding the Logo
       const logoData = await getLogoBase64();
       if (logoData) {
         try {
@@ -453,7 +473,7 @@ export default function BulkerInvoiceDetails() {
       const colWidth = (pageWidth - margin * 2 - 8) / 2;
       const boxY = 42;
 
-      // Left Box: Billed To (Bulker Details)
+      // Left Box: Billed To
       doc.setFillColor(248, 250, 252);
       doc.roundedRect(margin, boxY, colWidth, 42, 2, 2, 'F');
       doc.setDrawColor(226, 232, 240);
@@ -476,7 +496,7 @@ export default function BulkerInvoiceDetails() {
       if (bulker?.email) doc.text(`Email: ${bulker.email}`, margin + 4, boxY + 27);
       doc.text(`Account Mode: ${bulker?.account_type || 'Manual Mode'}`, margin + 4, boxY + 32);
 
-      // Right Box: Payment Status & Transaction Details (Dynamic from DB)
+      // Right Box: Payment Status & Settlement
       const rightBoxX = margin + colWidth + 8;
       doc.setFillColor(248, 250, 252);
       doc.roundedRect(rightBoxX, boxY, colWidth, 42, 2, 2, 'F');
@@ -498,23 +518,24 @@ export default function BulkerInvoiceDetails() {
       doc.text(`Payment Date(s): ${activePaymentDate}`, rightBoxX + 4, boxY + 32);
       doc.text(`UTR / Ref: ${activePaymentUtr}`, rightBoxX + 4, boxY + 37);
 
-      // 5. Itemized Table of Applications (Using autoTable)
+      // 5. Itemized Table with APP DATE column
       const tableRows = currentMonthApps.map((item, idx) => [
         String(idx + 1).padStart(2, '0'),
         `${item.appName}\nTask ID: #${item.taskId}`,
+        formatKolkataDate(item.appDate),
         String(item.liveCount),
         `₹${parseFloat(item.assignedAmount || 0).toFixed(2)}`,
         `₹${parseFloat(item.appTotal || 0).toFixed(2)}`
       ]);
 
       if (tableRows.length === 0) {
-        tableRows.push(['01', `Bulker Desk Operations (${formatMonthTitle(selectedMonth)})`, '1', `₹${currentMonthData.grossTotal.toFixed(2)}`, `₹${currentMonthData.grossTotal.toFixed(2)}`]);
+        tableRows.push(['01', `Bulker Desk Operations (${formatMonthTitle(selectedMonth)})`, '—', '1', `₹${currentMonthData.grossTotal.toFixed(2)}`, `₹${currentMonthData.grossTotal.toFixed(2)}`]);
       }
 
       autoTable(doc, {
         startY: 90,
         margin: { left: margin, right: margin },
-        head: [['NO.', 'APPLICATION / CAMPAIGN', 'LIVE REVIEWS', 'ASSIGNED RATE (INR)', 'GROSS TOTAL (INR)']],
+        head: [['NO.', 'APPLICATION / CAMPAIGN', 'APP DATE', 'LIVE REVIEWS', 'ASSIGNED RATE (INR)', 'GROSS TOTAL (INR)']],
         body: tableRows,
         theme: 'grid',
         headStyles: {
@@ -531,11 +552,12 @@ export default function BulkerInvoiceDetails() {
           valign: 'middle'
         },
         columnStyles: {
-          0: { cellWidth: 12, halign: 'center' },
+          0: { cellWidth: 10, halign: 'center' },
           1: { cellWidth: 'auto', fontStyle: 'bold' },
-          2: { cellWidth: 26, halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] },
-          3: { cellWidth: 36, halign: 'right' },
-          4: { cellWidth: 38, halign: 'right', fontStyle: 'bold', textColor: [15, 157, 114] }
+          2: { cellWidth: 26, halign: 'center' },
+          3: { cellWidth: 24, halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] },
+          4: { cellWidth: 32, halign: 'right' },
+          5: { cellWidth: 34, halign: 'right', fontStyle: 'bold', textColor: [15, 157, 114] }
         },
         alternateRowStyles: {
           fillColor: [248, 250, 252]
@@ -543,8 +565,8 @@ export default function BulkerInvoiceDetails() {
       });
 
       // 6. Summary Totals Box
-      const finalY = (doc).lastAutoTable.finalY + 6;
-      const totalBoxWidth = 86;
+      const finalY = doc.lastAutoTable.finalY + 6;
+      const totalBoxWidth = 88;
       const totalBoxX = pageWidth - margin - totalBoxWidth;
 
       doc.setFillColor(241, 245, 249);
@@ -581,7 +603,7 @@ export default function BulkerInvoiceDetails() {
       doc.text(`₹${remainingBalance.toFixed(2)}`, totalBoxX + totalBoxWidth - 4, finalY + 28, { align: 'right' });
 
       // 7. Terms & Compliance Note Box
-      const notesY = Math.max(finalY + 40, (doc).lastAutoTable.finalY + 42);
+      const notesY = Math.max(finalY + 40, doc.lastAutoTable.finalY + 42);
       doc.setFillColor(248, 250, 252);
       doc.roundedRect(margin, notesY, pageWidth - margin * 2, 22, 2, 2, 'F');
       doc.setDrawColor(226, 232, 240);
@@ -638,10 +660,13 @@ export default function BulkerInvoiceDetails() {
 
   if (loading) {
     return (
-      <Box sx={{ p: 6, textAlign: 'center', maxWidth: 1200, mx: 'auto' }}>
-        <CircularProgress size={44} />
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Calculating bulker invoice records...
+      <Box sx={{ p: 8, textAlign: 'center', maxWidth: 800, mx: 'auto' }}>
+        <CircularProgress size={46} thickness={4} />
+        <Typography variant="body1" sx={{ fontWeight: 750, mt: 3, color: 'text.primary' }}>
+          Compiling Bulker Invoice Records...
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Auditing multi-database verified deliverables and billing cycles.
         </Typography>
       </Box>
     );
@@ -649,517 +674,732 @@ export default function BulkerInvoiceDetails() {
 
   if (!bulker) {
     return (
-      <Box sx={{ p: 5, textAlign: 'center', maxWidth: 800, mx: 'auto' }}>
-        <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>Bulker Not Found</Typography>
+      <Box sx={{ p: 6, textAlign: 'center', maxWidth: 640, mx: 'auto' }}>
+        <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>Bulker Partner Desk Not Found</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Could not find any bulker desk matching "{identifier}".
+          Could not locate any active bulker desk matching identifier "{identifier}".
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/payments/bulkers/invoices')}>
-          Back to Invoices
+        <Button
+          variant="contained"
+          onClick={() => navigate('/payments/bulkers/invoices')}
+          sx={{ borderRadius: '12px', fontWeight: 800, textTransform: 'none' }}
+        >
+          Return to Bulker Invoices
         </Button>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ maxWidth: 1300, mx: 'auto', py: 2 }}>
-      {/* Top Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate('/payments/bulkers/invoices')}
-            sx={{ borderRadius: '12px', fontWeight: 700 }}
-            color="inherit"
-          >
-            Back
-          </Button>
-
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                {bulker.full_name}
-              </Typography>
-              <Chip
-                label={bulker.bulker_id}
-                size="small"
-                sx={{ fontFamily: 'monospace', fontWeight: 800, borderRadius: '8px' }}
-              />
-              <Chip
-                label={bulker.account_type || 'Wallet System'}
-                size="small"
-                color={bulker.account_type === 'Manual' ? 'warning' : 'primary'}
-                sx={{ fontWeight: 800, fontSize: '0.72rem', borderRadius: '8px' }}
-              />
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              Bulker Desk Settlement & Official Monthly Bill Statement
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Action Controls */}
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Button
-            variant="outlined"
-            startIcon={<AccountBalanceWalletIcon />}
-            onClick={() => navigate(`/payments/bulkers/wallet/${encodeURIComponent(bulker.id || bulker.bulker_id)}`)}
-            sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700 }}
-          >
-            View Wallet
-          </Button>
-
-          <Button
-            variant="outlined"
-            startIcon={<PrintIcon />}
-            onClick={() => window.print()}
-            sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700 }}
-          >
-            Print
-          </Button>
-
-          <Button
-            variant="contained"
-            color={isFullyPaid ? 'inherit' : isPartiallyPaid ? 'warning' : 'success'}
-            startIcon={<PaymentIcon />}
-            disabled={isFullyPaid}
-            onClick={handleOpenPayModal}
-            sx={{
-              borderRadius: '12px',
-              textTransform: 'none',
-              fontWeight: 800,
-              px: 2.5,
-              boxShadow: isFullyPaid ? 'none' : '0 4px 14px rgba(16,185,129,0.3)'
-            }}
-          >
-            {isFullyPaid ? 'Invoice Settled' : isPartiallyPaid ? `Pay Remaining (${formatINR(remainingBalance)})` : 'Pay Invoice'}
-          </Button>
-
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={downloadingPdf ? <CircularProgress size={18} color="inherit" /> : <DownloadIcon />}
-            disabled={downloadingPdf}
-            onClick={handleDownloadVectorPdf}
-            sx={{
-              borderRadius: '12px',
-              textTransform: 'none',
-              fontWeight: 800,
-              px: 2.8,
-              boxShadow: '0 4px 14px rgba(37,99,235,0.3)'
-            }}
-          >
-            {downloadingPdf ? 'Exporting PDF...' : 'Download Invoice PDF'}
-          </Button>
-        </Stack>
-      </Box>
-
-      {/* PAYMENT CONTROLS & MONTH SELECTOR TOOLBAR */}
+    <Box sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 1.5, sm: 3 }, py: 3 }}>
+      {/* 1. TOP EXECUTIVE HEADER BANNER */}
       <Paper
         elevation={0}
         sx={{
-          p: 2.5,
-          mb: 3.5,
-          borderRadius: '20px',
+          p: { xs: 2.5, sm: 3 },
+          mb: 3,
+          borderRadius: '24px',
           border: `1px solid ${theme.palette.divider}`,
-          bgcolor: theme.palette.mode === 'light' ? '#fff' : 'rgba(15,23,42,0.6)'
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(30,41,59,0.7) 0%, rgba(15,23,42,0.9) 100%)'
+            : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          boxShadow: theme.palette.mode === 'dark'
+            ? '0 10px 30px rgba(0,0,0,0.35)'
+            : '0 10px 25px rgba(15,23,42,0.04)'
         }}
       >
-        <Grid container spacing={2.5} alignItems="center">
-          {/* Month Selector */}
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 0.6 }}>
-              BILLING MONTH:
-            </Typography>
-            <FormControl size="small" fullWidth>
-              <Select
-                value={selectedMonth || ''}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                sx={{ borderRadius: '14px', fontWeight: 750 }}
-              >
-                {invoices.monthKeys.map((mk) => (
-                  <MenuItem key={mk} value={mk}>
-                    {formatMonthTitle(mk)}
-                  </MenuItem>
-                ))}
-                {invoices.monthKeys.length === 0 && (
-                  <MenuItem value="">No Manual Periods Recorded</MenuItem>
-                )}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          {/* Database-Backed Payment Status */}
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 0.6 }}>
-              DATABASE PAYMENT STATUS:
-            </Typography>
-            <Box
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, flexWrap: 'wrap', gap: 2.5 }}>
+          {/* Bulker Identity Profile */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              startIcon={<ArrowBackIcon />}
+              onClick={() => navigate('/payments/bulkers/invoices')}
               sx={{
-                p: 1.1,
-                px: 2,
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.2,
-                bgcolor: isFullyPaid
-                  ? 'rgba(16,185,129,0.08)'
-                  : isPartiallyPaid
-                  ? 'rgba(234,88,12,0.08)'
-                  : 'rgba(245,158,11,0.08)',
-                border: '1px solid',
-                borderColor: isFullyPaid
-                  ? 'rgba(16,185,129,0.25)'
-                  : isPartiallyPaid
-                  ? 'rgba(234,88,12,0.25)'
-                  : 'rgba(245,158,11,0.25)'
-              }}
-            >
-              <Chip
-                label={
-                  isFullyPaid
-                    ? 'SETTLED & FULLY PAID'
-                    : isPartiallyPaid
-                    ? `PARTIALLY PAID (${formatINR(totalPaidAmount)})`
-                    : 'PENDING DISBURSEMENT'
+                borderRadius: '12px',
+                fontWeight: 750,
+                textTransform: 'none',
+                minWidth: 'auto',
+                px: 1.5,
+                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
+                color: 'text.primary',
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : '#e2e8f0'
                 }
-                size="small"
-                color={isFullyPaid ? 'success' : isPartiallyPaid ? 'warning' : 'default'}
-                sx={{ fontWeight: 800, fontSize: '0.72rem' }}
-              />
-            </Box>
-          </Grid>
-
-          {/* Outstanding Due / Pending */}
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 0.6 }}>
-              OUTSTANDING BALANCE:
-            </Typography>
-            <Box
-              sx={{
-                p: 1.1,
-                px: 2,
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                bgcolor: remainingBalance > 0.01 ? 'rgba(239,68,68,0.06)' : 'rgba(16,185,129,0.06)',
-                border: '1px solid',
-                borderColor: remainingBalance > 0.01 ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'
               }}
             >
-              <Typography sx={{ fontWeight: 900, fontSize: '0.92rem', color: remainingBalance > 0.01 ? '#dc2626' : '#16a34a' }}>
-                {formatINR(remainingBalance)}
-              </Typography>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                {remainingBalance > 0.01 ? 'Still Pending' : 'Cleared (₹0.00)'}
-              </Typography>
-            </Box>
-          </Grid>
+              Invoices
+            </Button>
 
-          {/* Settlement / Transaction Reference */}
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 0.6 }}>
-              UTR / TRANSACTION REF ({matchedPaymentTransactions.length}):
-            </Typography>
-            <Box
+            <Avatar
               sx={{
-                p: 1.1,
-                px: 2,
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                bgcolor: theme.palette.mode === 'light' ? '#f8fafc' : 'rgba(30,41,59,0.5)',
-                border: `1px solid ${theme.palette.divider}`
+                width: 52,
+                height: 52,
+                fontSize: '1.25rem',
+                fontWeight: 900,
+                bgcolor: '#2563eb',
+                boxShadow: '0 4px 14px rgba(37,99,235,0.3)'
               }}
             >
-              <Typography
-                sx={{
-                  fontFamily: 'monospace',
-                  fontWeight: 800,
-                  fontSize: '0.82rem',
-                  color: totalPaidAmount > 0 ? 'primary.main' : 'text.secondary',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '100%'
-                }}
-                title={activePaymentUtr}
-              >
-                {activePaymentUtr}
-              </Typography>
+              {(bulker.full_name || 'B').charAt(0).toUpperCase()}
+            </Avatar>
+
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '-0.02em', color: 'text.primary' }}>
+                  {bulker.full_name}
+                </Typography>
+                <Chip
+                  icon={<VerifiedIcon sx={{ fontSize: '14px !important', color: '#2563eb !important' }} />}
+                  label={bulker.bulker_id}
+                  size="small"
+                  onClick={() => copyToClipboard(bulker.bulker_id, 'Bulker ID')}
+                  clickable
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    borderRadius: '8px',
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(37,99,235,0.15)' : '#eff6ff',
+                    color: '#2563eb',
+                    border: '1px solid rgba(37,99,235,0.2)'
+                  }}
+                />
+                <Chip
+                  label={bulker.account_type === 'Manual' ? 'Manual Invoice Mode' : 'Wallet Mode'}
+                  size="small"
+                  color={bulker.account_type === 'Manual' ? 'warning' : 'primary'}
+                  sx={{ fontWeight: 800, fontSize: '0.72rem', borderRadius: '8px', height: 24 }}
+                />
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.6, flexWrap: 'wrap' }}>
+                {bulker.phone && (
+                  <Box
+                    component="span"
+                    onClick={() => copyToClipboard(bulker.phone, 'Phone')}
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      fontSize: '0.78rem',
+                      color: 'text.secondary',
+                      cursor: 'pointer',
+                      '&:hover': { color: 'primary.main' }
+                    }}
+                  >
+                    <PhoneIcon sx={{ fontSize: 13 }} />
+                    {bulker.phone}
+                  </Box>
+                )}
+                {bulker.email && (
+                  <Box
+                    component="span"
+                    onClick={() => copyToClipboard(bulker.email, 'Email')}
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      fontSize: '0.78rem',
+                      color: 'text.secondary',
+                      cursor: 'pointer',
+                      '&:hover': { color: 'primary.main' }
+                    }}
+                  >
+                    <EmailIcon sx={{ fontSize: 13 }} />
+                    {bulker.email}
+                  </Box>
+                )}
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <BusinessIcon sx={{ fontSize: 13 }} />
+                  Treasury Desk Partner
+                </Typography>
+              </Box>
             </Box>
-          </Grid>
-        </Grid>
+          </Box>
+
+          {/* Action Hub Buttons */}
+          <Stack direction="row" spacing={1.2} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AccountBalanceWalletIcon />}
+              onClick={() => navigate(`/payments/bulkers/wallet/${encodeURIComponent(bulker.id || bulker.bulker_id)}`)}
+              sx={{
+                borderRadius: '12px',
+                textTransform: 'none',
+                fontWeight: 750,
+                fontSize: '0.82rem',
+                borderWidth: '1.5px',
+                px: 2
+              }}
+            >
+              Wallet Ledger
+            </Button>
+
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<PrintIcon />}
+              onClick={() => window.print()}
+              sx={{
+                borderRadius: '12px',
+                textTransform: 'none',
+                fontWeight: 750,
+                fontSize: '0.82rem',
+                borderWidth: '1.5px',
+                px: 2
+              }}
+            >
+              Print
+            </Button>
+
+            <Button
+              variant="contained"
+              size="small"
+              color="primary"
+              startIcon={downloadingPdf ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+              disabled={downloadingPdf}
+              onClick={handleDownloadVectorPdf}
+              sx={{
+                borderRadius: '12px',
+                textTransform: 'none',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                px: 2.2,
+                boxShadow: '0 4px 14px rgba(37,99,235,0.3)'
+              }}
+            >
+              {downloadingPdf ? 'Exporting...' : 'PDF Bill'}
+            </Button>
+
+            <Button
+              variant="contained"
+              size="small"
+              color={isFullyPaid ? 'success' : isPartiallyPaid ? 'warning' : 'success'}
+              startIcon={<PaymentIcon />}
+              disabled={isFullyPaid}
+              onClick={handleOpenPayModal}
+              sx={{
+                borderRadius: '12px',
+                textTransform: 'none',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                px: 2.4,
+                boxShadow: isFullyPaid ? 'none' : '0 4px 14px rgba(16,185,129,0.3)'
+              }}
+            >
+              {isFullyPaid ? 'Settled (Paid)' : isPartiallyPaid ? `Settle Bal (${formatINR(remainingBalance)})` : 'Settle Payment'}
+            </Button>
+          </Stack>
+        </Box>
       </Paper>
 
-      {/* MONTHLY SUMMARY METRIC CARDS */}
+      {/* 2. BILLING MONTH STRIP SELECTOR */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2,
+          mb: 3,
+          borderRadius: '20px',
+          border: `1px solid ${theme.palette.divider}`,
+          bgcolor: theme.palette.mode === 'dark' ? 'rgba(15,23,42,0.6)' : '#ffffff'
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+            <CalendarMonthIcon sx={{ color: 'primary.main', fontSize: 22 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+              Billing Cycles:
+            </Typography>
+          </Box>
+
+          {/* Quick Month Switcher Pills */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', flex: 1, justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+            {invoices.monthKeys.map((mk) => {
+              const mData = invoices.byMonth[mk] || {};
+              const isSelected = selectedMonth === mk;
+              return (
+                <Chip
+                  key={mk}
+                  clickable
+                  onClick={() => setSelectedMonth(mk)}
+                  variant={isSelected ? 'filled' : 'outlined'}
+                  color={isSelected ? 'primary' : 'default'}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, py: 0.2 }}>
+                      <span style={{ fontWeight: isSelected ? 800 : 700 }}>
+                        {formatMonthTitle(mk)}
+                      </span>
+                      <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>
+                        • {mData.liveCount || 0} Live ({formatINR(mData.grossTotal || 0)})
+                      </span>
+                    </Box>
+                  }
+                  sx={{
+                    borderRadius: '12px',
+                    height: 32,
+                    fontWeight: 750,
+                    borderWidth: isSelected ? '1.5px' : '1px',
+                    boxShadow: isSelected ? '0 3px 10px rgba(37,99,235,0.25)' : 'none'
+                  }}
+                />
+              );
+            })}
+            {invoices.monthKeys.length === 0 && (
+              <Typography variant="caption" color="text.secondary">
+                No manual invoice billing cycles recorded yet.
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      </Paper>
+
+      {/* 3. 4 EXECUTIVE FINTECH TELEMETRY KPI PODS */}
       <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
-        <Grid item xs={12} sm={4}>
-          <Card
+        {/* Metric 1: Gross Total */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
             elevation={0}
             sx={{
               p: 2.5,
               borderRadius: '20px',
-              border: '1.5px solid rgba(15,157,114,0.3)',
-              bgcolor: 'rgba(15,157,114,0.04)'
+              border: '1.5px solid rgba(37,99,235,0.25)',
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(37,99,235,0.06)' : 'rgba(37,99,235,0.03)',
+              height: '100%'
             }}
           >
-            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase' }}>
-              Month Gross Total
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Gross Invoiced
+              </Typography>
+              <Avatar sx={{ width: 34, height: 34, bgcolor: 'rgba(37,99,235,0.12)', color: 'primary.main' }}>
+                <ReceiptLongIcon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.02em' }}>
+              {formatINR(grossTotal)}
             </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 900, color: '#0f9d72', mt: 0.5 }}>
-              {formatINR(currentMonthData.grossTotal)}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.6 }}>
+              {currentMonthData.liveCount} live verified deliverables
             </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {formatMonthTitle(selectedMonth)}
-            </Typography>
-          </Card>
+          </Paper>
         </Grid>
 
-        <Grid item xs={12} sm={4}>
-          <Card
+        {/* Metric 2: Paid Disbursed */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.5,
+              borderRadius: '20px',
+              border: '1.5px solid rgba(16,185,129,0.25)',
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.03)',
+              height: '100%'
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Paid / Disbursed
+              </Typography>
+              <Avatar sx={{ width: 34, height: 34, bgcolor: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                <CheckCircleIcon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 900, color: '#10b981', letterSpacing: '-0.02em' }}>
+              {formatINR(totalPaidAmount)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.6 }}>
+              {matchedPaymentTransactions.length} settlement transaction(s) recorded
+            </Typography>
+          </Paper>
+        </Grid>
+
+        {/* Metric 3: Outstanding Due */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.5,
+              borderRadius: '20px',
+              border: `1.5px solid ${remainingBalance > 0.01 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`,
+              bgcolor: remainingBalance > 0.01
+                ? theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.06)' : 'rgba(239,68,68,0.03)'
+                : theme.palette.mode === 'dark' ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.03)',
+              height: '100%'
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 800,
+                  color: remainingBalance > 0.01 ? '#dc2626' : '#10b981',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em'
+                }}
+              >
+                Outstanding Due
+              </Typography>
+              <Avatar
+                sx={{
+                  width: 34,
+                  height: 34,
+                  bgcolor: remainingBalance > 0.01 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                  color: remainingBalance > 0.01 ? '#dc2626' : '#10b981'
+                }}
+              >
+                <AccountBalanceIcon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </Box>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 900,
+                color: remainingBalance > 0.01 ? '#dc2626' : '#10b981',
+                letterSpacing: '-0.02em'
+              }}
+            >
+              {formatINR(remainingBalance)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.6 }}>
+              {isFullyPaid
+                ? 'Fully settled & cleared'
+                : isPartiallyPaid
+                ? `Partial balance of ${formatINR(grossTotal)}`
+                : 'Awaiting settlement payout'}
+            </Typography>
+          </Paper>
+        </Grid>
+
+        {/* Metric 4: Deliverables & Campaigns */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
             elevation={0}
             sx={{
               p: 2.5,
               borderRadius: '20px',
               border: `1px solid ${theme.palette.divider}`,
-              bgcolor: theme.palette.mode === 'light' ? '#fff' : 'rgba(15,23,42,0.6)'
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(15,23,42,0.6)' : '#ffffff',
+              height: '100%'
             }}
           >
-            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase' }}>
-              Manual Live Reviews
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Active Campaigns
+              </Typography>
+              <Avatar sx={{ width: 34, height: 34, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f1f5f9', color: 'text.primary' }}>
+                <VerifiedIcon sx={{ fontSize: 18 }} />
+              </Avatar>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.02em' }}>
+              {currentMonthApps.length} Apps
             </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 900, color: 'primary.main', mt: 0.5 }}>
-              {currentMonthData.liveCount}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.6 }}>
+              {formatMonthTitle(selectedMonth)} operational cycle
             </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Submissions in {formatMonthTitle(selectedMonth)}
-            </Typography>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={4}>
-          <Card
-            elevation={0}
-            sx={{
-              p: 2.5,
-              borderRadius: '20px',
-              border: `1px solid ${theme.palette.divider}`,
-              bgcolor: theme.palette.mode === 'light' ? '#fff' : 'rgba(15,23,42,0.6)'
-            }}
-          >
-            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase' }}>
-              Active Campaign Apps
-            </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 900, mt: 0.5 }}>
-              {currentMonthApps.length}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Applications with verified live reviews
-            </Typography>
-          </Card>
+          </Paper>
         </Grid>
       </Grid>
 
-      {/* ON-SCREEN CORPORATE INVOICE TEMPLATE */}
+      {/* 4. THE OFFICIAL CORPORATE BULKER INVOICE (CENTERPIECE DOCUMENT) */}
       <Box
         sx={{
           bgcolor: '#ffffff',
-          color: '#111827',
-          p: { xs: 3, md: 5 },
+          color: '#0f172a',
+          p: { xs: 2.5, sm: 4, md: 5 },
           borderRadius: '24px',
-          border: '1px solid #e5e7eb',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.06)',
-          maxWidth: 960,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 16px 48px rgba(15,23,42,0.06)',
+          maxWidth: 1040,
           mx: 'auto',
           mb: 4,
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Google Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
         }}
       >
-        {/* Top Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', pb: 3, borderBottom: '2px solid #f1f5f9' }}>
+        {/* Invoice Top Bar */}
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            pb: 3,
+            borderBottom: '2px solid #f1f5f9',
+            flexWrap: 'wrap',
+            gap: 2
+          }}
+        >
+          {/* Novaira Corporate Logo & Registered Entity */}
           <Box>
             <Box sx={{ mb: 1.5 }}>
               <Box
                 component="img"
                 src="/novaira_logo.jpg"
-                alt="Novaira Logo"
+                alt="Novaira Business Solutions"
                 sx={{
-                  height: 58,
+                  height: 54,
                   width: 'auto',
-                  maxHeight: 64,
                   borderRadius: '12px',
                   objectFit: 'contain',
                   display: 'block',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+                  boxShadow: '0 3px 10px rgba(0,0,0,0.08)'
                 }}
                 onError={(e) => {
                   e.target.style.display = 'none';
                 }}
               />
             </Box>
-            <Typography sx={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.45 }}>
-              Novaira Global Business Solutions Pvt. Ltd.<br />
+            <Typography sx={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
+              <strong style={{ color: '#0f172a' }}>Novaira Global Business Solutions Pvt. Ltd.</strong><br />
+              Corporate Treasury & Bulker Operations Desk<br />
               <b>Email:</b> support@payments.novairasolution.com | <b>Web:</b> novairasolution.com
             </Typography>
           </Box>
 
-          <Box sx={{ textAlign: 'right' }}>
-            <Typography sx={{ fontSize: '1.8rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
+          {/* Invoice Document Meta & Status */}
+          <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
+            <Typography sx={{ fontSize: '1.9rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1 }}>
               BULKER INVOICE
-            </Typography>
-            <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.85rem', color: '#64748b', mt: 0.5 }}>
-              #{invoiceNumber}
             </Typography>
             <Box
               sx={{
-                mt: 1.5,
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 0.8,
-                bgcolor: isFullyPaid ? '#ecfdf5' : isPartiallyPaid ? '#fff7ed' : '#fffbeb',
-                color: isFullyPaid ? '#059669' : isPartiallyPaid ? '#ea580c' : '#d97706',
-                px: 1.6,
+                gap: 0.5,
+                mt: 0.8,
+                px: 1.2,
                 py: 0.4,
-                borderRadius: '100px',
-                border: '1px solid',
-                borderColor: isFullyPaid ? '#a7f3d0' : isPartiallyPaid ? '#fed7aa' : '#fde68a'
+                borderRadius: '8px',
+                bgcolor: '#f1f5f9',
+                cursor: 'pointer',
+                '&:hover': { bgcolor: '#e2e8f0' }
               }}
+              onClick={() => copyToClipboard(invoiceNumber, 'Invoice Number')}
             >
-              <CheckCircleIcon sx={{ fontSize: 15 }} />
-              <Typography sx={{ fontWeight: 800, fontSize: '0.72rem' }}>
-                {isFullyPaid
-                  ? 'SETTLED & FULLY PAID'
-                  : isPartiallyPaid
-                  ? `PARTIALLY PAID (${formatINR(totalPaidAmount)})`
-                  : 'PENDING DISBURSEMENT'}
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.84rem', color: '#334155' }}>
+                #{invoiceNumber}
               </Typography>
+              <ContentCopyIcon sx={{ fontSize: 13, color: '#64748b' }} />
+            </Box>
+
+            <Box sx={{ mt: 1.5 }}>
+              <Box
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.8,
+                  bgcolor: isFullyPaid ? '#ecfdf5' : isPartiallyPaid ? '#fff7ed' : '#fffbeb',
+                  color: isFullyPaid ? '#059669' : isPartiallyPaid ? '#ea580c' : '#d97706',
+                  px: 1.8,
+                  py: 0.5,
+                  borderRadius: '100px',
+                  border: '1px solid',
+                  borderColor: isFullyPaid ? '#a7f3d0' : isPartiallyPaid ? '#fed7aa' : '#fde68a'
+                }}
+              >
+                <CheckCircleIcon sx={{ fontSize: 15 }} />
+                <Typography sx={{ fontWeight: 800, fontSize: '0.74rem', letterSpacing: '0.04em' }}>
+                  {isFullyPaid
+                    ? 'SETTLED & FULLY PAID'
+                    : isPartiallyPaid
+                    ? `PARTIALLY PAID (${formatINR(totalPaidAmount)})`
+                    : 'PENDING DISBURSEMENT'}
+                </Typography>
+              </Box>
             </Box>
           </Box>
         </Box>
 
-        {/* Invoice Meta Grid */}
-        <Grid container spacing={3} sx={{ py: 3, borderBottom: '1px solid #f1f5f9' }}>
-          {/* Bulker Details */}
+        {/* Invoice Two-Column Information Cards */}
+        <Grid container spacing={2.5} sx={{ py: 3, borderBottom: '1px solid #f1f5f9' }}>
+          {/* Card 1: Billed To / Partner */}
           <Grid item xs={12} sm={6}>
-            <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.5 }}>
-              Billed To / Bulker Partner
-            </Typography>
-            <Typography sx={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-              {bulker.full_name}
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#334155', mt: 0.2 }}>
-              <b>Bulker ID:</b> {bulker.bulker_id}
-            </Typography>
-            {bulker.phone && (
-              <Typography sx={{ fontSize: '0.82rem', color: '#475569' }}>
-                <b>Phone:</b> {bulker.phone}
+            <Box sx={{ p: 2, borderRadius: '16px', bgcolor: '#f8fafc', border: '1px solid #e2e8f0', height: '100%' }}>
+              <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.8 }}>
+                BILLED TO / DESK OPERATOR
               </Typography>
-            )}
-            {bulker.email && (
-              <Typography sx={{ fontSize: '0.82rem', color: '#475569' }}>
-                <b>Email:</b> {bulker.email}
+              <Typography sx={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a' }}>
+                {bulker.full_name}
               </Typography>
-            )}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.4 }}>
+                <Typography sx={{ fontSize: '0.8rem', color: '#475569', fontFamily: 'monospace', fontWeight: 700 }}>
+                  ID: {bulker.bulker_id}
+                </Typography>
+                <IconButton size="small" onClick={() => copyToClipboard(bulker.bulker_id, 'Bulker ID')} sx={{ p: 0.2 }}>
+                  <ContentCopyIcon sx={{ fontSize: 12, color: '#94a3b8' }} />
+                </IconButton>
+              </Box>
+              {bulker.phone && (
+                <Typography sx={{ fontSize: '0.8rem', color: '#475569', mt: 0.3 }}>
+                  <b>Phone:</b> {bulker.phone}
+                </Typography>
+              )}
+              {bulker.email && (
+                <Typography sx={{ fontSize: '0.8rem', color: '#475569', mt: 0.2 }}>
+                  <b>Email:</b> {bulker.email}
+                </Typography>
+              )}
+              <Typography sx={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 750, mt: 0.4 }}>
+                <b>Billing Framework:</b> Manual Review Verification
+              </Typography>
+            </Box>
           </Grid>
 
-          {/* Payment Details (Aligned to right-end) */}
-          <Grid
-            item
-            xs={12}
-            sm={6}
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: { xs: 'flex-start', sm: 'flex-end' },
-              textAlign: { xs: 'left', sm: 'right' }
-            }}
-          >
-            <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.5 }}>
-              Payment & Settlement Information
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.3 }}>
-              <b>Billing Cycle:</b> {formatMonthTitle(selectedMonth)}
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.3 }}>
-              <b>Payment Method:</b> {paymentMethodLabels[activePaymentMethod] || activePaymentMethod}
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.3 }}>
-              <b>Status:</b>{' '}
-              <span
-                style={{
-                  color: isFullyPaid ? '#16a34a' : isPartiallyPaid ? '#ea580c' : '#d97706',
-                  fontWeight: 800
-                }}
-              >
-                {isFullyPaid
-                  ? 'FULLY PAID'
-                  : isPartiallyPaid
-                  ? `PARTIALLY PAID (${formatINR(totalPaidAmount)} of ${formatINR(grossTotal)})`
-                  : 'PENDING'}
-              </span>
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.3 }}>
-              <b>Payment Date(s):</b> {activePaymentDate}
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.3, maxWidth: 360, wordBreak: 'break-all' }}>
-              <b>UTR / Ref:</b>{' '}
-              <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {activePaymentUtr}
-              </span>
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#334155' }}>
-              <b>Currency:</b> INR (₹)
-            </Typography>
+          {/* Card 2: Settlement & Audit Details */}
+          <Grid item xs={12} sm={6}>
+            <Box sx={{ p: 2, borderRadius: '16px', bgcolor: '#f8fafc', border: '1px solid #e2e8f0', height: '100%' }}>
+              <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.8 }}>
+                TREASURY SETTLEMENT & AUDIT
+              </Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.4 }}>
+                <b>Billing Cycle:</b> <span style={{ fontWeight: 800 }}>{formatMonthTitle(selectedMonth)}</span>
+              </Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.4 }}>
+                <b>Settlement Method:</b> {paymentMethodLabels[activePaymentMethod] || activePaymentMethod}
+              </Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.4 }}>
+                <b>Disbursed So Far:</b> <span style={{ color: '#059669', fontWeight: 800 }}>{formatINR(totalPaidAmount)}</span>
+              </Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: '#334155', mb: 0.4, wordBreak: 'break-all' }}>
+                <b>Bank Reference / UTR:</b>{' '}
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: totalPaidAmount > 0 ? '#2563eb' : '#64748b' }}>
+                  {activePaymentUtr}
+                </span>
+              </Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: '#334155' }}>
+                <b>Disbursement Date(s):</b> {activePaymentDate}
+              </Typography>
+            </Box>
           </Grid>
         </Grid>
 
-        {/* Itemized Apps Breakdown Table */}
-        <Typography sx={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a', mt: 3, mb: 1.5 }}>
-          Itemized Apps Breakdown — {formatMonthTitle(selectedMonth)}
-        </Typography>
+        {/* Itemized Applications Table Header */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 3, mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+          <Typography sx={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.01em' }}>
+            Itemized Campaign Deliverables — {formatMonthTitle(selectedMonth)}
+          </Typography>
+          <Chip
+            size="small"
+            label={`${currentMonthApps.length} Applications • ${currentMonthData.liveCount} Total Live Reviews`}
+            sx={{ fontWeight: 750, fontSize: '0.72rem', bgcolor: '#f1f5f9', color: '#475569' }}
+          />
+        </Box>
 
-        <TableContainer sx={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', mb: 3 }}>
+        {/* ITEMIZED TABLE WITH APP DATE COLUMN */}
+        <TableContainer sx={{ border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', mb: 3 }}>
           <Table size="small">
             <TableHead sx={{ bgcolor: '#f8fafc' }}>
               <TableRow>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.74rem', color: '#475569', py: 1.2 }}>NO.</TableCell>
-                <TableCell sx={{ fontWeight: 800, fontSize: '0.74rem', color: '#475569' }}>APPLICATION NAME & TASK</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.74rem', color: '#475569' }}>LIVE REVIEWS</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.74rem', color: '#475569' }}>ASSIGNED RATE</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.74rem', color: '#475569' }}>GROSS TOTAL (₹)</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 850, fontSize: '0.74rem', color: '#475569', py: 1.4, width: '60px' }}>
+                  NO.
+                </TableCell>
+                <TableCell sx={{ fontWeight: 850, fontSize: '0.74rem', color: '#475569', minWidth: '220px' }}>
+                  APPLICATION NAME & TASK
+                </TableCell>
+                <TableCell align="center" sx={{ fontWeight: 850, fontSize: '0.74rem', color: '#475569', width: '130px' }}>
+                  APP DATE
+                </TableCell>
+                <TableCell align="center" sx={{ fontWeight: 850, fontSize: '0.74rem', color: '#475569', width: '120px' }}>
+                  LIVE REVIEWS
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 850, fontSize: '0.74rem', color: '#475569', width: '130px' }}>
+                  ASSIGNED RATE
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 850, fontSize: '0.74rem', color: '#475569', width: '140px' }}>
+                  GROSS TOTAL (₹)
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {currentMonthApps.length > 0 ? (
                 currentMonthApps.map((item, idx) => (
-                  <TableRow key={item.appId} sx={{ '&:last-child td': { border: 0 } }}>
-                    <TableCell sx={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+                  <TableRow
+                    key={item.appId}
+                    sx={{
+                      '&:nth-of-type(even)': { bgcolor: '#fafafa' },
+                      '&:hover': { bgcolor: '#f1f5f9' },
+                      transition: 'background-color 0.15s'
+                    }}
+                  >
+                    {/* Index */}
+                    <TableCell align="center" sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 750, fontFamily: 'monospace' }}>
                       {String(idx + 1).padStart(2, '0')}
                     </TableCell>
-                    <TableCell sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#1e293b' }}>
-                      {item.appName}
-                      <Typography variant="caption" sx={{ display: 'block', color: '#64748b', fontFamily: 'monospace' }}>
-                        Task ID: #{item.taskId}
+
+                    {/* App Name & Task ID */}
+                    <TableCell sx={{ py: 1.2 }}>
+                      <Typography sx={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>
+                        {item.appName}
                       </Typography>
+                      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, mt: 0.3 }}>
+                        <Chip
+                          label={`Task ID: #${item.taskId}`}
+                          size="small"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.65rem',
+                            fontWeight: 800,
+                            fontFamily: 'monospace',
+                            borderRadius: '6px',
+                            bgcolor: '#f1f5f9',
+                            color: '#475569'
+                          }}
+                        />
+                      </Box>
                     </TableCell>
-                    <TableCell align="center" sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#059669' }}>
-                      {item.liveCount}
+
+                    {/* APP DATE (Requested by User) */}
+                    <TableCell align="center">
+                      <Box
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.6,
+                          px: 1,
+                          py: 0.35,
+                          borderRadius: '8px',
+                          bgcolor: item.appDate ? '#f1f5f9' : 'transparent',
+                          border: item.appDate ? '1px solid #e2e8f0' : 'none'
+                        }}
+                      >
+                        <CalendarTodayIcon sx={{ fontSize: 12, color: '#64748b' }} />
+                        <Typography sx={{ fontSize: '0.76rem', fontWeight: 700, color: '#334155' }}>
+                          {formatKolkataDate(item.appDate)}
+                        </Typography>
+                      </Box>
                     </TableCell>
-                    <TableCell align="right" sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
+
+                    {/* Live Reviews Count */}
+                    <TableCell align="center">
+                      <Chip
+                        label={`${item.liveCount} Live`}
+                        size="small"
+                        sx={{
+                          height: 22,
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          borderRadius: '8px',
+                          bgcolor: '#ecfdf5',
+                          color: '#059669',
+                          border: '1px solid #a7f3d0'
+                        }}
+                      />
+                    </TableCell>
+
+                    {/* Assigned Rate */}
+                    <TableCell align="right" sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#475569' }}>
                       {formatINR(item.assignedAmount)}
                     </TableCell>
-                    <TableCell align="right" sx={{ fontSize: '0.86rem', fontWeight: 900, color: '#0f9d72' }}>
+
+                    {/* Gross Total */}
+                    <TableCell align="right" sx={{ fontSize: '0.9rem', fontWeight: 900, color: '#0f9d72' }}>
                       {formatINR(item.appTotal)}
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 4, color: '#64748b', fontSize: '0.84rem' }}>
-                    No manual review submissions found for {formatMonthTitle(selectedMonth)}.
+                  <TableCell colSpan={6} align="center" sx={{ py: 5, color: '#64748b', fontSize: '0.86rem' }}>
+                    No verified manual review submissions recorded for {formatMonthTitle(selectedMonth)}.
                   </TableCell>
                 </TableRow>
               )}
@@ -1167,76 +1407,182 @@ export default function BulkerInvoiceDetails() {
           </Table>
         </TableContainer>
 
-        {/* Calculation Summary Block */}
+        {/* Invoice Summary Calculation Panel */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
-          <Box sx={{ width: { xs: '100%', sm: 340 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.6 }}>
-              <Typography sx={{ fontSize: '0.84rem', color: '#64748b' }}>Total Live Reviews:</Typography>
-              <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
-                {currentMonthData.liveCount}
+          <Box
+            sx={{
+              width: { xs: '100%', sm: 360 },
+              p: 2.2,
+              borderRadius: '16px',
+              bgcolor: '#f8fafc',
+              border: '1px solid #e2e8f0'
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
+              <Typography sx={{ fontSize: '0.82rem', color: '#64748b' }}>Verified Deliverables:</Typography>
+              <Typography sx={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                {currentMonthData.liveCount} Reviews
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.6 }}>
-              <Typography sx={{ fontSize: '0.84rem', color: '#64748b' }}>Month Gross Total:</Typography>
-              <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
+              <Typography sx={{ fontSize: '0.82rem', color: '#64748b' }}>Month Gross Invoiced:</Typography>
+              <Typography sx={{ fontSize: '0.92rem', fontWeight: 850, color: '#0f172a' }}>
                 {formatINR(grossTotal)}
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.6 }}>
-              <Typography sx={{ fontSize: '0.84rem', color: '#16a34a' }}>Disbursed / Paid So Far:</Typography>
-              <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: '#16a34a' }}>
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
+              <Typography sx={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 700 }}>
+                Disbursed / Paid So Far:
+              </Typography>
+              <Typography sx={{ fontSize: '0.92rem', fontWeight: 850, color: '#16a34a' }}>
                 - {formatINR(totalPaidAmount)}
               </Typography>
             </Box>
-            <Divider sx={{ my: 1, borderColor: '#e2e8f0' }} />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.8 }}>
-              <Typography sx={{ fontSize: '1.05rem', fontWeight: 800, color: remainingBalance > 0.01 ? '#dc2626' : '#0f9d72' }}>
-                {remainingBalance > 0.01 ? 'Outstanding Due:' : 'Net Balance Due:'}
+
+            <Divider sx={{ my: 1.2, borderColor: '#cbd5e1' }} />
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
+              <Typography
+                sx={{
+                  fontSize: '0.95rem',
+                  fontWeight: 900,
+                  color: remainingBalance > 0.01 ? '#dc2626' : '#0f9d72'
+                }}
+              >
+                {remainingBalance > 0.01 ? 'Outstanding Balance Due:' : 'Net Balance Due:'}
               </Typography>
-              <Typography sx={{ fontSize: '1.25rem', fontWeight: 900, color: remainingBalance > 0.01 ? '#dc2626' : '#0f9d72' }}>
+              <Typography
+                sx={{
+                  fontSize: '1.25rem',
+                  fontWeight: 900,
+                  color: remainingBalance > 0.01 ? '#dc2626' : '#0f9d72'
+                }}
+              >
                 {formatINR(remainingBalance)}
               </Typography>
             </Box>
           </Box>
         </Box>
 
-        {/* Compliance Footer */}
-        <Box sx={{ p: 2, borderRadius: '12px', bgcolor: '#f8fafc', border: '1px solid #e2e8f0', mt: 2 }}>
-          <Typography sx={{ fontSize: '0.72rem', color: '#64748b', lineHeight: 1.5 }}>
-            This monthly invoice statement is computed dynamically based on verified live reviews submitted during <b>Manual Billing periods</b> recorded in <code>bulker_billing_history</code>. Settled via {paymentMethodLabels[activePaymentMethod] || activePaymentMethod}. Generated via Novaira Admin Portal V2.1.
+        {/* Corporate Authenticity & Compliance Statement */}
+        <Box sx={{ p: 2, borderRadius: '14px', bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <Typography sx={{ fontSize: '0.72rem', color: '#64748b', lineHeight: 1.6 }}>
+            <b>COMPLIANCE & LEGAL NOTICE:</b> This monthly bill statement is dynamically compiled from verified live reviews logged under <b>Manual Review Billing</b> in Novaira Database. Disbursed via {paymentMethodLabels[activePaymentMethod] || activePaymentMethod} under reference/UTR <code>{activePaymentUtr}</code>. Valid as an authorized digital statement.
           </Typography>
         </Box>
       </Box>
 
-      {/* PAY INVOICE MODAL DIALOG */}
+      {/* 5. DATABASE SETTLEMENT TRANSACTIONS TIMELINE (IF RECORDED) */}
+      {matchedPaymentTransactions.length > 0 && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            mb: 4,
+            borderRadius: '24px',
+            border: `1px solid ${theme.palette.divider}`,
+            bgcolor: theme.palette.mode === 'dark' ? 'rgba(15,23,42,0.6)' : '#ffffff'
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 850, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AccountBalanceIcon sx={{ color: '#10b981' }} />
+            Settlement Payment Ledger ({matchedPaymentTransactions.length} Recorded)
+          </Typography>
+
+          <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '16px', overflow: 'hidden' }}>
+            <Table size="small">
+              <TableHead sx={{ bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 800, fontSize: '0.74rem' }}>TRANSACTION ID / UTR</TableCell>
+                  <TableCell sx={{ fontWeight: 800, fontSize: '0.74rem' }}>DATE</TableCell>
+                  <TableCell sx={{ fontWeight: 800, fontSize: '0.74rem' }}>METHOD</TableCell>
+                  <TableCell sx={{ fontWeight: 800, fontSize: '0.74rem' }}>SYNCED TO FUND</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.74rem' }}>AMOUNT</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {matchedPaymentTransactions.map((tx) => (
+                  <TableRow key={tx.id || tx.transaction_id}>
+                    <TableCell>
+                      <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.82rem', color: 'primary.main' }}>
+                        {tx.transaction_id}
+                      </Typography>
+                      {tx.utr_id && (
+                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', fontFamily: 'monospace' }}>
+                          UTR: {tx.utr_id}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                      {formatKolkataDate(tx.created_at)}
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.8rem' }}>
+                      {paymentMethodLabels[tx.payout_details?.payment_method] || tx.payout_details?.payment_method || 'Bank Transfer'}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={tx.sync_to_company_fund ? 'Synced' : 'Bulker Only'}
+                        size="small"
+                        color={tx.sync_to_company_fund ? 'success' : 'default'}
+                        sx={{ height: 20, fontSize: '0.68rem', fontWeight: 800 }}
+                      />
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 900, color: '#10b981', fontSize: '0.88rem' }}>
+                      {formatINR(tx.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
+
+      {/* 6. PAY / SETTLE INVOICE DIALOG MODAL */}
       <Dialog
         open={payModalOpen}
         onClose={() => !paying && setPayModalOpen(false)}
-        maxWidth="xs"
+        maxWidth="sm"
         fullWidth
-        PaperProps={{ sx: { borderRadius: '24px', p: 1 } }}
+        PaperProps={{
+          sx: {
+            borderRadius: '24px',
+            p: 1.5,
+            border: `1px solid ${theme.palette.divider}`
+          }
+        }}
       >
-        <DialogTitle sx={{ fontWeight: 800 }}>
+        <DialogTitle sx={{ fontWeight: 900, fontSize: '1.2rem', pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PaymentIcon sx={{ color: 'primary.main' }} />
           Settle Bulker Invoice
         </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2.2} sx={{ mt: 1 }}>
-            {/* Invoice Info */}
-            <Box sx={{ p: 1.8, borderRadius: '14px', bgcolor: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.15)' }}>
-              <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main', display: 'block' }}>
+        <DialogContent dividers sx={{ borderColor: theme.palette.divider }}>
+          <Stack spacing={2.4} sx={{ mt: 1 }}>
+            {/* Invoice Overview Pill */}
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: '16px',
+                bgcolor: theme.palette.mode === 'dark' ? 'rgba(37,99,235,0.08)' : '#eff6ff',
+                border: '1px solid rgba(37,99,235,0.2)'
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 900, color: 'primary.main', display: 'block', letterSpacing: '0.04em' }}>
                 INVOICE #{invoiceNumber}
               </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3 }}>
-                Bulker: <strong>{bulker?.full_name} ({bulker?.bulker_id})</strong> &nbsp;|&nbsp; Cycle: <strong>{formatMonthTitle(selectedMonth)}</strong>
+              <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.3, color: 'text.primary' }}>
+                {bulker.full_name} ({bulker.bulker_id}) &bull; Cycle: {formatMonthTitle(selectedMonth)}
               </Typography>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px dashed rgba(37,99,235,0.2)' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5, pt: 1.2, borderTop: '1px dashed rgba(37,99,235,0.25)' }}>
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                   Total Bill: <strong>{formatINR(grossTotal)}</strong>
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#16a34a', fontWeight: 700 }}>
+                <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 800 }}>
                   Paid: {formatINR(totalPaidAmount)}
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#dc2626', fontWeight: 800 }}>
+                <Typography variant="caption" sx={{ color: '#dc2626', fontWeight: 900 }}>
                   Remaining: {formatINR(remainingBalance)}
                 </Typography>
               </Box>
@@ -1244,7 +1590,7 @@ export default function BulkerInvoiceDetails() {
 
             {/* Payout Amount */}
             <TextField
-              label="Payout Amount (₹)"
+              label="Payout Amount (INR)"
               type="number"
               fullWidth
               value={payAmount}
@@ -1252,13 +1598,24 @@ export default function BulkerInvoiceDetails() {
               helperText={
                 remainingBalance > 0
                   ? `Remaining unpaid balance: ${formatINR(remainingBalance)}`
-                  : 'Invoice is already settled'
+                  : 'Invoice is already fully settled'
               }
-              InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                endAdornment: (
+                  <Button
+                    size="small"
+                    onClick={() => setPayAmount(String(remainingBalance))}
+                    sx={{ textTransform: 'none', fontWeight: 800, fontSize: '0.72rem' }}
+                  >
+                    Full Due
+                  </Button>
+                )
+              }}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
             />
 
-            {/* Payment Method */}
+            {/* Disbursement Method */}
             <TextField
               select
               label="Disbursement Method"
@@ -1269,13 +1626,13 @@ export default function BulkerInvoiceDetails() {
             >
               <MenuItem value="DIRECT_BANK_TRANSFER">Direct Bank Transfer (IMPS/NEFT)</MenuItem>
               <MenuItem value="UPI">UPI Auto-Settlement</MenuItem>
-              <MenuItem value="NEFT_RTGS">NEFT / RTGS Corporate</MenuItem>
+              <MenuItem value="NEFT_RTGS">Corporate RTGS Settlement</MenuItem>
               <MenuItem value="WALLET_TRANSFER">Novaira Pay Bulker Wallet</MenuItem>
             </TextField>
 
             {/* Bank UTR / Reference */}
             <TextField
-              label="UTR / Reference Number"
+              label="Bank UTR / Transaction Reference"
               fullWidth
               value={payUtr}
               onChange={(e) => setPayUtr(e.target.value)}
@@ -1283,9 +1640,9 @@ export default function BulkerInvoiceDetails() {
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
             />
 
-            {/* Notes */}
+            {/* Payment Note */}
             <TextField
-              label="Payment Note / Description"
+              label="Payment Description / Notes"
               multiline
               rows={2}
               fullWidth
@@ -1294,15 +1651,17 @@ export default function BulkerInvoiceDetails() {
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '14px' } }}
             />
 
-            {/* Sync to Company Fund Checkbox (Wallet-like control) */}
+            {/* Sync to Company Fund Checkbox */}
             <Paper
               elevation={0}
               sx={{
-                p: 1.5,
-                borderRadius: '14px',
-                border: '1px solid',
-                borderColor: syncToCompanyFund ? 'rgba(37,99,235,0.3)' : 'divider',
-                bgcolor: syncToCompanyFund ? 'rgba(37,99,235,0.04)' : 'transparent'
+                p: 1.8,
+                borderRadius: '16px',
+                border: '1.5px solid',
+                borderColor: syncToCompanyFund ? 'rgba(37,99,235,0.3)' : theme.palette.divider,
+                bgcolor: syncToCompanyFund
+                  ? theme.palette.mode === 'dark' ? 'rgba(37,99,235,0.08)' : 'rgba(37,99,235,0.04)'
+                  : 'transparent'
               }}
             >
               <FormControlLabel
@@ -1315,13 +1674,13 @@ export default function BulkerInvoiceDetails() {
                 }
                 label={
                   <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 750 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 800 }}>
                       Sync to Company Fund Transactions
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.2 }}>
                       {syncToCompanyFund
-                        ? '✅ Transaction will be recorded in Company Fund ledger as outgoing fund.'
-                        : '❌ Transaction will ONLY be recorded in Bulker Wallet, company fund a uthbe na.'}
+                        ? '✅ Transaction will be automatically logged in Company Fund ledger as an outgoing treasury payout.'
+                        : '❌ Transaction will ONLY be recorded in Bulker Ledger without modifying company reserve fund.'}
                     </Typography>
                   </Box>
                 }
@@ -1329,8 +1688,12 @@ export default function BulkerInvoiceDetails() {
             </Paper>
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setPayModalOpen(false)} disabled={paying} sx={{ borderRadius: '12px', fontWeight: 700 }}>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button
+            onClick={() => setPayModalOpen(false)}
+            disabled={paying}
+            sx={{ borderRadius: '12px', fontWeight: 750, textTransform: 'none' }}
+          >
             Cancel
           </Button>
           <Button
@@ -1338,14 +1701,21 @@ export default function BulkerInvoiceDetails() {
             variant="contained"
             color="success"
             disabled={paying}
-            sx={{ borderRadius: '12px', fontWeight: 800, px: 3 }}
+            sx={{
+              borderRadius: '12px',
+              fontWeight: 800,
+              textTransform: 'none',
+              px: 3.5,
+              py: 1,
+              boxShadow: '0 4px 14px rgba(16,185,129,0.3)'
+            }}
           >
-            {paying ? 'Processing...' : 'Confirm & Disburse Payment'}
+            {paying ? 'Recording...' : 'Confirm & Disburse Payment'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Top Center Compact Toast Notification */}
+      {/* 7. FLOATING TOAST NOTIFICATION */}
       <Snackbar
         open={toast.open}
         autoHideDuration={3200}
@@ -1359,8 +1729,8 @@ export default function BulkerInvoiceDetails() {
             display: 'flex',
             alignItems: 'center',
             gap: 1.4,
-            py: 0.9,
-            px: 2,
+            py: 1,
+            px: 2.2,
             borderRadius: '100px',
             bgcolor: theme.palette.mode === 'dark' ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.98)',
             border: '1px solid',
@@ -1370,6 +1740,7 @@ export default function BulkerInvoiceDetails() {
                 : toast.type === 'warning'
                 ? 'rgba(245, 158, 11, 0.45)'
                 : 'rgba(239, 68, 68, 0.45)',
+            boxShadow: '0 12px 36px rgba(0,0,0,0.2)',
             minWidth: { xs: 290, sm: 360 }
           }}
         >
@@ -1400,7 +1771,7 @@ export default function BulkerInvoiceDetails() {
               {toast.title}
             </Typography>
             {toast.message && (
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }} noWrap>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.78rem' }} noWrap>
                 {toast.message}
               </Typography>
             )}
