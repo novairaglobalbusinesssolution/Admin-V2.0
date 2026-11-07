@@ -341,7 +341,7 @@ export default function UserView() {
           shortBulkerId?.toUpperCase(),
           longBulkerId?.toLowerCase(),
           longBulkerId?.toUpperCase(),
-          finalData.id,
+          currentData?.id,
         ].filter(Boolean)));
 
         const { data: allApps } = await supabase.from('apps').select('*').order('app_date', { ascending: false }).limit(1000);
@@ -403,36 +403,55 @@ export default function UserView() {
           profileNameMap.set(p.earner_id, name);
         });
 
-        // 1. Get exact total count of reviews for this bulker
-        const { count: totalReviewsCount } = await supabase
-          .from('review_submit_data')
-          .select('*', { count: 'exact', head: true })
-          .in('bulker_id', bulkerKeys);
+        let rawReviews = [];
+        try {
+          // 1. Get exact total count of reviews for this bulker
+          const { count: totalReviewsCount } = await supabase
+            .from('review_submit_data')
+            .select('*', { count: 'exact', head: true })
+            .in('bulker_id', bulkerKeys);
 
-        // 2. Fetch ALL real reviews in parallel chunks (PostgREST 1000 limit bypass)
-        const totalToFetch = totalReviewsCount || 0;
-        const pageSize = 1000;
-        const numPages = Math.min(Math.ceil(totalToFetch / pageSize), 25);
-        const reviewPromises = [];
+          // 2. Fetch real reviews in parallel chunks (PostgREST 1000 limit bypass)
+          const totalToFetch = totalReviewsCount && totalReviewsCount > 0 ? totalReviewsCount : 2000;
+          const pageSize = 1000;
+          const numPages = Math.min(Math.ceil(totalToFetch / pageSize), 25);
+          const reviewPromises = [];
 
-        for (let i = 0; i < numPages; i++) {
-          const from = i * pageSize;
-          const to = from + pageSize - 1;
-          reviewPromises.push(
-            supabase
+          for (let i = 0; i < numPages; i++) {
+            const from = i * pageSize;
+            const to = from + pageSize - 1;
+            reviewPromises.push(
+              supabase
+                .from('review_submit_data')
+                .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id')
+                .in('bulker_id', bulkerKeys)
+                .range(from, to)
+                .order('submitted_at', { ascending: false })
+            );
+          }
+
+          const reviewResults = await Promise.all(reviewPromises);
+          reviewResults.forEach((res) => {
+            if (res?.data && Array.isArray(res.data)) {
+              rawReviews.push(...res.data);
+            }
+          });
+        } catch (fetchErr) {
+          console.warn('Parallel reviews fetch error, trying fallback:', fetchErr);
+        }
+
+        // Fallback safety if batch failed
+        if (rawReviews.length === 0) {
+          try {
+            const { data: fallbackRevs } = await supabase
               .from('review_submit_data')
               .select('id, app_id, submitted_username, status, submitted_at, earner_id, bulker_id')
               .in('bulker_id', bulkerKeys)
-              .range(from, to)
               .order('submitted_at', { ascending: false })
-          );
+              .limit(1000);
+            if (fallbackRevs) rawReviews = fallbackRevs;
+          } catch (_) {}
         }
-
-        const reviewResults = await Promise.all(reviewPromises);
-        let rawReviews = [];
-        reviewResults.forEach((res) => {
-          if (res.data) rawReviews.push(...res.data);
-        });
 
         if (rawReviews.length > 0) {
           revsData = rawReviews.map((r) => {
