@@ -28,7 +28,7 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import FlashOnIcon from '@mui/icons-material/FlashOn';
 
 import { supabase } from '../supabaseClient';
-import { getApiBaseUrl, getApiHeaders } from '../utils/apiConfig';
+import { getApiBaseUrl, getMailApiBaseUrl, getApiHeaders } from '../utils/apiConfig';
 
 const getISTDateString = () => {
   const d = new Date();
@@ -251,7 +251,8 @@ export default function LiveCheckingMails() {
     setSendingId(app.id);
     try {
       const recEmails = receivers.map(r => r.receiver_email).join(',');
-      const res = await fetch(`${getApiBaseUrl()}/api/send-live-checking-email`, {
+      const mailBase = getMailApiBaseUrl();
+      const res = await fetch(`${mailBase}/api/send-live-checking-email`, {
         method: 'POST',
         headers: getApiHeaders(),
         body: JSON.stringify({ smtp_id: selectedSmtp, receiver_email: recEmails, app_data: app })
@@ -305,7 +306,8 @@ export default function LiveCheckingMails() {
     
     setSendingBulk(true);
     try {
-      const res = await fetch(`${getApiBaseUrl()}/api/send-bulk-live-checking`, {
+      const mailBase = getMailApiBaseUrl();
+      const res = await fetch(`${mailBase}/api/send-bulk-live-checking`, {
         method: 'POST',
         headers: getApiHeaders(),
         body: JSON.stringify({ smtp_id: selectedSmtp, apps })
