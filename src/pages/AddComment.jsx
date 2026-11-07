@@ -230,18 +230,17 @@ export default function AddComment() {
 
       let newComments = [];
 
-      // 2. Process by Task Type
+      // 2. Process by Task Type (Only parse comments if provided, otherwise allow saving guard settings)
       if (effectiveType === 'Android App' || effectiveType === 'iOS App') {
         if (reviewMode === 'text') {
           if (!multiStarMode) {
-            newComments = parseText(commentsText, globalRating);
+            if (commentsText.trim()) newComments = parseText(commentsText, globalRating);
           } else {
             Object.keys(multiStarTexts).forEach(r => {
-              newComments = [...newComments, ...parseText(multiStarTexts[r], parseInt(r))];
+              if (multiStarTexts[r].trim()) {
+                newComments = [...newComments, ...parseText(multiStarTexts[r], parseInt(r))];
+              }
             });
-          }
-          if (newComments.length === 0) {
-            throw new Error('Please enter at least one review comment in the text field.');
           }
         } else {
           // Star Rating Only Mode (No text comment)
@@ -256,52 +255,18 @@ export default function AddComment() {
               });
             }
           });
-          if (newComments.length === 0) {
-            throw new Error('Please enter a quantity greater than 0 for at least one star rating slot.');
-          }
         }
       } else if (effectiveType === 'Registration') {
-        if (!regProcedure.trim()) {
-          throw new Error('Please enter the registration guidelines and step-by-step instructions.');
-        }
-        
-        let instructionsText = regProcedure.trim();
-        if (regVideoUrl.trim()) {
-          instructionsText += `\n\nTutorial Video (${regVideoType === 'server' ? 'Server Video' : 'YouTube'}): ${regVideoUrl.trim()}`;
-        }
-        appUpdatePayload.instructions = instructionsText;
-
-        const count = parseInt(regSlots || 1, 10);
-        if (count <= 0) throw new Error('Please specify at least 1 registration slot capacity.');
-
-        for (let i = 0; i < count; i++) {
-          newComments.push({
-            app_id: selectedApp.id,
-            content: '',
-            rating: 5,
-            status: 'active'
-          });
-        }
-      } else if (effectiveType === 'YT Video') {
-        if (!ytProcedure.trim()) {
-          throw new Error('Please enter the YouTube watch time and interaction instructions.');
-        }
-
-        let ytInstructions = ytProcedure.trim();
-        if (ytVideoUrl.trim()) {
-          ytInstructions += `\n\nYouTube Link: ${ytVideoUrl.trim()}`;
-          appUpdatePayload.app_package = ytVideoUrl.trim();
-        }
-        appUpdatePayload.instructions = ytInstructions;
-
-        if (ytCommentMode === 'custom_comments') {
-          newComments = parseText(ytCommentsText, 5);
-          if (newComments.length === 0) {
-            throw new Error('Please paste at least one YouTube comment in the comments pool.');
+        if (regProcedure.trim()) {
+          let instructionsText = regProcedure.trim();
+          if (regVideoUrl.trim()) {
+            instructionsText += `\n\nTutorial Video (${regVideoType === 'server' ? 'Server Video' : 'YouTube'}): ${regVideoUrl.trim()}`;
           }
-        } else {
-          const count = parseInt(ytSlots || 1, 10);
-          if (count <= 0) throw new Error('Please specify at least 1 video watch slot.');
+          appUpdatePayload.instructions = instructionsText;
+        }
+
+        const count = parseInt(regSlots || 0, 10);
+        if (count > 0) {
           for (let i = 0; i < count; i++) {
             newComments.push({
               app_id: selectedApp.id,
@@ -309,6 +274,31 @@ export default function AddComment() {
               rating: 5,
               status: 'active'
             });
+          }
+        }
+      } else if (effectiveType === 'YT Video') {
+        if (ytProcedure.trim()) {
+          let ytInstructions = ytProcedure.trim();
+          if (ytVideoUrl.trim()) {
+            ytInstructions += `\n\nYouTube Link: ${ytVideoUrl.trim()}`;
+            appUpdatePayload.app_package = ytVideoUrl.trim();
+          }
+          appUpdatePayload.instructions = ytInstructions;
+        }
+
+        if (ytCommentMode === 'custom_comments') {
+          if (ytCommentsText.trim()) newComments = parseText(ytCommentsText, 5);
+        } else {
+          const count = parseInt(ytSlots || 0, 10);
+          if (count > 0) {
+            for (let i = 0; i < count; i++) {
+              newComments.push({
+                app_id: selectedApp.id,
+                content: '',
+                rating: 5,
+                status: 'active'
+              });
+            }
           }
         }
       }
@@ -380,8 +370,10 @@ export default function AddComment() {
 
       setAlertData({ 
         open: true, 
-        title: 'Task Successfully Deployed!', 
-        message: `Successfully released ${newComments.length} task slots/comments for "${selectedApp.app_name}". Push notifications dispatched to target bulker network!`, 
+        title: newComments.length > 0 ? 'Task Successfully Deployed!' : 'Settings Successfully Updated!', 
+        message: newComments.length > 0 
+          ? `Successfully released ${newComments.length} task slots/comments for "${selectedApp.app_name}". Push notifications dispatched to target bulker network!`
+          : `Task guard settings (Repeat Link Guard, Limits & Cooldown) for "${selectedApp.app_name}" updated successfully in the system!`, 
         type: 'success' 
       });
 
