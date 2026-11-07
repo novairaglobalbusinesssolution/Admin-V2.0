@@ -716,10 +716,6 @@ export default function AdminLayout() {
 
   const providerSubMenuItems = [
     { text: 'Invoice & Bills', path: '/payments/providers/invoices', icon: <ReceiptLongIcon sx={{ fontSize: 16 }} /> },
-    { text: 'User Wallet', path: '/payments/providers/wallet', icon: <AccountBalanceWalletIcon sx={{ fontSize: 16 }} /> },
-    { text: 'Withdrawals Request', path: '/payments/providers/withdrawals', icon: <PaidIcon sx={{ fontSize: 16 }} /> },
-    { text: 'Gift Cards', path: '/payments/providers/gift-cards', icon: <CardGiftcardIcon sx={{ fontSize: 16 }} /> },
-    { text: 'Settings Payments', path: '/payments/providers/settings-payments', icon: <TuneIcon sx={{ fontSize: 16 }} /> },
   ];
 
   const paymentsDrawer = (
