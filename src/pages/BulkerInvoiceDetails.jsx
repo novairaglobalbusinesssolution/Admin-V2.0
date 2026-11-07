@@ -896,7 +896,7 @@ export default function BulkerInvoiceDetails() {
         </Box>
       </Paper>
 
-      {/* 2. BILLING MONTH STRIP SELECTOR */}
+      {/* 2. BILLING MONTH & YEAR DROPDOWN SELECTOR */}
       <Paper
         elevation={0}
         sx={{
@@ -908,51 +908,99 @@ export default function BulkerInvoiceDetails() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-            <CalendarMonthIcon sx={{ color: 'primary.main', fontSize: 22 }} />
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-              Billing Cycles:
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.4 }}>
+            <Avatar sx={{ width: 38, height: 38, bgcolor: 'rgba(37,99,235,0.1)', color: 'primary.main' }}>
+              <CalendarMonthIcon sx={{ fontSize: 22 }} />
+            </Avatar>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 850, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', fontSize: '0.74rem' }}>
+                Billing Cycle (Month & Year):
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Select invoice statement period grouped by App Release Date
+              </Typography>
+            </Box>
           </Box>
 
-          {/* Quick Month Switcher Pills */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', flex: 1, justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
-            {invoices.monthKeys.map((mk) => {
-              const mData = invoices.byMonth[mk] || {};
-              const isSelected = selectedMonth === mk;
-              return (
-                <Chip
-                  key={mk}
-                  clickable
-                  onClick={() => setSelectedMonth(mk)}
-                  variant={isSelected ? 'filled' : 'outlined'}
-                  color={isSelected ? 'primary' : 'default'}
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, py: 0.2 }}>
-                      <span style={{ fontWeight: isSelected ? 800 : 700 }}>
-                        {formatMonthTitle(mk)}
-                      </span>
-                      <span style={{ opacity: 0.75, fontSize: '0.72rem' }}>
-                        • {mData.liveCount || 0} Live ({formatINR(mData.grossTotal || 0)})
-                      </span>
+          {/* Month & Year Select Dropdown */}
+          <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 380 } }}>
+            <Select
+              value={selectedMonth || ''}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              displayEmpty
+              renderValue={(selected) => {
+                if (!selected) return <span style={{ color: '#94a3b8' }}>Select Month & Year</span>;
+                const mData = invoices.byMonth[selected] || {};
+                return (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pr: 0.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CalendarTodayIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                      <Typography sx={{ fontWeight: 800, fontSize: '0.88rem', color: 'text.primary' }}>
+                        {formatMonthTitle(selected)}
+                      </Typography>
                     </Box>
-                  }
-                  sx={{
-                    borderRadius: '12px',
-                    height: 32,
-                    fontWeight: 750,
-                    borderWidth: isSelected ? '1.5px' : '1px',
-                    boxShadow: isSelected ? '0 3px 10px rgba(37,99,235,0.25)' : 'none'
-                  }}
-                />
-              );
-            })}
-            {invoices.monthKeys.length === 0 && (
-              <Typography variant="caption" color="text.secondary">
-                No manual invoice billing cycles recorded yet.
-              </Typography>
-            )}
-          </Box>
+                    <Chip
+                      size="small"
+                      label={`${mData.liveCount || 0} Live (${formatINR(mData.grossTotal || 0)})`}
+                      color="primary"
+                      sx={{ fontWeight: 800, fontSize: '0.72rem', height: 22, borderRadius: '6px' }}
+                    />
+                  </Box>
+                );
+              }}
+              sx={{
+                borderRadius: '14px',
+                bgcolor: theme.palette.mode === 'dark' ? 'rgba(30,41,59,0.7)' : '#f8fafc',
+                fontWeight: 800,
+                border: `1px solid ${theme.palette.divider}`,
+                '& .MuiSelect-select': {
+                  py: 1,
+                  px: 1.8,
+                  display: 'flex',
+                  alignItems: 'center'
+                }
+              }}
+            >
+              {invoices.monthKeys.map((mk) => {
+                const mData = invoices.byMonth[mk] || {};
+                return (
+                  <MenuItem
+                    key={mk}
+                    value={mk}
+                    sx={{
+                      py: 1.3,
+                      px: 2,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 2
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                      <CalendarTodayIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                      <Typography sx={{ fontWeight: 800, fontSize: '0.88rem' }}>
+                        {formatMonthTitle(mk)}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      size="small"
+                      label={`${mData.liveCount || 0} Live • ${formatINR(mData.grossTotal || 0)}`}
+                      sx={{
+                        fontWeight: 750,
+                        fontSize: '0.72rem',
+                        bgcolor: selectedMonth === mk ? 'primary.main' : 'rgba(100,116,139,0.1)',
+                        color: selectedMonth === mk ? '#fff' : 'text.secondary',
+                        borderRadius: '8px'
+                      }}
+                    />
+                  </MenuItem>
+                );
+              })}
+              {invoices.monthKeys.length === 0 && (
+                <MenuItem value="" disabled>No billing cycles recorded</MenuItem>
+              )}
+            </Select>
+          </FormControl>
         </Box>
       </Paper>
 
