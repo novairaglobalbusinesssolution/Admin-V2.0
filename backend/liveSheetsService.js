@@ -265,11 +265,12 @@ function saveStructuredExcelInline(reviewsList, taskId, appName, targetDateStr) 
 async function syncToGoogleSheet(taskData, reviews) {
     const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
     if (!appsScriptUrl || !appsScriptUrl.startsWith('http')) {
-        const safeName = encodeURIComponent(taskData.app_name || 'App');
+        const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://admin-v2-backend.onrender.com';
         return {
             status: 'success',
-            sheet_url: `https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Novaira_Task_${taskData.task_id}_${safeName}/pubhtml`,
-            mode: 'cloud_cached'
+            sheet_url: `${baseUrl}/api/live-sheets/view-sheet/${taskData.task_id}`,
+            download_url: `${baseUrl}/api/live-sheets/download/${taskData.task_id}`,
+            mode: 'cloud_hosted'
         };
     }
 

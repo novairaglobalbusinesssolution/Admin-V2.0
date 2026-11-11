@@ -1947,6 +1947,167 @@ app.post('/api/live-sheets/manual-extract/:taskId', async (req, res) => {
     }
 });
 
+// View Online Spreadsheet in Google Sheets style
+app.get('/api/live-sheets/view-sheet/:taskId', (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const cached = liveSheetsService.getCachedReviews(taskId);
+        if (!cached || !cached.reviews) {
+            return res.status(404).send(`
+                <html>
+                <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #0b1220; color: #fff;">
+                    <h2>⚠️ No Spreadsheet Found for Task #${taskId}</h2>
+                    <p style="color: #94a3b8;">Reviews have not been extracted for this task yet.</p>
+                    <a href="/api/live-sheets/trigger-extraction?key=Novaira002@#" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #8b5cf6; color: white; text-decoration: none; border-radius: 8px;">Run Extraction Console ⚡</a>
+                </body>
+                </html>
+            `);
+        }
+
+        const reviews = cached.reviews || [];
+        const rowsHtml = reviews.map((r, i) => `
+            <tr>
+                <td style="text-align: center; color: #64748b; font-weight: 600;">${i + 1}</td>
+                <td style="font-weight: 700; color: #1e293b;">${r.userName || 'Anonymous'}</td>
+                <td style="text-align: center;"><span style="background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 12px; font-weight: 700; font-size: 12px;">★ ${r.rating}</span></td>
+                <td style="max-width: 450px; line-height: 1.5; color: #334155;">${r.content || ''}</td>
+                <td style="text-align: center; color: #64748b;">${r.thumbsUpCount || 0}</td>
+                <td style="color: #475569; white-space: nowrap;">${r.at || r.date || ''}</td>
+                <td style="text-align: center; font-weight: 600; color: #0284c7;">${r.country || 'IN'}</td>
+            </tr>
+        `).join('');
+
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Task #${cached.task_id}] ${cached.app_name} - Play Store Reviews Sheet</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; color: #0f172a; }
+        .top-bar {
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 14px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .app-meta h1 { font-size: 18px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px; }
+        .app-meta p { font-size: 13px; color: #64748b; margin-top: 4px; }
+        .sheet-pill { background: #107c41; color: white; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+        .actions { display: flex; gap: 10px; align-items: center; }
+        .btn-dl { background: #0f9d58; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-dl:hover { background: #0b8043; }
+        .search-box {
+            padding: 8px 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 13px;
+            width: 260px;
+        }
+        .table-wrap { overflow-x: auto; padding: 16px 24px; }
+        table { width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        th { background: #107c41; color: #ffffff; padding: 12px 14px; text-align: left; font-weight: 600; font-size: 13px; border-right: 1px solid #0b6133; }
+        td { padding: 10px 14px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #f1f5f9; }
+        tr:hover td { background: #f1f5f9; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="app-meta">
+            <h1>
+                <span class="sheet-pill">SHEET</span>
+                [Task #${cached.task_id}] ${cached.app_name}
+            </h1>
+            <p>
+                Package: <code>${cached.app_package}</code> &bull; 
+                Release Date: <strong>${cached.app_date}</strong> &bull; 
+                Live Date: <strong>${cached.live_checking_date}</strong> &bull; 
+                Total Reviews: <strong>${reviews.length}</strong>
+            </p>
+        </div>
+        <div class="actions">
+            <input type="text" id="search-input" class="search-box" placeholder="Filter reviews in sheet..." oninput="filterTable()" />
+            <a href="/api/live-sheets/download/${cached.task_id}" class="btn-dl">
+                📥 Download Excel (.xlsx)
+            </a>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table id="reviews-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px; text-align: center;">#</th>
+                    <th>Reviewer Name</th>
+                    <th style="text-align: center; width: 90px;">Rating</th>
+                    <th>Review Content</th>
+                    <th style="text-align: center; width: 110px;">Helpful Votes</th>
+                    <th>Review Date & Time</th>
+                    <th style="text-align: center; width: 80px;">Country</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function filterTable() {
+            const q = document.getElementById('search-input').value.toLowerCase();
+            const rows = document.querySelectorAll('#reviews-table tbody tr');
+            rows.forEach(r => {
+                const text = r.innerText.toLowerCase();
+                r.style.display = text.includes(q) ? '' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>
+        `;
+
+        res.send(html);
+    } catch (e) {
+        res.status(500).send('Error rendering sheet: ' + e.message);
+    }
+});
+
+// Download original Excel file directly
+app.get('/api/live-sheets/download/:taskId', (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const cached = liveSheetsService.getCachedReviews(taskId);
+        if (cached && cached.excel_path && require('fs').existsSync(cached.excel_path)) {
+            return res.download(cached.excel_path);
+        }
+
+        // Re-generate on the fly if file missing
+        if (cached && cached.reviews) {
+            const tempPath = liveSheetsService.saveStructuredExcelInline(
+                cached.reviews,
+                cached.task_id,
+                cached.app_name,
+                cached.live_checking_date
+            );
+            if (tempPath && require('fs').existsSync(tempPath)) {
+                return res.download(tempPath);
+            }
+        }
+
+        res.status(404).send('Excel file not found for this task.');
+    } catch (e) {
+        res.status(500).send('Error downloading file: ' + e.message);
+    }
+});
+
 
 
 
