@@ -430,6 +430,28 @@ async function processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targ
                 cache[String(app.id)] = record;
                 writeCache(cache);
 
+                // 4. Save/Store Sheet link in Supabase app_settings table permanently
+                try {
+                    const settingKey = `live_sheet_${app.task_id}`;
+                    await supabaseSystem.from('app_settings').upsert({
+                        setting_key: settingKey,
+                        setting_value: JSON.stringify({
+                            task_id: String(app.task_id),
+                            app_name: app.app_name,
+                            sheet_url: record.sheet_url,
+                            excel_path: record.excel_path,
+                            total_reviews: reviews.length,
+                            app_date: app.app_date,
+                            live_checking_date: app.live_checking_date,
+                            updated_at: new Date().toISOString()
+                        }),
+                        updated_at: new Date().toISOString()
+                    });
+                    logJob(`Saved Google Sheet link to database (app_settings: '${settingKey}')`);
+                } catch (dbErr) {
+                    logJob(`Warning storing sheet url to DB: ${dbErr.message}`);
+                }
+
                 const appResult = {
                     task_id: app.task_id,
                     app_name: app.app_name,
@@ -602,11 +624,32 @@ function getCurrentJobStatus() {
 }
 
 /**
- * Get cached extracted reviews for a single task ID or app ID
+ * Get cached extracted reviews for a single task ID or app ID (memory/disk + database fallback)
  */
-function getCachedReviews(taskIdOrAppId) {
+async function getCachedReviews(taskIdOrAppId, supabaseSystem = null) {
     const cache = readCache();
-    return cache[String(taskIdOrAppId)] || null;
+    if (cache[String(taskIdOrAppId)]) {
+        return cache[String(taskIdOrAppId)];
+    }
+
+    // Database fallback if system supabase client is provided
+    if (supabaseSystem) {
+        try {
+            const settingKey = `live_sheet_${String(taskIdOrAppId).replace(/\D/g, '')}`;
+            const { data } = await supabaseSystem
+                .from('app_settings')
+                .select('setting_value')
+                .eq('setting_key', settingKey)
+                .maybeSingle();
+
+            if (data && data.setting_value) {
+                const parsed = JSON.parse(data.setting_value);
+                return parsed;
+            }
+        } catch (_) {}
+    }
+
+    return null;
 }
 
 module.exports = {

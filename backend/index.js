@@ -1855,7 +1855,7 @@ app.all('/api/live-sheets/trigger-extraction', async (req, res) => {
 app.get('/api/live-sheets/app/:taskId', async (req, res) => {
     try {
         const { taskId } = req.params;
-        const cached = liveSheetsService.getCachedReviews(taskId);
+        const cached = await liveSheetsService.getCachedReviews(taskId, supabaseSystem);
         if (cached) {
             return res.json({ status: 'success', cached: true, data: cached });
         }
@@ -1936,6 +1936,24 @@ app.post('/api/live-sheets/manual-extract/:taskId', async (req, res) => {
         cache[String(app.task_id)] = cacheRecord;
         cache[String(app.id)] = cacheRecord;
         fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+
+        // Also save to database
+        try {
+            await supabaseSystem.from('app_settings').upsert({
+                setting_key: `live_sheet_${app.task_id}`,
+                setting_value: JSON.stringify({
+                    task_id: String(app.task_id),
+                    app_name: app.app_name,
+                    sheet_url: cacheRecord.sheet_url,
+                    excel_path: cacheRecord.excel_path,
+                    total_reviews: reviews.length,
+                    app_date: app.app_date,
+                    live_checking_date: app.live_checking_date,
+                    updated_at: new Date().toISOString()
+                }),
+                updated_at: new Date().toISOString()
+            });
+        } catch (_) {}
 
         res.json({
             status: 'success',
