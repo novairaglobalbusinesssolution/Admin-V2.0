@@ -48,6 +48,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import PersonIcon from '@mui/icons-material/Person';
 import PaidIcon from '@mui/icons-material/Paid';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import TuneIcon from '@mui/icons-material/Tune';
 import SettingsApplicationsIcon from '@mui/icons-material/SettingsApplications';
@@ -215,6 +216,7 @@ export default function AdminLayout() {
 
   const liveListItems = [
     { text: 'Add Verification', icon: <PlaylistAddCheckIcon fontSize="small" />, color: '#10b981', path: '/add-live' },
+    { text: 'Automatic Live List', icon: <AutoAwesomeIcon fontSize="small" />, color: '#8b5cf6', path: '/automatic-live-list' },
     { text: 'Verification List', icon: <ViewListIcon fontSize="small" />, color: '#3b82f6', path: '/live-list' },
   ];
 

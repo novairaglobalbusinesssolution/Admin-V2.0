@@ -1436,6 +1436,134 @@ app.post('/api/cloudinary/upload', apiAuth, async (req, res) => {
     }
 });
 
+// ==============================================================================
+// GOOGLE SHEETS LIVE REVIEWS AUTOMATION ENDPOINTS
+// ==============================================================================
+const liveSheetsService = require('./liveSheetsService');
+
+// Automation Webhook / Cron trigger link (accepts GET or POST)
+app.all('/api/live-sheets/trigger-extraction', async (req, res) => {
+    const adminKey = req.headers['x-admin-key'] || req.query.key || (req.body && req.body.key);
+    const origin = req.headers.origin || '';
+    const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1') || req.ip === '127.0.0.1' || req.ip === '::1';
+    
+    if (!isLocalhost && adminKey !== 'Novaira002@#') {
+        return res.status(401).json({ error: 'Unauthorized: Invalid Admin Key' });
+    }
+
+    try {
+        const targetDate = req.query.date || (req.body && req.body.date) || liveSheetsService.getISTDateString();
+        console.log(`[API Trigger] Live review extraction triggered for date: ${targetDate}`);
+        
+        const result = await liveSheetsService.processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targetDate);
+        res.json({
+            status: 'success',
+            message: `Extraction completed for ${result.total_apps} apps on ${targetDate}`,
+            ...result
+        });
+    } catch (error) {
+        console.error('[API Trigger Error]:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get cached Google Sheet info & reviews for a task
+app.get('/api/live-sheets/app/:taskId', async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const cached = liveSheetsService.getCachedReviews(taskId);
+        if (cached) {
+            return res.json({ status: 'success', cached: true, data: cached });
+        }
+        res.json({ status: 'not_found', cached: false, data: null });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Single app on-demand extraction
+app.post('/api/live-sheets/manual-extract/:taskId', async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const cleanedId = String(taskId).replace(/\D/g, '');
+        
+        const { data: app, error: appErr } = await supabaseWork
+            .from('apps')
+            .select('*')
+            .eq('task_id', parseInt(cleanedId, 10))
+            .single();
+
+        if (appErr || !app) {
+            return res.status(404).json({ error: `App with Task ID #${taskId} not found` });
+        }
+
+        const startDate = app.app_date || liveSheetsService.getISTDateString();
+        const endDate = app.live_checking_date || liveSheetsService.getISTDateString();
+
+        const extractRes = await liveSheetsService.scrapePlayStoreReviewsInline(
+            app.app_package,
+            startDate,
+            endDate,
+            'in',
+            5000
+        );
+
+        const reviews = extractRes.reviews || [];
+        const excelPath = liveSheetsService.saveStructuredExcelInline(
+            reviews,
+            app.task_id,
+            app.app_name,
+            endDate
+        );
+
+        const sheetRes = await liveSheetsService.syncToGoogleSheet(app, reviews);
+
+        const cacheRecord = {
+            task_id: String(app.task_id),
+            app_id: app.id,
+            app_name: app.app_name,
+            app_package: app.app_package,
+            clean_package_id: liveSheetsService.extractPackageId(app.app_package),
+            app_date: app.app_date,
+            live_checking_date: app.live_checking_date,
+            total_reviews: reviews.length,
+            extracted_at: new Date().toISOString(),
+            sheet_url: sheetRes.sheet_url || '',
+            excel_path: excelPath || '',
+            reviews: reviews.map(r => ({
+                userName: r.userName || 'Anonymous',
+                rating: r.rating || 5,
+                content: r.content || '',
+                at: r.at || '',
+                date: r.date || '',
+                country: r.country || 'IN'
+            }))
+        };
+
+        const fs = require('fs');
+        const path = require('path');
+        const CACHE_FILE = path.join(__dirname, 'live_sheet_cache.json');
+        let cache = {};
+        try {
+            if (fs.existsSync(CACHE_FILE)) {
+                cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8') || '{}');
+            }
+        } catch (_) {}
+        cache[String(app.task_id)] = cacheRecord;
+        cache[String(app.id)] = cacheRecord;
+        fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+
+        res.json({
+            status: 'success',
+            data: cacheRecord
+        });
+    } catch (error) {
+        console.error('[ManualExtract Error]:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
 
 
 

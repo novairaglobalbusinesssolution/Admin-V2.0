@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Play Store Live Review Extractor Agent (India Cloud)</title>
+    <!-- Google Fonts & FontAwesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Chart.js for analytics charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="light-theme">
+
+    <!-- Ambient Liquid Glassmorphism Glow Background -->
+    <div class="ambient-glow-wrapper" aria-hidden="true">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+        <div class="glow-orb orb-3"></div>
+        <div class="glow-orb orb-4"></div>
+        <div class="mesh-grain"></div>
+    </div>
+
+    <div class="app-container">
+        
+        <!-- Header / Glass Navbar -->
+        <header class="navbar">
+            <div class="logo-group">
+                <div class="logo-icon">
+                    <i class="fa-brands fa-google-play"></i>
+                </div>
+                <div class="logo-text">
+                    <div class="title-row">
+                        <h1>PlayStore Review Extractor</h1>
+                        <span class="badge-pro">PRO 2.0</span>
+                        <span class="badge-india">🇮🇳 INDIA CLOUD</span>
+                    </div>
+                    <p class="subtitle">Extract 20,000+ live Google Play Store reviews with high-speed multi-threaded agent</p>
+                </div>
+            </div>
+
+            <div class="header-right-controls">
+                <!-- Theme Toggle Button (Light / Dark) -->
+                <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="Switch Theme (Light / Dark)">
+                    <span class="toggle-pill">
+                        <i class="fa-solid fa-sun icon-sun"></i>
+                        <i class="fa-solid fa-moon icon-moon"></i>
+                    </span>
+                    <span id="themeToggleLabel" class="theme-label">Light</span>
+                </button>
+
+                <!-- Agent Status Chip -->
+                <div class="header-status">
+                    <span class="status-indicator online">
+                        <span class="status-ping"></span>
+                    </span>
+                    <span class="status-text">Agent Online</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="dashboard-grid">
+            
+            <!-- Left Column: Controls & Configuration -->
+            <section class="panel control-panel">
+                <div class="panel-header">
+                    <div class="panel-title-wrap">
+                        <div class="panel-icon"><i class="fa-solid fa-sliders"></i></div>
+                        <div>
+                            <h2>Extraction Controls</h2>
+                            <p class="panel-desc">Configure target application, date scope and scraping engine</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <form id="extractForm" class="form-grid">
+                    <!-- Package ID Input -->
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="packageId">Play Store App Package ID <span class="required">*</span></label>
+                            <span class="input-hint">Exact Android Application ID</span>
+                        </div>
+                        <div class="input-with-action">
+                            <div class="input-icon-prefix">
+                                <i class="fa-brands fa-android"></i>
+                            </div>
+                            <input type="text" id="packageId" placeholder="e.g. com.spotify.music, com.whatsapp" required value="com.spotify.music">
+                            <button type="button" id="btnPreviewApp" class="btn-inspect" title="Fetch Live App Details">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <span>Inspect</span>
+                            </button>
+                        </div>
+                        <small class="help-text">
+                            <i class="fa-solid fa-circle-info"></i> Extract from URL: <code>play.google.com/store/apps/details?id=<b>com.whatsapp</b></code>
+                        </small>
+                    </div>
+
+                    <!-- Quick App Preset Pills -->
+                    <div class="quick-app-pills">
+                        <span class="pills-label"><i class="fa-solid fa-wand-magic-sparkles"></i> Quick Pick:</span>
+                        <div class="pills-container">
+                            <button type="button" class="btn-app-chip" data-pkg="com.spotify.music"><i class="fa-brands fa-spotify"></i> Spotify</button>
+                            <button type="button" class="btn-app-chip" data-pkg="com.whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
+                            <button type="button" class="btn-app-chip" data-pkg="com.instagram.android"><i class="fa-brands fa-instagram"></i> Instagram</button>
+                            <button type="button" class="btn-app-chip" data-pkg="com.flipkart.android"><i class="fa-solid fa-bag-shopping"></i> Flipkart</button>
+                            <button type="button" class="btn-app-chip" data-pkg="com.zeptonow"><i class="fa-solid fa-bolt"></i> Zepto</button>
+                            <button type="button" class="btn-app-chip" data-pkg="com.quackquack"><i class="fa-solid fa-heart"></i> QuackQuack</button>
+                        </div>
+                    </div>
+
+                    <!-- App Preview Card (Glass Card) -->
+                    <div id="appPreviewCard" class="app-preview-card hidden">
+                        <img id="appIcon" src="" alt="App Icon" class="app-icon">
+                        <div class="app-info-details">
+                            <div class="app-header-line">
+                                <h3 id="appTitle">App Name</h3>
+                                <span class="verified-tag"><i class="fa-solid fa-circle-check"></i> Verified</span>
+                            </div>
+                            <p id="appDeveloper" class="developer-name">Developer</p>
+                            <div class="app-meta-tags">
+                                <span class="tag rating-tag"><i class="fa-solid fa-star"></i> <span id="appScore">0.0</span></span>
+                                <span class="tag"><i class="fa-solid fa-download"></i> <span id="appInstalls">0</span></span>
+                                <span class="tag category-tag"><i class="fa-solid fa-tags"></i> <span id="appGenre">Category</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Target Specific Date Input -->
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="targetDate">Target Review Date <span class="required">*</span></label>
+                            <span class="input-hint">Single-day date filter</span>
+                        </div>
+                        <div class="input-with-icon">
+                            <i class="fa-regular fa-calendar input-inner-icon"></i>
+                            <input type="date" id="targetDate" required>
+                        </div>
+                        <small class="help-text">Extracts all reviews matching this specific date and halts automatically when older dates stream.</small>
+                    </div>
+
+                    <!-- Store Region -->
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="country">Play Store Region / Geo Server</label>
+                            <span class="input-hint">Localized reviews</span>
+                        </div>
+                        <div class="select-wrapper">
+                            <select id="country">
+                                <option value="in" selected>🇮🇳 India (IN Server - Multi-Language)</option>
+                                <option value="us">🇺🇸 United States (US Server)</option>
+                                <option value="gb">🇬🇧 United Kingdom (GB Server)</option>
+                                <option value="ca">🇨🇦 Canada (CA Server)</option>
+                                <option value="au">🇦🇺 Australia (AU Server)</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down select-chevron"></i>
+                        </div>
+                    </div>
+
+                    <!-- Preset Quick Date Selectors -->
+                    <div class="quick-presets">
+                        <span class="preset-label"><i class="fa-regular fa-clock"></i> Quick Date:</span>
+                        <div class="preset-chips">
+                            <button type="button" class="btn-chip active" data-offset="0">Today</button>
+                            <button type="button" class="btn-chip" data-offset="1">Yesterday</button>
+                            <button type="button" class="btn-chip" data-offset="2">2 Days Ago</button>
+                            <button type="button" class="btn-chip" data-offset="3">3 Days Ago</button>
+                            <button type="button" class="btn-chip" data-offset="7">7 Days Ago</button>
+                        </div>
+                    </div>
+
+                    <!-- Auto-Record on Android / Emulator Option -->
+                    <div class="auto-record-card">
+                        <label class="custom-toggle" for="autoRecordToggle">
+                            <input type="checkbox" id="autoRecordToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="toggle-text-wrap">
+                            <span class="toggle-main-title"><i class="fa-solid fa-video text-primary"></i> Auto-Record on Virtual / Real Device</span>
+                            <span class="toggle-subtitle">Auto-opens device, pulls clock &amp; records target date reviews video when extraction completes</span>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="form-actions">
+                        <button type="submit" id="btnStart" class="btn-primary">
+                            <span class="btn-content">
+                                <i class="fa-solid fa-bolt-lightning"></i>
+                                <span>Extract All Live Reviews</span>
+                            </span>
+                        </button>
+                        <button type="button" id="btnStop" class="btn-danger hidden">
+                            <span class="btn-content">
+                                <i class="fa-solid fa-circle-stop"></i>
+                                <span>Stop Extraction</span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Right Column: Live Status & Analytics -->
+            <section class="panel status-panel">
+                <div class="panel-header">
+                    <div class="panel-title-wrap">
+                        <div class="panel-icon purple"><i class="fa-solid fa-chart-line"></i></div>
+                        <div>
+                            <h2>Live Extraction Monitor</h2>
+                            <p class="panel-desc">Real-time telemetry, scraping throughput, and agent execution logs</p>
+                        </div>
+                    </div>
+                    <span id="liveJobBadge" class="job-badge idle">IDLE</span>
+                </div>
+
+                <!-- Live Metrics Cards -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-icon blue"><i class="fa-solid fa-comments"></i></div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metricUnique">0</div>
+                            <div class="metric-label">Unique Reviews</div>
+                            <div class="metric-sub">Deduplicated pool</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon purple"><i class="fa-solid fa-gauge-high"></i></div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metricSpeed">0 /s</div>
+                            <div class="metric-label">Scrape Speed</div>
+                            <div class="metric-sub">Reviews per second</div>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon green"><i class="fa-solid fa-stopwatch"></i></div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metricElapsed">0.0s</div>
+                            <div class="metric-label">Elapsed Time</div>
+                            <div class="metric-sub">Active job timer</div>
+                        </div>
+                    </div>
+                    <div class="metric-card" title="Duplicate reviews removed across multi-language streams to ensure unique entries">
+                        <div class="metric-icon orange"><i class="fa-solid fa-filter-circle-xmark"></i></div>
+                        <div class="metric-info">
+                            <div class="metric-value" id="metricDuplicates">0</div>
+                            <div class="metric-label">Dups Filtered <i class="fa-solid fa-circle-info" style="font-size:0.65rem;"></i></div>
+                            <div class="metric-sub">Cross-stream clean</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Liquid Flowing Progress Bar -->
+                <div class="progress-section">
+                    <div class="progress-header">
+                        <div class="progress-title-wrap">
+                            <i class="fa-solid fa-bars-progress"></i>
+                            <span id="progressLabel">Extraction Progress</span>
+                        </div>
+                        <span id="progressPercent" class="progress-badge">0%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <!-- macOS Style Terminal Console -->
+                <div class="terminal-box">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="dot dot-red"></span>
+                            <span class="dot dot-yellow"></span>
+                            <span class="dot dot-green"></span>
+                        </div>
+                        <span class="terminal-title"><i class="fa-solid fa-terminal"></i> agent-extraction-worker.log</span>
+                        <button id="btnClearLogs" class="btn-clear-logs" title="Clear console output">
+                            <i class="fa-regular fa-trash-can"></i> Clear
+                        </button>
+                    </div>
+                    <div id="logConsole" class="log-console">
+                        <p class="log-entry system"><span class="log-tag tag-system">[System]</span> Play Store Review Extractor Pro Agent initialized.</p>
+                        <p class="log-entry info"><span class="log-tag tag-info">[Info]</span> Ready to extract reviews. Choose a target package and click 'Extract All Live Reviews'.</p>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
+
+        <!-- Analytics Visualizations Section -->
+        <section id="analyticsSection" class="panel analytics-panel hidden">
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <div class="panel-icon orange"><i class="fa-solid fa-chart-pie"></i></div>
+                    <div>
+                        <h2>Dataset Analytics & Insights</h2>
+                        <p class="panel-desc">Visual distributions, sentiment classification, and review timelines</p>
+                    </div>
+                </div>
+                <div class="export-group">
+                    <span class="export-label"><i class="fa-solid fa-download"></i> Export:</span>
+                    <button class="btn-export csv" data-format="csv"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                    <button class="btn-export json" data-format="json"><i class="fa-solid fa-file-code"></i> JSON</button>
+                    <button class="btn-export xlsx" data-format="xlsx"><i class="fa-solid fa-file-excel"></i> Excel</button>
+                    <button id="btnRecordAndroid" class="btn-record" title="Record auto-scroll on Android Emulator">
+                        <i class="fa-solid fa-mobile-screen"></i> Record on Android
+                    </button>
+                </div>
+            </div>
+            
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3><i class="fa-solid fa-star-half-stroke"></i> Star Rating Distribution</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartRatings"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3><i class="fa-regular fa-face-smile"></i> Sentiment Breakdown</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartSentiment"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card full-width">
+                    <div class="chart-header">
+                        <h3><i class="fa-solid fa-timeline"></i> Review Velocity Timeline (By Date)</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartTimeline"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Android Recording Panel -->
+        <section id="recordingPanel" class="panel recording-panel hidden">
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <div class="panel-icon green"><i class="fa-solid fa-mobile-screen"></i></div>
+                    <div>
+                        <h2>Android Device &amp; Emulator — Live Screen Recording</h2>
+                        <p class="panel-desc">Supports both Virtual Emulator (Google Pixel 10a) and Real Android Phone via USB</p>
+                    </div>
+                </div>
+                <span id="recStatusBadge" class="job-badge idle">IDLE</span>
+            </div>
+
+            <!-- Device Connection & Launcher Bar -->
+            <div class="device-detection-banner">
+                <div class="device-status-item">
+                    <div class="device-icon-wrap" id="deviceStatusIcon"><i class="fa-solid fa-mobile-screen"></i></div>
+                    <div>
+                        <div class="device-status-title">Target Device Status:</div>
+                        <div id="deviceStatusText" class="device-status-val">
+                            <i class="fa-solid fa-spinner fa-spin"></i> Checking connected devices...
+                        </div>
+                    </div>
+                </div>
+                <div class="device-action-buttons">
+                    <button type="button" id="btnLaunchPixel" class="btn-device-action primary">
+                        <i class="fa-brands fa-google"></i> Launch Google Pixel 10a
+                    </button>
+                    <button type="button" id="btnRefreshDevices" class="btn-device-action secondary" title="Scan for USB phone or emulator">
+                        <i class="fa-solid fa-rotate"></i> Refresh Devices
+                    </button>
+                </div>
+            </div>
+
+            <div class="recording-body">
+                <!-- Info Column -->
+                <div class="rec-info-col">
+                    <div class="rec-steps">
+                        <div class="rec-step" id="recStep1">
+                            <div class="step-icon"><i class="fa-solid fa-mobile-screen"></i></div>
+                            <div class="step-text">
+                                <strong>Step 1</strong>: Emulator detected &amp; Chrome opened
+                            </div>
+                        </div>
+                        <div class="rec-step" id="recStep2">
+                            <div class="step-icon"><i class="fa-solid fa-bell"></i></div>
+                            <div class="step-text">
+                                <strong>Step 2</strong>: Notification bar pulled (shows real clock)
+                            </div>
+                        </div>
+                        <div class="rec-step" id="recStep3">
+                            <div class="step-icon"><i class="fa-solid fa-circle-dot" style="color:#ef4444"></i></div>
+                            <div class="step-text">
+                                <strong>Step 3</strong>: Screen recording started
+                            </div>
+                        </div>
+                        <div class="rec-step" id="recStep4">
+                            <div class="step-icon"><i class="fa-solid fa-scroll"></i></div>
+                            <div class="step-text">
+                                <strong>Step 4</strong>: Auto-scrolling all reviews (0.5s each)
+                            </div>
+                        </div>
+                        <div class="rec-step" id="recStep5">
+                            <div class="step-icon"><i class="fa-solid fa-download"></i></div>
+                            <div class="step-text">
+                                <strong>Step 5</strong>: Video saved to exports/ folder
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="recDownloadArea" class="rec-download hidden">
+                        <i class="fa-solid fa-circle-check text-success-large"></i>
+                        <div>
+                            <h4>Recording Complete!</h4>
+                            <p class="text-subtle">High-definition MP4 video recorded and verified.</p>
+                        </div>
+                        <a id="recDownloadLink" href="#" class="btn-primary btn-download" style="display:inline-flex;gap:8px;width:auto;text-decoration:none">
+                            <i class="fa-solid fa-download"></i> Download MP4 Video
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Progress Column -->
+                <div class="rec-progress-col">
+                    <div class="rec-progress-label">
+                        <span>Recording Progress</span>
+                        <span id="recProgressPct" class="progress-badge">0%</span>
+                    </div>
+                    <div class="progress-bar-bg" style="margin-bottom:16px">
+                        <div id="recProgressBar" class="progress-bar-fill rec-bar" style="width:0%;"></div>
+                    </div>
+
+                    <div class="terminal-box">
+                        <div class="terminal-header">
+                            <div class="terminal-dots">
+                                <span class="dot dot-red"></span>
+                                <span class="dot dot-yellow"></span>
+                                <span class="dot dot-green"></span>
+                            </div>
+                            <span class="terminal-title"><i class="fa-solid fa-terminal"></i> android-recorder.log</span>
+                        </div>
+                        <div id="recLogConsole" class="log-console">
+                            <p class="log-entry system"><span class="log-tag tag-system">[System]</span> Android recorder ready. Click "Record on Android" after extraction.</p>
+                        </div>
+                    </div>
+
+                    <div class="rec-device-guides">
+                        <div class="guide-card">
+                            <div class="guide-title"><i class="fa-solid fa-laptop"></i> 1. Virtual Device (Google Pixel 10a)</div>
+                            <p>Click <b>Launch Google Pixel 10a</b> above or run <code>START_EMULATOR.bat</code>. Once the emulator window opens and boots, the agent will record on it automatically.</p>
+                        </div>
+                        <div class="guide-card">
+                            <div class="guide-title"><i class="fa-solid fa-mobile-screen"></i> 2. Real Android Phone (USB)</div>
+                            <p>Enable <b>Developer Options</b> &rarr; turn on <b>USB Debugging</b> on your phone. Connect with USB cable and tap "Allow". Then click <b>Refresh Devices</b>.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive Live Device Workflow & App Screen Capture -->
+            <div class="live-interaction-box">
+                <div class="interaction-header">
+                    <div class="interaction-title">
+                        <div class="panel-icon purple" style="width:36px;height:36px;font-size:1rem;"><i class="fa-solid fa-gamepad"></i></div>
+                        <div>
+                            <h4>Live Interactive Screen Capture &amp; App Workflow</h4>
+                            <p class="panel-desc">Record any user movement &amp; interaction (e.g. Novaira App, WhatsApp, Play Store) live on your real phone or emulator</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="interaction-controls-grid">
+                    <!-- App Launcher -->
+                    <div class="interaction-input-group">
+                        <label for="liveAppPackage">App Package ID to Open on Device:</label>
+                        <div class="input-with-action">
+                            <input type="text" id="liveAppPackage" placeholder="e.g. com.whatsapp, com.novaira.app" value="com.spotify.music">
+                            <button type="button" id="btnLaunchAppOnDevice" class="btn-inspect" title="Launch on Connected Device">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Open App
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Recording Actions -->
+                    <div class="interaction-buttons-row">
+                        <button type="button" id="btnStartLiveRec" class="btn-live-record">
+                            <i class="fa-solid fa-circle-dot"></i> Start Live Screen Recording
+                        </button>
+                        <button type="button" id="btnStopLiveRec" class="btn-danger hidden" style="width:auto;">
+                            <i class="fa-solid fa-stop"></i> Stop &amp; Save Video
+                        </button>
+                        <button type="button" id="btnLiveScreencap" class="btn-live-screencap" title="Capture instant device screenshot">
+                            <i class="fa-solid fa-camera"></i> Screenshot
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Interaction Status / Results -->
+                <div id="liveRecStatusBox" class="live-rec-status-box hidden">
+                    <div class="live-pulse-dot"></div>
+                    <span id="liveRecTimerText">RECORDING LIVE: 00:00</span>
+                    <span class="live-rec-hint">— Move, swipe, and use your device freely. Click 'Stop &amp; Save Video' when done.</span>
+                </div>
+
+                <!-- Captured Result Card -->
+                <div id="liveCaptureResult" class="live-capture-result hidden">
+                    <div class="capture-result-content">
+                        <i class="fa-solid fa-circle-check text-success-large"></i>
+                        <div>
+                            <h4 id="captureResultTitle">Capture Saved!</h4>
+                            <p id="captureResultDesc" class="text-subtle">Saved to exports/ folder.</p>
+                        </div>
+                        <a id="captureResultLink" href="#" target="_blank" class="btn-primary btn-download" style="display:inline-flex;gap:8px;width:auto;text-decoration:none;">
+                            <i class="fa-solid fa-download"></i> Download File
+                        </a>
+                    </div>
+                    <div id="capturePreviewContainer" class="capture-preview-container hidden">
+                        <img id="capturePreviewImg" src="" alt="Live Device Screenshot">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Virtual Phone Simulator Section -->
+        <section id="phoneSection" class="panel phone-panel hidden">
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <div class="panel-icon blue"><i class="fa-solid fa-mobile-screen-button"></i></div>
+                    <div>
+                        <h2>Virtual Phone Screen Simulator &amp; Recorder</h2>
+                        <p class="panel-desc">Interactive smartphone frame rendering live Play Store feed with browser tab video recording</p>
+                    </div>
+                </div>
+                <div class="phone-actions">
+                    <button id="btnPhonePlay" class="btn-phone-ctrl"><i class="fa-solid fa-play"></i> Auto-Scroll</button>
+                    <button id="btnPhonePause" class="btn-phone-ctrl hidden"><i class="fa-solid fa-pause"></i> Pause</button>
+                    <div class="speed-select-wrap">
+                        <select id="phoneSpeedSelect" class="speed-select">
+                            <option value="1">Speed: 1x</option>
+                            <option value="2" selected>Speed: 2x</option>
+                            <option value="4">Speed: 4x</option>
+                        </select>
+                    </div>
+                    <button id="btnPhoneRecord" class="btn-phone-rec"><i class="fa-solid fa-circle-dot"></i> Record Screen Video</button>
+                </div>
+            </div>
+
+            <div class="phone-simulator-container">
+                <!-- Realistic Virtual Smartphone Frame -->
+                <div id="phoneDeviceFrame" class="phone-device-frame">
+                    <!-- Dynamic Island / Punch Hole Notch -->
+                    <div class="phone-notch">
+                        <div class="phone-camera"></div>
+                        <div class="phone-speaker"></div>
+                    </div>
+
+                    <!-- Android Status Bar -->
+                    <div class="phone-status-bar">
+                        <span id="phoneClock">10:00</span>
+                        <div class="status-icons">
+                            <i class="fa-solid fa-wifi"></i>
+                            <i class="fa-solid fa-signal"></i>
+                            <i class="fa-solid fa-battery-full"></i>
+                        </div>
+                    </div>
+
+                    <!-- Play Store Header inside Virtual Phone -->
+                    <div class="phone-playstore-header">
+                        <div class="playstore-nav">
+                            <i class="fa-solid fa-arrow-left"></i>
+                            <span id="phoneAppHeaderTitle">Google Play Store</span>
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </div>
+                        <div class="phone-date-banner">
+                            <span><i class="fa-solid fa-calendar-day"></i> Reviews for <strong id="phoneTargetDateLabel">Target Date</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Live Review Feed inside Virtual Phone -->
+                    <div id="phoneReviewScreen" class="phone-review-screen">
+                        <div id="phoneReviewFeed" class="phone-review-feed">
+                            <!-- Dynamically populated with live review cards -->
+                        </div>
+                    </div>
+
+                    <!-- Android Home Indicator / Navigation Bar -->
+                    <div class="phone-home-bar">
+                        <div class="home-pill"></div>
+                    </div>
+                </div>
+
+                <!-- Live Recorder Info Sidebar -->
+                <div class="phone-info-card">
+                    <div class="info-card-header">
+                        <div class="info-badge-icon"><i class="fa-solid fa-video"></i></div>
+                        <h3>Live Smartphone Screen Recorder</h3>
+                    </div>
+                    <p>Visually scrolls through every live user review for the selected date on an ultra-realistic Virtual Android Smartphone display.</p>
+                    <ul class="recorder-specs">
+                        <li><i class="fa-solid fa-check text-success"></i> Genuine Google Play Store card layout &amp; avatar initials</li>
+                        <li><i class="fa-solid fa-check text-success"></i> Auto-scrolls through 100% of scraped reviews smoothly</li>
+                        <li><i class="fa-solid fa-check text-success"></i> Downloads high-definition video file (<code>.webm</code>)</li>
+                    </ul>
+                    <div id="recordingStatusBadge" class="recording-badge hidden">
+                        <span class="rec-dot"></span> <span id="recordingTime">REC 00:00</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Review Table Section -->
+        <section id="tableSection" class="panel table-panel hidden">
+            <div class="panel-header flex-wrap">
+                <div class="panel-title-wrap">
+                    <div class="panel-icon blue"><i class="fa-solid fa-table-list"></i></div>
+                    <div>
+                        <h2>Extracted Reviews Dataset (<span id="tableTotalCount">0</span>)</h2>
+                        <p class="panel-desc">Search, filter, and inspect verified user reviews</p>
+                    </div>
+                </div>
+                
+                <div class="table-filters">
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="tableSearch" placeholder="Search keywords or users...">
+                    </div>
+                    <div class="select-wrapper">
+                        <select id="ratingFilter">
+                            <option value="">All Ratings</option>
+                            <option value="5">★ 5 Stars</option>
+                            <option value="4">★ 4 Stars</option>
+                            <option value="3">★ 3 Stars</option>
+                            <option value="2">★ 2 Stars</option>
+                            <option value="1">★ 1 Star</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down select-chevron"></i>
+                    </div>
+                    <div class="select-wrapper">
+                        <select id="sentimentFilter">
+                            <option value="">All Sentiments</option>
+                            <option value="Positive">Positive</option>
+                            <option value="Neutral">Neutral</option>
+                            <option value="Negative">Negative</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down select-chevron"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Rating</th>
+                            <th>Sentiment</th>
+                            <th>Review Text</th>
+                            <th>Date</th>
+                            <th>Thumbs 👍</th>
+                            <th>App Version</th>
+                            <th>Language</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reviewsTableBody">
+                        <tr>
+                            <td colspan="8" class="text-center empty-state">
+                                <div class="empty-state-wrap">
+                                    <i class="fa-regular fa-folder-open empty-icon"></i>
+                                    <p>No reviews extracted yet. Start an extraction job above to inspect live reviews.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination-bar">
+                <span id="pageInfo">Showing 0-0 of 0</span>
+                <div class="pagination-controls">
+                    <button id="btnPrevPage" class="btn-page" disabled><i class="fa-solid fa-chevron-left"></i> Prev</button>
+                    <span id="currentPageNum" class="page-num">1</span>
+                    <button id="btnNextPage" class="btn-page" disabled>Next <i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

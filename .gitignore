@@ -31,3 +31,12 @@ backend/serviceAccountKey.json
 *.njsproj
 *.sln
 *.sw?
+
+# Generated Review Excels & Cache
+backend/REVIEW_EXCELS/
+backend/live_sheet_cache.json
+*.xlsx
+*.mp4
+*.csv
+exports/
+__pycache__/

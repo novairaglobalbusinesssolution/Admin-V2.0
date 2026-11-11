@@ -21,6 +21,7 @@ import PushNotifications from './pages/PushNotifications';
 import UsersManagement from './pages/UsersManagement';
 import UserView from './pages/UserView';
 import LiveListManagement from './pages/LiveListManagement';
+import AutomaticLiveList from './pages/AutomaticLiveList';
 import ScanZone from './pages/ScanZone';
 import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
@@ -299,6 +300,8 @@ function App() {
                 <Route path="payments/settings" element={<PaymentGatewayConfig />} />
 
                 <Route path="add-live" element={<LiveListManagement />} />
+                <Route path="automatic-live-list" element={<AutomaticLiveList />} />
+                <Route path="automatic_live_list" element={<AutomaticLiveList />} />
                 <Route path="live-list" element={<LiveListView />} />
                 <Route path="settings" element={<Settings />} />
                 <Route path="add-app" element={<AddApp />} />
