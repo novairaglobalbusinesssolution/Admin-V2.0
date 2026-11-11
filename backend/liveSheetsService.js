@@ -259,11 +259,13 @@ function saveStructuredExcelInline(reviewsList, taskId, appName, targetDateStr) 
     }
 }
 
+const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw4QlgShmtFDJCcxYDAJ_h2UcNDJlcXZ2BRPPoo0mG8pRZwrHkij2WvIQ7nDQuXd7E0uA/exec';
+
 /**
  * Sync extracted reviews to Google Sheet
  */
 async function syncToGoogleSheet(taskData, reviews) {
-    const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
+    const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL || DEFAULT_APPS_SCRIPT_URL;
     if (!appsScriptUrl || !appsScriptUrl.startsWith('http')) {
         const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://admin-v2-backend.onrender.com';
         return {
