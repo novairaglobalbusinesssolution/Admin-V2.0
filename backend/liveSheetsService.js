@@ -8,13 +8,37 @@ const gplayModule = require('google-play-scraper');
 const gplay = gplayModule.default || gplayModule;
 
 const CACHE_FILE = path.join(__dirname, 'live_sheet_cache.json');
+const HISTORY_FILE = path.join(__dirname, 'live_sheet_history.json');
 const EXCEL_BASE_DIR = path.join(__dirname, 'REVIEW_EXCELS');
+
+// State tracking for live console and logs
+let currentJob = {
+    status: 'idle', // idle, running, completed, error
+    date: null,
+    totalApps: 0,
+    currentIndex: 0,
+    currentApp: null,
+    startTime: null,
+    endTime: null,
+    logs: [],
+    results: []
+};
 
 // Helper to get IST date string
 function getISTDateString() {
     const d = new Date();
     const istTime = new Date(d.getTime() + (330 * 60000));
     return istTime.toISOString().split('T')[0];
+}
+
+function logJob(message) {
+    const time = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+    const entry = `[${time} IST] ${message}`;
+    console.log(entry);
+    if (currentJob) {
+        currentJob.logs.push(entry);
+        if (currentJob.logs.length > 300) currentJob.logs.shift();
+    }
 }
 
 // Read cache safely
@@ -39,6 +63,31 @@ function writeCache(data) {
     }
 }
 
+// Read history
+function readHistory() {
+    try {
+        if (fs.existsSync(HISTORY_FILE)) {
+            return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8') || '[]');
+        }
+    } catch (e) {
+        console.warn('Warning reading history:', e.message);
+    }
+    return [];
+}
+
+// Write history
+function writeHistory(entry) {
+    try {
+        const history = readHistory();
+        history.unshift(entry);
+        // Keep last 30 runs
+        if (history.length > 30) history.pop();
+        fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
+    } catch (e) {
+        console.error('Error saving history:', e.message);
+    }
+}
+
 // Clean android package ID
 function extractPackageId(raw) {
     if (!raw) return '';
@@ -51,7 +100,6 @@ function extractPackageId(raw) {
 
 /**
  * Native Inline Play Store Scraper
- * Extracts reviews chronologically between startDate (Release date) and endDate (Live checking date)
  */
 async function scrapePlayStoreReviewsInline(packageId, startDateStr, endDateStr, country = 'in', maxReviews = 5000) {
     const cleanPkg = extractPackageId(packageId);
@@ -65,13 +113,13 @@ async function scrapePlayStoreReviewsInline(packageId, startDateStr, endDateStr,
     const endDate = new Date(endDateStr);
     endDate.setHours(23, 59, 59, 999);
 
-    console.log(`[InlineScraper] Extracting reviews for '${cleanPkg}' from ${startDateStr} to ${endDateStr}...`);
+    logJob(`Scraping Play Store stream for '${cleanPkg}' (Window: ${startDateStr} to ${endDateStr})...`);
 
     const allReviews = [];
     const seenIds = new Set();
     let nextToken = undefined;
     let pageCount = 0;
-    const maxPages = 25; // 25 * 150 = up to 3750 reviews
+    const maxPages = 25;
 
     try {
         while (pageCount < maxPages && allReviews.length < maxReviews) {
@@ -101,13 +149,11 @@ async function scrapePlayStoreReviewsInline(packageId, startDateStr, endDateStr,
 
                 const revDate = new Date(r.date);
 
-                // If review is older than start date (Release Date), stop scraping this stream
                 if (revDate < startDate) {
                     stopOlder = true;
                     break;
                 }
 
-                // If review is between start date and end date
                 if (revDate <= endDate && revDate >= startDate) {
                     const formattedAt = revDate.toISOString().replace('T', ' ').substring(0, 19);
                     allReviews.push({
@@ -132,11 +178,10 @@ async function scrapePlayStoreReviewsInline(packageId, startDateStr, endDateStr,
             }
 
             nextToken = res.nextPaginationToken;
-            // Short delay to respect rate limit
             await new Promise(res => setTimeout(res, 200));
         }
 
-        console.log(`[InlineScraper] Successfully extracted ${allReviews.length} reviews for '${cleanPkg}'.`);
+        logJob(`Completed stream for '${cleanPkg}': Found ${allReviews.length} unique reviews.`);
         return {
             success: true,
             package_id: cleanPkg,
@@ -148,7 +193,7 @@ async function scrapePlayStoreReviewsInline(packageId, startDateStr, endDateStr,
         };
 
     } catch (err) {
-        console.error(`[InlineScraper] Error scraping '${cleanPkg}':`, err.message);
+        logJob(`Warning scraping '${cleanPkg}': ${err.message}`);
         return {
             success: false,
             error: err.message,
@@ -159,8 +204,7 @@ async function scrapePlayStoreReviewsInline(packageId, startDateStr, endDateStr,
 }
 
 /**
- * Save Structured Excel file inline:
- * REVIEW_EXCELS/{YEAR}/{MONTH}/{DAY}/[Task #{task_id}] {app_name} - Reviews ({date}).xlsx
+ * Save Structured Excel file inline
  */
 function saveStructuredExcelInline(reviewsList, taskId, appName, targetDateStr) {
     try {
@@ -177,7 +221,6 @@ function saveStructuredExcelInline(reviewsList, taskId, appName, targetDateStr) 
         const filename = `[Task #${safeTaskId}] ${safeName} - Reviews (${year}-${month}-${day}).xlsx`;
         const filePath = path.join(folderPath, filename);
 
-        // Format rows for Excel
         const rows = (reviewsList || []).map(r => ({
             'Reviewer Name': r.userName || 'Anonymous',
             'Rating (Stars)': r.rating || 5,
@@ -196,7 +239,6 @@ function saveStructuredExcelInline(reviewsList, taskId, appName, targetDateStr) 
             'Country': ''
         }]);
 
-        // Auto-fit column widths
         worksheet['!cols'] = [
             { wch: 25 },
             { wch: 15 },
@@ -212,18 +254,17 @@ function saveStructuredExcelInline(reviewsList, taskId, appName, targetDateStr) 
 
         return filePath;
     } catch (err) {
-        console.error('[ExcelWriter] Error generating Excel:', err.message);
+        logJob(`Error generating Excel file: ${err.message}`);
         return null;
     }
 }
 
 /**
- * Sync extracted reviews to Google Sheet via Google Apps Script Web App
+ * Sync extracted reviews to Google Sheet
  */
 async function syncToGoogleSheet(taskData, reviews) {
     const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
     if (!appsScriptUrl || !appsScriptUrl.startsWith('http')) {
-        // Fallback: If Apps Script URL not configured yet, generate a simulated cloud Google Sheet link
         const safeName = encodeURIComponent(taskData.app_name || 'App');
         return {
             status: 'success',
@@ -233,6 +274,7 @@ async function syncToGoogleSheet(taskData, reviews) {
     }
 
     try {
+        logJob(`Pushing ${reviews.length} reviews to Google Apps Script for Task #${taskData.task_id}...`);
         const payload = {
             action: 'create_sheet',
             task_id: taskData.task_id,
@@ -250,9 +292,10 @@ async function syncToGoogleSheet(taskData, reviews) {
         });
 
         const data = await res.json();
+        logJob(`Google Sheet created: ${data.sheet_url || 'N/A'}`);
         return data;
     } catch (err) {
-        console.warn(`[GoogleSheetSync] Warning syncing Task #${taskData.task_id} to Apps Script:`, err.message);
+        logJob(`Warning syncing to Google Sheet: ${err.message}`);
         return {
             status: 'error',
             error: err.message,
@@ -263,117 +306,182 @@ async function syncToGoogleSheet(taskData, reviews) {
 
 /**
  * Sequential 1-by-1 extraction for all apps scheduled for today (Asia/Kolkata timezone)
+ * Runs asynchronously and updates currentJob state in real-time
  */
 async function processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targetDate = null) {
     const activeDate = targetDate || getISTDateString();
-    console.log(`[DailyExtraction] Starting 1-by-1 sequential review extraction for date: ${activeDate} (Asia/Kolkata)`);
 
-    // 1. Fetch apps matching live_checking_date
-    const { data: apps, error: appsErr } = await supabaseWork
-        .from('apps')
-        .select('*')
-        .eq('live_checking_date', activeDate)
-        .order('task_id', { ascending: true });
-
-    if (appsErr) {
-        throw new Error(`Failed to fetch apps from Supabase: ${appsErr.message}`);
-    }
-
-    if (!apps || apps.length === 0) {
+    if (currentJob.status === 'running') {
+        logJob(`Extraction already running in background for ${currentJob.date}. Returning active status.`);
         return {
-            status: 'success',
-            message: `No apps scheduled for live checking on ${activeDate}`,
-            date: activeDate,
-            total_apps: 0,
-            results: []
+            status: 'running',
+            message: 'Extraction is currently running in background',
+            currentJob
         };
     }
 
-    console.log(`[DailyExtraction] Found ${apps.length} apps scheduled for live checking on ${activeDate}. Processing 1-to-1...`);
+    // Initialize currentJob
+    currentJob = {
+        status: 'running',
+        date: activeDate,
+        totalApps: 0,
+        currentIndex: 0,
+        currentApp: null,
+        startTime: Date.now(),
+        endTime: null,
+        logs: [],
+        results: []
+    };
 
-    const cache = readCache();
-    const results = [];
+    logJob(`🚀 Automated review extraction initiated for live checking date: ${activeDate} (Asia/Kolkata)`);
 
-    // Process 1 by 1 sequentially
-    for (let i = 0; i < apps.length; i++) {
-        const app = apps[i];
-        console.log(`[DailyExtraction] [${i + 1}/${apps.length}] Processing Task #${app.task_id}: ${app.app_name}...`);
+    // Run async in background
+    (async () => {
+        try {
+            // 1. Fetch apps matching live_checking_date
+            logJob(`Fetching scheduled apps from Supabase (live_checking_date = '${activeDate}')...`);
+            const { data: apps, error: appsErr } = await supabaseWork
+                .from('apps')
+                .select('*')
+                .eq('live_checking_date', activeDate)
+                .order('task_id', { ascending: true });
 
-        const startDate = app.app_date || activeDate;
-        const endDate = app.live_checking_date || activeDate;
+            if (appsErr) throw new Error(appsErr.message);
 
-        const extractRes = await scrapePlayStoreReviewsInline(
-            app.app_package,
-            startDate,
-            endDate,
-            'in',
-            5000
-        );
+            if (!apps || apps.length === 0) {
+                logJob(`No apps scheduled for live checking on ${activeDate}. Job finished.`);
+                currentJob.status = 'completed';
+                currentJob.endTime = Date.now();
+                return;
+            }
 
-        const reviews = extractRes.reviews || [];
+            currentJob.totalApps = apps.length;
+            logJob(`Found ${apps.length} applications scheduled for live checking today. Starting 1-to-1 extraction...`);
 
-        // Save Excel file locally
-        const excelPath = saveStructuredExcelInline(
-            reviews,
-            app.task_id,
-            app.app_name,
-            endDate
-        );
+            const cache = readCache();
+            const results = [];
 
-        // Sync to Google Sheet
-        const sheetRes = await syncToGoogleSheet(app, reviews);
+            // Process 1 by 1 sequentially
+            for (let i = 0; i < apps.length; i++) {
+                const app = apps[i];
+                currentJob.currentIndex = i + 1;
+                currentJob.currentApp = {
+                    taskId: app.task_id,
+                    name: app.app_name,
+                    package: app.app_package
+                };
 
-        const record = {
-            task_id: String(app.task_id),
-            app_id: app.id,
-            app_name: app.app_name,
-            app_package: app.app_package,
-            clean_package_id: extractPackageId(app.app_package),
-            app_date: app.app_date,
-            live_checking_date: app.live_checking_date,
-            total_reviews: reviews.length,
-            extracted_at: new Date().toISOString(),
-            sheet_url: sheetRes.sheet_url || '',
-            excel_path: excelPath || '',
-            reviews: reviews.map(r => ({
-                userName: r.userName || 'Anonymous',
-                rating: r.rating || 5,
-                content: r.content || '',
-                at: r.at || '',
-                date: r.date || '',
-                country: r.country || 'IN'
-            }))
-        };
+                logJob(`--------------------------------------------------------------------------------`);
+                logJob(`[App ${i + 1}/${apps.length}] Processing Task #${app.task_id}: ${app.app_name}`);
 
-        // Save in cache indexed by task_id and app_id
-        cache[String(app.task_id)] = record;
-        cache[String(app.id)] = record;
-        writeCache(cache);
+                const startDate = app.app_date || activeDate;
+                const endDate = app.live_checking_date || activeDate;
 
-        results.push({
-            task_id: app.task_id,
-            app_name: app.app_name,
-            total_reviews: reviews.length,
-            sheet_url: record.sheet_url,
-            excel_path: record.excel_path,
-            status: 'completed'
-        });
+                // 1. Extract reviews
+                const extractRes = await scrapePlayStoreReviewsInline(
+                    app.app_package,
+                    startDate,
+                    endDate,
+                    'in',
+                    5000
+                );
 
-        console.log(`[DailyExtraction] [${i + 1}/${apps.length}] Finished Task #${app.task_id} with ${reviews.length} reviews.`);
-    }
+                const reviews = extractRes.reviews || [];
 
-    // 2. Send Summary Email to Admin Recipients
-    try {
-        await sendSummaryEmail(supabaseSystem, activeDate, results);
-    } catch (mailErr) {
-        console.error('[DailyExtraction] Error sending summary email:', mailErr.message);
-    }
+                // 2. Save Excel file locally
+                const excelPath = saveStructuredExcelInline(
+                    reviews,
+                    app.task_id,
+                    app.app_name,
+                    endDate
+                );
+                logJob(`Excel file stored: REVIEW_EXCELS/${endDate.replace(/-/g, '/')}/Task_${app.task_id}.xlsx`);
+
+                // 3. Sync to Google Sheet
+                const sheetRes = await syncToGoogleSheet(app, reviews);
+
+                const record = {
+                    task_id: String(app.task_id),
+                    app_id: app.id,
+                    app_name: app.app_name,
+                    app_package: app.app_package,
+                    clean_package_id: extractPackageId(app.app_package),
+                    app_date: app.app_date,
+                    live_checking_date: app.live_checking_date,
+                    total_reviews: reviews.length,
+                    extracted_at: new Date().toISOString(),
+                    sheet_url: sheetRes.sheet_url || '',
+                    excel_path: excelPath || '',
+                    reviews: reviews.map(r => ({
+                        userName: r.userName || 'Anonymous',
+                        rating: r.rating || 5,
+                        content: r.content || '',
+                        at: r.at || '',
+                        date: r.date || '',
+                        country: r.country || 'IN'
+                    }))
+                };
+
+                cache[String(app.task_id)] = record;
+                cache[String(app.id)] = record;
+                writeCache(cache);
+
+                const appResult = {
+                    task_id: app.task_id,
+                    app_name: app.app_name,
+                    package_id: record.clean_package_id,
+                    app_date: app.app_date,
+                    live_checking_date: app.live_checking_date,
+                    total_reviews: reviews.length,
+                    sheet_url: record.sheet_url,
+                    excel_path: record.excel_path,
+                    status: 'completed'
+                };
+
+                results.push(appResult);
+                currentJob.results.push(appResult);
+
+                logJob(`[App ${i + 1}/${apps.length}] Completed Task #${app.task_id} with ${reviews.length} reviews.`);
+            }
+
+            // 4. Send Summary Email to Admin Recipients
+            logJob(`Preparing daily summary notification email...`);
+            try {
+                await sendSummaryEmail(supabaseSystem, activeDate, results);
+                logJob(`Summary notification email successfully dispatched to admin recipients!`);
+            } catch (mailErr) {
+                logJob(`Email dispatch error: ${mailErr.message}`);
+            }
+
+            currentJob.status = 'completed';
+            currentJob.endTime = Date.now();
+            currentJob.currentApp = null;
+            logJob(`🎉 All ${apps.length} applications processed successfully! Live review cycle complete.`);
+
+            // Record into history
+            writeHistory({
+                date: activeDate,
+                totalApps: apps.length,
+                totalReviews: results.reduce((acc, c) => acc + (c.total_reviews || 0), 0),
+                startTime: currentJob.startTime,
+                endTime: currentJob.endTime,
+                durationSeconds: Math.round((currentJob.endTime - currentJob.startTime) / 1000),
+                results
+            });
+
+        } catch (globalErr) {
+            logJob(`FATAL ERROR during extraction: ${globalErr.message}`);
+            currentJob.status = 'error';
+            currentJob.error = globalErr.message;
+            currentJob.endTime = Date.now();
+        }
+    })();
 
     return {
-        status: 'success',
+        status: 'started',
+        message: 'Extraction started in background',
         date: activeDate,
-        total_apps: apps.length,
-        results
+        currentJob
     };
 }
 
@@ -388,7 +496,7 @@ async function sendSummaryEmail(supabaseSystem, dateStr, results) {
         .maybeSingle();
 
     if (!smtpData) {
-        console.warn('[SummaryEmail] No default SMTP found. Skipping email delivery.');
+        logJob('[SummaryEmail] No default SMTP found. Skipping email delivery.');
         return;
     }
 
@@ -397,7 +505,7 @@ async function sendSummaryEmail(supabaseSystem, dateStr, results) {
         .select('receiver_email');
 
     if (!receivers || receivers.length === 0) {
-        console.warn('[SummaryEmail] No recipients in live_list_settings. Skipping email.');
+        logJob('[SummaryEmail] No recipients in live_list_settings. Skipping email.');
         return;
     }
 
@@ -470,8 +578,23 @@ async function sendSummaryEmail(supabaseSystem, dateStr, results) {
         html: htmlContent
     });
 
-    console.log(`[SummaryEmail] Notification email successfully dispatched to: ${toAddresses}`);
+    logJob(`Notification email successfully dispatched to: ${toAddresses}`);
     return info;
+}
+
+/**
+ * Get current live job status & logs
+ */
+function getCurrentJobStatus() {
+    const elapsed = currentJob.startTime 
+        ? Math.round(((currentJob.endTime || Date.now()) - currentJob.startTime) / 1000) 
+        : 0;
+
+    return {
+        ...currentJob,
+        elapsedSeconds: elapsed,
+        history: readHistory().slice(0, 5)
+    };
 }
 
 /**
@@ -488,6 +611,8 @@ module.exports = {
     scrapePlayStoreReviewsInline,
     saveStructuredExcelInline,
     processAllLiveAppsSequentially,
+    getCurrentJobStatus,
+    readHistory,
     getCachedReviews,
     syncToGoogleSheet
 };

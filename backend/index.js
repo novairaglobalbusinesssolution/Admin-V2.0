@@ -1441,6 +1441,380 @@ app.post('/api/cloudinary/upload', apiAuth, async (req, res) => {
 // ==============================================================================
 const liveSheetsService = require('./liveSheetsService');
 
+function renderLiveConsoleHtml(adminKey = 'Novaira002@#') {
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novaira Live Review Extraction & Google Sheets Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #090d16;
+            --surface: #111827;
+            --surface-hover: #1f2937;
+            --border: #1f293d;
+            --accent: #8b5cf6;
+            --accent-glow: rgba(139, 92, 246, 0.25);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            padding: 24px;
+            min-height: 100vh;
+        }
+        .container { max-width: 1350px; margin: 0 auto; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .logo-badge {
+            width: 44px; height: 44px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 20px;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        .title h1 { font-size: 20px; font-weight: 700; color: #fff; }
+        .title p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 20px;
+        }
+        .stat-card span { font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+        .stat-card h3 { font-size: 24px; font-weight: 700; color: #fff; margin-top: 6px; }
+        
+        /* Progress Bar */
+        .progress-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 14px; }
+        .progress-bar-bg {
+            width: 100%; height: 12px;
+            background: #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #8b5cf6, #10b981);
+            width: 0%;
+            transition: width 0.4s ease;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        @media(max-width: 950px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        /* Terminal Logs */
+        .terminal-box {
+            background: #06090e;
+            border: 1px solid #1e293b;
+            border-radius: 14px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            height: 520px;
+        }
+        .terminal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #1a2234;
+            margin-bottom: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .terminal-logs {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #38bdf8;
+            overflow-y: auto;
+            flex-grow: 1;
+            white-space: pre-wrap;
+            word-break: break-all;
+            padding-right: 8px;
+        }
+        .terminal-logs::-webkit-scrollbar { width: 6px; }
+        .terminal-logs::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+        /* Table Card */
+        .table-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            height: 520px;
+            display: flex;
+            flex-direction: column;
+        }
+        .table-box h2 { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+        .table-container { overflow-y: auto; flex-grow: 1; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: #172033; color: var(--text-muted); padding: 10px 12px; text-align: left; font-weight: 600; position: sticky; top: 0; }
+        td { padding: 12px; border-bottom: 1px solid #1f293d; color: #e2e8f0; }
+        tr:hover td { background: var(--surface-hover); }
+        .btn-sheet {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: #2563eb; color: #fff;
+            padding: 5px 10px; border-radius: 6px;
+            text-decoration: none; font-size: 12px; font-weight: 600;
+        }
+        .btn-sheet:hover { background: #1d4ed8; }
+        .badge {
+            display: inline-block; padding: 4px 8px; border-radius: 6px;
+            font-size: 11px; font-weight: 700;
+        }
+        .badge-running { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+        .badge-completed { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; }
+        .badge-idle { background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid #64748b; }
+        
+        .btn-action {
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: #fff; border: none; padding: 10px 18px; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-action:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="brand">
+                <div class="logo-badge">N</div>
+                <div class="title">
+                    <h1>Novaira Live Reviews & Google Sheets Automation</h1>
+                    <p>1-to-1 Play Store Scraping & Cloud Spreadsheet Delivery Engine</p>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <span id="job-status-badge" class="badge badge-idle">STATUS: IDLE</span>
+                <button class="btn-action" onclick="triggerExtraction()">
+                    ⚡ Run Extraction Now
+                </button>
+            </div>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span>Scheduled Apps</span>
+                <h3 id="stat-total-apps">0</h3>
+            </div>
+            <div class="stat-card">
+                <span>Completed Apps</span>
+                <h3 id="stat-completed-apps">0</h3>
+            </div>
+            <div class="stat-card">
+                <span>Total Reviews Extracted</span>
+                <h3 id="stat-total-reviews">0</h3>
+            </div>
+            <div class="stat-card">
+                <span>Elapsed Execution Time</span>
+                <h3 id="stat-elapsed">0s</h3>
+            </div>
+        </div>
+
+        <!-- Progress Box -->
+        <div class="progress-box">
+            <div class="progress-header">
+                <div>
+                    <strong id="progress-text">Ready to run</strong>
+                    <span id="current-app-text" style="color: #a78bfa; margin-left: 8px;"></span>
+                </div>
+                <strong id="progress-percent" style="color: #10b981;">0%</strong>
+            </div>
+            <div class="progress-bar-bg">
+                <div id="progress-bar-fill" class="progress-bar-fill"></div>
+            </div>
+        </div>
+
+        <!-- Grid: Live Logs + Results Table -->
+        <div class="grid-2">
+            <!-- Terminal Live Logs -->
+            <div class="terminal-box">
+                <div class="terminal-header">
+                    <span style="color: #38bdf8;">🖥️ Live Telemetry & Console Logs</span>
+                    <span id="log-count" style="color: var(--text-muted); font-size: 11px;">0 logs</span>
+                </div>
+                <div id="terminal-logs" class="terminal-logs">Waiting for job to start...</div>
+            </div>
+
+            <!-- Table of Generated Google Sheets -->
+            <div class="table-box">
+                <h2>📊 Completed Applications & Google Sheets</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Task ID</th>
+                                <th>Application</th>
+                                <th>Release Date</th>
+                                <th>Live Date</th>
+                                <th>Reviews</th>
+                                <th>Google Sheet</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-table-body">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+                                    No extraction completed in this session yet.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_KEY = "${adminKey}";
+        let isPolling = true;
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/live-sheets/status?key=' + ADMIN_KEY);
+                if (!res.ok) return;
+                const json = await res.json();
+                const job = json.data;
+                if (!job) return;
+
+                // Update Badges
+                const badge = document.getElementById('job-status-badge');
+                if (job.status === 'running') {
+                    badge.className = 'badge badge-running';
+                    badge.innerText = '● RUNNING (' + job.currentIndex + '/' + job.totalApps + ')';
+                } else if (job.status === 'completed') {
+                    badge.className = 'badge badge-completed';
+                    badge.innerText = '✔ COMPLETED (' + job.totalApps + ' APPS)';
+                } else {
+                    badge.className = 'badge badge-idle';
+                    badge.innerText = 'STATUS: ' + job.status.toUpperCase();
+                }
+
+                // Update Stats
+                document.getElementById('stat-total-apps').innerText = job.totalApps || 0;
+                document.getElementById('stat-completed-apps').innerText = (job.results || []).length;
+                const totalRev = (job.results || []).reduce((acc, c) => acc + (c.total_reviews || 0), 0);
+                document.getElementById('stat-total-reviews').innerText = totalRev.toLocaleString();
+                document.getElementById('stat-elapsed').innerText = (job.elapsedSeconds || 0) + 's';
+
+                // Progress Bar
+                const percent = job.totalApps > 0 ? Math.round(((job.results || []).length / job.totalApps) * 100) : (job.status === 'completed' ? 100 : 0);
+                document.getElementById('progress-bar-fill').style.width = percent + '%';
+                document.getElementById('progress-percent').innerText = percent + '%';
+
+                if (job.status === 'running' && job.currentApp) {
+                    document.getElementById('progress-text').innerText = 'Processing App ' + job.currentIndex + ' of ' + job.totalApps;
+                    document.getElementById('current-app-text').innerText = '→ [Task #' + job.currentApp.taskId + '] ' + job.currentApp.name;
+                } else if (job.status === 'completed') {
+                    document.getElementById('progress-text').innerText = 'Extraction Completed Successfully!';
+                    document.getElementById('current-app-text').innerText = '';
+                } else {
+                    document.getElementById('progress-text').innerText = 'Ready / Idle';
+                    document.getElementById('current-app-text').innerText = '';
+                }
+
+                // Logs Box
+                if (job.logs && job.logs.length > 0) {
+                    const term = document.getElementById('terminal-logs');
+                    term.innerText = job.logs.join('\\n');
+                    term.scrollTop = term.scrollHeight;
+                    document.getElementById('log-count').innerText = job.logs.length + ' logs';
+                }
+
+                // Table Rows
+                if (job.results && job.results.length > 0) {
+                    const tbody = document.getElementById('results-table-body');
+                    tbody.innerHTML = job.results.map(r => \`
+                        <tr>
+                            <td style="font-weight: 700; color: #a78bfa;">#\${r.task_id}</td>
+                            <td>
+                                <strong>\${r.app_name}</strong><br/>
+                                <span style="font-size: 11px; color: #64748b;">\${r.package_id || ''}</span>
+                            </td>
+                            <td style="color: #94a3b8;">\${r.app_date || 'N/A'}</td>
+                            <td style="color: #38bdf8; font-weight: 600;">\${r.live_checking_date || 'N/A'}</td>
+                            <td style="font-weight: 700; color: #10b981;">\${r.total_reviews}</td>
+                            <td>
+                                \${r.sheet_url ? \`<a href="\${r.sheet_url}" target="_blank" class="btn-sheet">Open Sheet ↗</a>\` : '<span style="color: #64748b;">N/A</span>'}
+                            </td>
+                        </tr>
+                    \`).join('');
+                }
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function triggerExtraction() {
+            try {
+                await fetch('/api/live-sheets/trigger-extraction?key=' + ADMIN_KEY + '&format=json', { method: 'POST' });
+                fetchStatus();
+            } catch (e) {
+                alert('Trigger failed: ' + e.message);
+            }
+        }
+
+        // Poll every 1.5s
+        fetchStatus();
+        setInterval(fetchStatus, 1500);
+    </script>
+</body>
+</html>
+    `;
+}
+
+// Live Status API for polling and monitoring
+app.get('/api/live-sheets/status', (req, res) => {
+    try {
+        const status = liveSheetsService.getCurrentJobStatus();
+        res.json({ status: 'success', data: status });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Automation Webhook / Cron trigger link (accepts GET or POST)
 app.all('/api/live-sheets/trigger-extraction', async (req, res) => {
     const adminKey = req.headers['x-admin-key'] || req.query.key || (req.body && req.body.key);
@@ -1453,13 +1827,23 @@ app.all('/api/live-sheets/trigger-extraction', async (req, res) => {
 
     try {
         const targetDate = req.query.date || (req.body && req.body.date) || liveSheetsService.getISTDateString();
-        console.log(`[API Trigger] Live review extraction triggered for date: ${targetDate}`);
-        
-        const result = await liveSheetsService.processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targetDate);
+        const wantsHtml = (req.headers.accept && req.headers.accept.includes('text/html')) && req.query.format !== 'json';
+
+        // Trigger the asynchronous background process
+        const startResult = await liveSheetsService.processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targetDate);
+
+        // If opened from a web browser, render the real-time live console UI!
+        if (wantsHtml) {
+            return res.send(renderLiveConsoleHtml(adminKey));
+        }
+
+        // If called by Google Apps Script or JSON API, return instant response (prevents timeout!)
         res.json({
-            status: 'success',
-            message: `Extraction completed for ${result.total_apps} apps on ${targetDate}`,
-            ...result
+            status: 'started',
+            message: `Review extraction started for date ${targetDate}`,
+            live_console_url: `/api/live-sheets/trigger-extraction?key=Novaira002@#`,
+            status_api_url: `/api/live-sheets/status`,
+            ...startResult
         });
     } catch (error) {
         console.error('[API Trigger Error]:', error);
