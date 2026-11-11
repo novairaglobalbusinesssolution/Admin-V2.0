@@ -212,6 +212,17 @@ function createLiveAppGoogleSheet(payload) {
 
   var publicUrl = ss.getUrl();
 
+  // 5. Update Central Live Monitoring Dashboard
+  recordInMonitoringDashboard({
+    taskId: taskId,
+    appName: appName,
+    appDate: releaseDateStr,
+    liveCheckingDate: liveDateStr,
+    totalReviews: reviews.length,
+    folderPath: "REVIEW_EXCELS/" + Utilities.formatDate(appReleaseDateObj, "Asia/Kolkata", "yyyy/MM/dd"),
+    sheetUrl: publicUrl
+  });
+
   return {
     status: "success",
     task_id: taskId,
@@ -251,6 +262,97 @@ function runDailyTriggerJob() {
   } catch (e) {
     Logger.log("Cron execution error: " + e.toString());
     return { status: "error", error: e.toString() };
+  }
+}
+
+/**
+ * ==============================================================================
+ * CENTRAL LIVE MONITORING DASHBOARD (IN GOOGLE SHEETS)
+ * ==============================================================================
+ * Creates or updates a central "NOVAIRA_MONITORING_DASHBOARD" spreadsheet
+ * in Google Drive so admins can see all processed apps, review counts, 
+ * execution status, and click links in real time!
+ */
+var DASHBOARD_SHEET_NAME = "NOVAIRA_LIVE_MONITORING_DASHBOARD";
+
+function getOrCreateMonitoringDashboard() {
+  var rootFolderName = "REVIEW_EXCELS";
+  var rootFolders = DriveApp.getFoldersByName(rootFolderName);
+  var rootFolder = rootFolders.hasNext() ? rootFolders.next() : DriveApp.createFolder(rootFolderName);
+
+  var files = rootFolder.getFilesByName(DASHBOARD_SHEET_NAME);
+  var ss;
+  if (files.hasNext()) {
+    ss = SpreadsheetApp.open(files.next());
+  } else {
+    ss = SpreadsheetApp.create(DASHBOARD_SHEET_NAME);
+    var driveFile = DriveApp.getFileById(ss.getId());
+    rootFolder.addFile(driveFile);
+    DriveApp.getRootFolder().removeFile(driveFile);
+    driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    // Initialize Header
+    var sheet = ss.getActiveSheet();
+    sheet.setName("Live Dashboard");
+    var headers = [
+      "Task ID", 
+      "App Name", 
+      "App Release Date", 
+      "Live Checking Date", 
+      "Total Reviews Extracted", 
+      "Google Drive Folder", 
+      "Google Sheet Link", 
+      "Last Synced (IST)"
+    ];
+    sheet.appendRow(headers);
+    var hRange = sheet.getRange(1, 1, 1, headers.length);
+    hRange.setBackground("#0f172a");
+    hRange.setFontColor("#38bdf8");
+    hRange.setFontWeight("bold");
+    hRange.setHorizontalAlignment("center");
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(2, 280);
+    sheet.setColumnWidth(6, 260);
+    sheet.setColumnWidth(7, 320);
+    sheet.setColumnWidth(8, 200);
+  }
+  return ss;
+}
+
+function recordInMonitoringDashboard(entry) {
+  try {
+    var ss = getOrCreateMonitoringDashboard();
+    var sheet = ss.getSheetByName("Live Dashboard") || ss.getActiveSheet();
+    var nowIST = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
+
+    var row = [
+      "#" + entry.taskId,
+      entry.appName,
+      entry.appDate,
+      entry.liveCheckingDate,
+      entry.totalReviews,
+      entry.folderPath,
+      entry.sheetUrl,
+      nowIST
+    ];
+
+    // Find if Task ID already exists to update, else append
+    var data = sheet.getDataRange().getValues();
+    var existingRow = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).replace("#", "").trim() === String(entry.taskId).trim()) {
+        existingRow = i + 1;
+        break;
+      }
+    }
+
+    if (existingRow > 0) {
+      sheet.getRange(existingRow, 1, 1, row.length).setValues([row]);
+    } else {
+      sheet.appendRow(row);
+    }
+  } catch (err) {
+    Logger.log("Dashboard update error: " + err.toString());
   }
 }
 
