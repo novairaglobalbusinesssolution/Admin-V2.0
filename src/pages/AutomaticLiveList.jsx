@@ -30,6 +30,7 @@ import DoneAllIcon from '@mui/icons-material/DoneAll';
 import RemoveDoneIcon from '@mui/icons-material/RemoveDone';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 
 /**
  * Fuzzy Name Matcher: Computes similarity percentage between 0% and 100%
@@ -109,6 +110,7 @@ export default function AutomaticLiveList() {
   // Google Sheet Data States
   const [sheetData, setSheetData] = useState(null);
   const [viewTab, setViewTab] = useState(0); // 0: Auto Matched, 1: Unmatched / Low Match, 2: All Submissions, 3: Google Sheet Reviews
+  const [todayApps, setTodayApps] = useState([]);
 
   // Cached Bulker Desks & Acceptances
   const [bulkerDesksList, setBulkerDesksList] = useState([]);
@@ -134,6 +136,27 @@ export default function AutomaticLiveList() {
       return new Date(dateString).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
     } catch {
       return String(dateString);
+    }
+  };
+
+  // Fetch today's scheduled apps on mount
+  useEffect(() => {
+    fetchTodayApps();
+  }, []);
+
+  const fetchTodayApps = async () => {
+    try {
+      const todayIST = new Date(new Date().getTime() + 330 * 60000).toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('apps')
+        .select('id, task_id, app_name, app_package, app_date, live_checking_date')
+        .eq('live_checking_date', todayIST)
+        .order('task_id', { ascending: false });
+      if (!error && data) {
+        setTodayApps(data);
+      }
+    } catch (e) {
+      console.warn('Error fetching today apps:', e.message);
     }
   };
 
@@ -236,6 +259,11 @@ export default function AutomaticLiveList() {
 
     setMembers(updated);
     setSelectedIds([...new Set(autoMatchedIds)]);
+    if (autoMatchedIds.length > 0) {
+      setViewTab(0);
+    } else {
+      setViewTab(2);
+    }
     return updated;
   };
 
@@ -800,6 +828,44 @@ export default function AutomaticLiveList() {
           </Button>
         </Paper>
       </Box>
+
+      {/* Quick Access Pills for Today's Scheduled Apps */}
+      {todayApps.length > 0 && (
+        <Paper 
+          sx={{ 
+            p: 1.5, 
+            mb: 3, 
+            borderRadius: 2, 
+            bgcolor: isDark ? '#111827' : '#f8fafc', 
+            border: `1px solid ${isDark ? '#1f293d' : '#e2e8f0'}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            flexWrap: 'wrap'
+          }}
+        >
+          <Typography variant="body2" fontWeight="bold" sx={{ color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <CalendarMonthIcon fontSize="small" /> Today&apos;s Live Apps ({todayApps.length}):
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {todayApps.map(app => (
+              <Chip
+                key={app.id}
+                label={`#${app.task_id} ${app.app_name}`}
+                onClick={() => {
+                  setTaskIdInput(String(app.task_id));
+                  fetchAppDetailsById(String(app.task_id));
+                }}
+                clickable
+                color={appDetails?.taskId === app.task_id ? 'primary' : 'default'}
+                variant={appDetails?.taskId === app.task_id ? 'filled' : 'outlined'}
+                size="small"
+                sx={{ fontWeight: 600, fontSize: 12 }}
+              />
+            ))}
+          </Box>
+        </Paper>
+      )}
 
       {/* App Details Header & Google Sheet Status */}
       {appDetails && (
