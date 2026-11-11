@@ -391,14 +391,15 @@ async function processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targ
 
                 const reviews = extractRes.reviews || [];
 
-                // 2. Save Excel file locally
+                // 2. Save Excel file locally categorized by app_date (Release Date: YYYY/MM/DD)
+                const folderDate = app.app_date || activeDate;
                 const excelPath = saveStructuredExcelInline(
                     reviews,
                     app.task_id,
                     app.app_name,
-                    endDate
+                    folderDate
                 );
-                logJob(`Excel file stored: REVIEW_EXCELS/${endDate.replace(/-/g, '/')}/Task_${app.task_id}.xlsx`);
+                logJob(`Excel file stored: REVIEW_EXCELS/${folderDate.replace(/-/g, '/')}/[Task #${app.task_id}] ${app.app_name}.xlsx`);
 
                 // 3. Sync to Google Sheet
                 const sheetRes = await syncToGoogleSheet(app, reviews);

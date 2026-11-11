@@ -74,9 +74,32 @@ function doGet(e) {
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
+function parseAppDate(dateStr) {
+  if (!dateStr) return new Date();
+  
+  // Clean string
+  var s = String(dateStr).trim();
+  
+  // Try YYYY-MM-DD or YYYY/MM/DD
+  var isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10));
+  }
+  
+  // Try DD-MM-YYYY or DD/MM/YYYY
+  var ddmmyyyyMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (ddmmyyyyMatch) {
+    return new Date(parseInt(ddmmyyyyMatch[3], 10), parseInt(ddmmyyyyMatch[2], 10) - 1, parseInt(ddmmyyyyMatch[1], 10));
+  }
+  
+  var parsed = new Date(s);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
 /**
  * Creates or retrieves nested folder in Google Drive:
  * REVIEW_EXCELS / {YEAR} / {MONTH} / {DAY}
+ * (Year, Month, Day correspond to the App's Release Date / app_date)
  */
 function getOrCreateReviewFolder(dateObj) {
   var year = Utilities.formatDate(dateObj, "Asia/Kolkata", "yyyy");
@@ -109,16 +132,17 @@ function createLiveAppGoogleSheet(payload) {
   var taskId = payload.task_id || "0";
   var appName = payload.app_name || "Application";
   var appPackage = payload.app_package || "";
-  var releaseDate = payload.app_date || "";
-  var liveDate = payload.live_checking_date || Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd");
+  var releaseDateStr = payload.app_date || "";
+  var liveDateStr = payload.live_checking_date || Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd");
   var reviews = payload.reviews || [];
 
-  var dateObj = new Date();
-  var dateStr = Utilities.formatDate(dateObj, "Asia/Kolkata", "dd-MM-yyyy");
-  var sheetTitle = "[Task #" + taskId + "] " + appName + " - Reviews (" + dateStr + ")";
+  // Important: Folder & File hierarchy is based strictly on App Release Date (app_date)
+  var appReleaseDateObj = parseAppDate(releaseDateStr);
+  var formattedAppDate = Utilities.formatDate(appReleaseDateObj, "Asia/Kolkata", "dd-MM-yyyy");
+  var sheetTitle = "[Task #" + taskId + "] " + appName + " - Reviews (" + formattedAppDate + ")";
 
-  // 1. Get destination folder in Drive
-  var targetFolder = getOrCreateReviewFolder(dateObj);
+  // 1. Get destination folder in Drive matching App's Release Date: REVIEW_EXCELS / YYYY / MM / DD
+  var targetFolder = getOrCreateReviewFolder(appReleaseDateObj);
 
   // 2. Create Spreadsheet
   var ss = SpreadsheetApp.create(sheetTitle);
@@ -196,7 +220,7 @@ function createLiveAppGoogleSheet(payload) {
     total_reviews: reviews.length,
     spreadsheet_id: ss.getId(),
     sheet_url: publicUrl,
-    folder_path: "REVIEW_EXCELS/" + Utilities.formatDate(dateObj, "Asia/Kolkata", "yyyy/MM/dd")
+    folder_path: "REVIEW_EXCELS/" + Utilities.formatDate(appReleaseDateObj, "Asia/Kolkata", "yyyy/MM/dd")
   };
 }
 
