@@ -1881,8 +1881,10 @@ app.post('/api/live-sheets/manual-extract/:taskId', async (req, res) => {
             return res.status(404).json({ error: `App with Task ID #${taskId} not found` });
         }
 
-        const startDate = app.app_date || liveSheetsService.getISTDateString();
-        const endDate = app.live_checking_date || liveSheetsService.getISTDateString();
+        // Strict filter: Extract reviews ONLY for the App's Release Date (app_date)
+        const targetAppDate = app.app_date || liveSheetsService.getISTDateString();
+        const startDate = targetAppDate;
+        const endDate = targetAppDate;
 
         const extractRes = await liveSheetsService.scrapePlayStoreReviewsInline(
             app.app_package,
@@ -1897,7 +1899,7 @@ app.post('/api/live-sheets/manual-extract/:taskId', async (req, res) => {
             reviews,
             app.task_id,
             app.app_name,
-            endDate
+            targetAppDate
         );
 
         const sheetRes = await liveSheetsService.syncToGoogleSheet(app, reviews);

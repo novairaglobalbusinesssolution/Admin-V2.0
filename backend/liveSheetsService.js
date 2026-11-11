@@ -377,8 +377,12 @@ async function processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targ
                 logJob(`--------------------------------------------------------------------------------`);
                 logJob(`[App ${i + 1}/${apps.length}] Processing Task #${app.task_id}: ${app.app_name}`);
 
-                const startDate = app.app_date || activeDate;
-                const endDate = app.live_checking_date || activeDate;
+                // Strict filter: Extract reviews ONLY for the App's Release Date (app_date)
+                const targetAppDate = app.app_date || activeDate;
+                const startDate = targetAppDate;
+                const endDate = targetAppDate;
+
+                logJob(`Extracting reviews strictly for release date: ${targetAppDate}`);
 
                 // 1. Extract reviews
                 const extractRes = await scrapePlayStoreReviewsInline(
@@ -392,7 +396,7 @@ async function processAllLiveAppsSequentially(supabaseWork, supabaseSystem, targ
                 const reviews = extractRes.reviews || [];
 
                 // 2. Save Excel file locally categorized by app_date (Release Date: YYYY/MM/DD)
-                const folderDate = app.app_date || activeDate;
+                const folderDate = targetAppDate;
                 const excelPath = saveStructuredExcelInline(
                     reviews,
                     app.task_id,
