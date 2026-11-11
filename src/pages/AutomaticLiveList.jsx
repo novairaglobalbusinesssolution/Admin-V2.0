@@ -30,6 +30,7 @@ import DoneAllIcon from '@mui/icons-material/DoneAll';
 import RemoveDoneIcon from '@mui/icons-material/RemoveDone';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import EditIcon from '@mui/icons-material/Edit';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 
 /**
@@ -127,6 +128,14 @@ export default function AutomaticLiveList() {
   const [allBulkers, setAllBulkers] = useState([]);
   const [fetchingOptions, setFetchingOptions] = useState(false);
 
+  // Edit Username Dialog State
+  const [editUsernameDialog, setEditUsernameDialog] = useState({
+    open: false,
+    member: null,
+    newUsername: '',
+    saving: false
+  });
+
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
 
   // Date formatter for Asia/Kolkata
@@ -136,6 +145,133 @@ export default function AutomaticLiveList() {
       return new Date(dateString).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
     } catch {
       return String(dateString);
+    }
+  };
+
+  // Fetch Earners & Bulkers for Add Missing Member Dialog
+  useEffect(() => {
+    if (addMissingOpen) {
+      const fetchOptions = async () => {
+        setFetchingOptions(true);
+        try {
+          const [profRes, bulkRes] = await Promise.all([
+            supabase.from('profiles').select('earner_id, first_name, last_name'),
+            supabase.from('bulker_desks').select('bulker_id, full_name')
+          ]);
+          if (!profRes.error) setAllEarners(profRes.data || []);
+          if (!bulkRes.error) setAllBulkers(bulkRes.data || []);
+        } catch (error) {
+          console.error("Error fetching dropdown options", error);
+        } finally {
+          setFetchingOptions(false);
+        }
+      };
+      fetchOptions();
+    }
+  }, [addMissingOpen]);
+
+  // Submit Add Missing Member
+  const submitAddMissing = async () => {
+    if (!missingData.username || !missingData.earnerId || !missingData.bulkerId) {
+      setSnack({ open: true, message: 'Please fill all fields', severity: 'warning' });
+      return;
+    }
+    setAddingMissing(true);
+    try {
+      let commentIdToUse = null;
+      const { data: existingComments } = await supabase
+        .from('app_comments')
+        .select('id')
+        .eq('app_id', appDetails.id)
+        .limit(1);
+
+      if (existingComments && existingComments.length > 0) {
+        commentIdToUse = existingComments[0].id;
+      } else {
+        const { data: newComment, error: dummyErr } = await supabase
+          .from('app_comments')
+          .insert({
+            app_id: appDetails.id,
+            content: 'Manual Entry Dummy Comment',
+            rating: 5,
+            status: 'completed'
+          })
+          .select('id')
+          .single();
+
+        if (dummyErr) throw new Error("Failed to create dummy comment: " + dummyErr.message);
+        commentIdToUse = newComment.id;
+      }
+
+      const { data: insertedData, error: insertErr } = await supabase
+        .from('review_submit_data')
+        .insert({
+          app_id: appDetails.id,
+          comment_id: commentIdToUse,
+          earner_id: missingData.earnerId,
+          bulker_id: missingData.bulkerId,
+          submitted_username: missingData.username,
+          screenshot_url: 'MANUAL_ENTRY',
+          status: 'Under Review'
+        })
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+
+      setSnack({ open: true, message: 'Missing member added successfully!', severity: 'success' });
+      setAddMissingOpen(false);
+      setMissingData({ username: '', earnerId: '', bulkerId: '' });
+
+      // Refresh app submissions
+      await fetchAppDetailsById(taskIdInput);
+    } catch (error) {
+      setSnack({ open: true, message: error.message, severity: 'error' });
+    } finally {
+      setAddingMissing(false);
+    }
+  };
+
+  // Open Edit Username Dialog
+  const handleOpenEditUsername = (member) => {
+    setEditUsernameDialog({
+      open: true,
+      member: member,
+      newUsername: member.submitted_username || '',
+      saving: false
+    });
+  };
+
+  // Save Updated Username
+  const handleSaveUsername = async () => {
+    if (!editUsernameDialog.member || !editUsernameDialog.newUsername.trim()) {
+      setSnack({ open: true, message: 'Please enter a valid username', severity: 'warning' });
+      return;
+    }
+
+    const updatedName = editUsernameDialog.newUsername.trim();
+    const targetId = editUsernameDialog.member.id;
+
+    setEditUsernameDialog(prev => ({ ...prev, saving: true }));
+
+    try {
+      const { error } = await supabase
+        .from('review_submit_data')
+        .update({ submitted_username: updatedName })
+        .eq('id', targetId);
+
+      if (error) throw error;
+
+      // Update local member & re-run fuzzy match
+      const updatedMembers = members.map(m => m.id === targetId ? { ...m, submitted_username: updatedName } : m);
+      applyMatchingWithSheet(updatedMembers, sheetData);
+
+      setSnack({ open: true, message: `Username updated to "${updatedName}"`, severity: 'success' });
+      setEditUsernameDialog({ open: false, member: null, newUsername: '', saving: false });
+    } catch (err) {
+      console.error('Error updating username:', err);
+      setSnack({ open: true, message: 'Failed to update username: ' + err.message, severity: 'error' });
+      setEditUsernameDialog(prev => ({ ...prev, saving: false }));
     }
   };
 
@@ -797,6 +933,7 @@ export default function AutomaticLiveList() {
             display: 'flex', 
             alignItems: 'center', 
             width: { xs: '100%', sm: 380 },
+            borderRadius: 1,
             boxShadow: theme.shadows[2],
             border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`
           }}
@@ -822,7 +959,7 @@ export default function AutomaticLiveList() {
             variant="contained" 
             onClick={fetchAppDetails} 
             disabled={loading || !taskIdInput.trim()}
-            sx={{ bgcolor: '#8b5cf6', '&:hover': { bgcolor: '#7c3aed' }, px: 3, borderRadius: 2 }}
+            sx={{ bgcolor: '#8b5cf6', '&:hover': { bgcolor: '#7c3aed' }, px: 3, borderRadius: 1 }}
           >
             {loading ? <CircularProgress size={20} color="inherit" /> : 'Fetch'}
           </Button>
@@ -835,7 +972,7 @@ export default function AutomaticLiveList() {
           sx={{ 
             p: 1.5, 
             mb: 3, 
-            borderRadius: 2, 
+            borderRadius: 1, 
             bgcolor: isDark ? '#111827' : '#f8fafc', 
             border: `1px solid ${isDark ? '#1f293d' : '#e2e8f0'}`,
             display: 'flex',
@@ -860,7 +997,7 @@ export default function AutomaticLiveList() {
                 color={appDetails?.taskId === app.task_id ? 'primary' : 'default'}
                 variant={appDetails?.taskId === app.task_id ? 'filled' : 'outlined'}
                 size="small"
-                sx={{ fontWeight: 600, fontSize: 12 }}
+                sx={{ fontWeight: 600, fontSize: 12, borderRadius: 1 }}
               />
             ))}
           </Box>
@@ -871,14 +1008,14 @@ export default function AutomaticLiveList() {
       {appDetails && (
         <Box sx={{ mb: 3 }}>
           {/* Main App Info Card */}
-          <Paper sx={{ p: 2.5, mb: 2, borderRadius: 3, border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}` }}>
+          <Paper sx={{ p: 2.5, mb: 2, borderRadius: 1, border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}` }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant="h6" fontWeight="bold">
                     [Task #{appDetails.taskId}] {appDetails.name}
                   </Typography>
-                  <Chip label={appDetails.sponsorType} size="small" color="primary" />
+                  <Chip label={appDetails.sponsorType} size="small" color="primary" sx={{ borderRadius: 1 }} />
                 </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   Package: <code style={{ color: '#8b5cf6' }}>{appDetails.package}</code> &bull; Provider: <strong>{appDetails.provider}</strong>
@@ -892,9 +1029,23 @@ export default function AutomaticLiveList() {
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <Button
                   variant="outlined"
+                  startIcon={<PersonAddIcon />}
+                  onClick={() => setAddMissingOpen(true)}
+                  sx={{ 
+                    borderRadius: 1, 
+                    fontWeight: 600,
+                    borderColor: isDark ? 'rgba(139,92,246,0.5)' : '#8b5cf6',
+                    color: isDark ? '#c4b5fd' : '#7c3aed'
+                  }}
+                >
+                  Add Missing Member
+                </Button>
+                <Button
+                  variant="outlined"
                   color="warning"
                   onClick={handleZeroLive}
                   disabled={saving}
+                  sx={{ borderRadius: 1, fontWeight: 600 }}
                 >
                   Zero Live
                 </Button>
@@ -902,7 +1053,7 @@ export default function AutomaticLiveList() {
                   variant="contained"
                   onClick={handleSaveLiveList}
                   disabled={saving}
-                  sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, px: 3, fontWeight: 'bold' }}
+                  sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, px: 3, fontWeight: 'bold', borderRadius: 1 }}
                 >
                   {saving ? <CircularProgress size={22} color="inherit" /> : `Save Live List (${selectedIds.length} Selected)`}
                 </Button>
@@ -917,7 +1068,7 @@ export default function AutomaticLiveList() {
                 p: 2, 
                 bgcolor: isDark ? '#1e1b4b' : '#f5f3ff', 
                 border: `1px solid ${isDark ? '#4338ca' : '#ddd6fe'}`,
-                borderRadius: 2,
+                borderRadius: 1,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -988,7 +1139,7 @@ export default function AutomaticLiveList() {
           </Paper>
 
           {/* Quick Selection & Statistics Toolbar */}
-          <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+          <Paper sx={{ p: 2, mb: 2, borderRadius: 1 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
               {/* Tabs */}
               <Tabs 
@@ -1026,7 +1177,7 @@ export default function AutomaticLiveList() {
                   variant="outlined" 
                   startIcon={<DoneAllIcon />}
                   onClick={handleSelectAllMatched}
-                  sx={{ borderColor: '#10b981', color: '#10b981', fontSize: 12 }}
+                  sx={{ borderColor: '#10b981', color: '#10b981', fontSize: 12, borderRadius: 1 }}
                 >
                   Select All Matched (≥80%)
                 </Button>
@@ -1035,7 +1186,7 @@ export default function AutomaticLiveList() {
                   variant="outlined" 
                   startIcon={<StarIcon />}
                   onClick={handleSelectExact100Only}
-                  sx={{ borderColor: '#8b5cf6', color: '#8b5cf6', fontSize: 12 }}
+                  sx={{ borderColor: '#8b5cf6', color: '#8b5cf6', fontSize: 12, borderRadius: 1 }}
                 >
                   Select 100% Only
                 </Button>
@@ -1044,7 +1195,7 @@ export default function AutomaticLiveList() {
                   variant="outlined" 
                   startIcon={<RemoveDoneIcon />}
                   onClick={handleClearSelection}
-                  sx={{ borderColor: '#6b7280', color: '#6b7280', fontSize: 12 }}
+                  sx={{ borderColor: '#6b7280', color: '#6b7280', fontSize: 12, borderRadius: 1 }}
                 >
                   Clear Selection
                 </Button>
@@ -1061,6 +1212,7 @@ export default function AutomaticLiveList() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   InputProps={{
+                    sx: { borderRadius: 1 },
                     startAdornment: (
                       <InputAdornment position="start">
                         <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
@@ -1079,7 +1231,7 @@ export default function AutomaticLiveList() {
 
           {/* Tab 3: Google Sheet Raw Play Store Reviews Viewer */}
           {viewTab === 3 ? (
-            <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
+            <Paper sx={{ borderRadius: 1, overflow: 'hidden' }}>
               <TableContainer sx={{ maxHeight: 650 }}>
                 <Table stickyHeader size="small">
                   <TableHead>
@@ -1116,7 +1268,7 @@ export default function AutomaticLiveList() {
             </Paper>
           ) : (
             /* Submissions Table with AI Matching Engine */
-            <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
+            <Paper sx={{ borderRadius: 1, overflow: 'hidden' }}>
               <TableContainer sx={{ maxHeight: 700 }}>
                 <Table stickyHeader size="small">
                   <TableHead>
@@ -1134,6 +1286,7 @@ export default function AutomaticLiveList() {
                       <TableCell sx={{ bgcolor: isDark ? '#1e293b' : '#f1f5f9', fontWeight: 'bold' }}>Earner Details</TableCell>
                       <TableCell sx={{ bgcolor: isDark ? '#1e293b' : '#f1f5f9', fontWeight: 'bold' }}>Bulker Desk</TableCell>
                       <TableCell sx={{ bgcolor: isDark ? '#1e293b' : '#f1f5f9', fontWeight: 'bold', textAlign: 'center' }}>Status</TableCell>
+                      <TableCell sx={{ bgcolor: isDark ? '#1e293b' : '#f1f5f9', fontWeight: 'bold', textAlign: 'center' }}>Action</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1226,7 +1379,24 @@ export default function AutomaticLiveList() {
                               label={isSelected ? 'Selected (Live)' : (m.status || 'Under Review')} 
                               size="small" 
                               color={isSelected ? 'success' : (m.status === 'Not Live' ? 'error' : 'default')}
+                              sx={{ borderRadius: 1 }}
                             />
+                          </TableCell>
+
+                          {/* Action (Edit Username) */}
+                          <TableCell sx={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <Tooltip title="Edit Submitted Username">
+                              <IconButton 
+                                size="small" 
+                                onClick={() => handleOpenEditUsername(m)}
+                                sx={{ 
+                                  color: '#8b5cf6', 
+                                  '&:hover': { bgcolor: isDark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.1)' } 
+                                }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                           </TableCell>
                         </TableRow>
                       );
@@ -1234,7 +1404,7 @@ export default function AutomaticLiveList() {
 
                     {filteredMembers.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
+                        <TableCell colSpan={8} sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
                           No submissions matching the current filter.
                         </TableCell>
                       </TableRow>
@@ -1246,6 +1416,142 @@ export default function AutomaticLiveList() {
           )}
         </Box>
       )}
+
+      {/* Add Missing Member Dialog */}
+      <Dialog 
+        open={addMissingOpen} 
+        onClose={() => !addingMissing && setAddMissingOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 1,
+            bgcolor: isDark ? '#0f172a' : '#fff',
+            border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <PersonAddIcon sx={{ color: '#8b5cf6' }} />
+          <Typography variant="h6" fontWeight="bold">Add Missing Member Submission</Typography>
+        </DialogTitle>
+        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Task: <strong>[#{appDetails?.taskId}] {appDetails?.name}</strong>
+          </Typography>
+
+          <TextField
+            label="Submitted Username *"
+            fullWidth
+            size="small"
+            placeholder="Reviewer Name as shown on Play Store"
+            value={missingData.username}
+            onChange={(e) => setMissingData(prev => ({ ...prev, username: e.target.value }))}
+            InputProps={{ sx: { borderRadius: 1 } }}
+          />
+
+          <Autocomplete
+            options={allEarners}
+            loading={fetchingOptions}
+            getOptionLabel={(option) => `${option.first_name || ''} ${option.last_name || ''} (${option.earner_id})`}
+            onChange={(_, val) => setMissingData(prev => ({ ...prev, earnerId: val ? val.earner_id : '' }))}
+            renderInput={(params) => (
+              <TextField 
+                {...params} 
+                label="Assign Earner Member *" 
+                size="small" 
+                placeholder="Search by Earner Name or ID..."
+                InputProps={{ ...params.InputProps, sx: { borderRadius: 1 } }}
+              />
+            )}
+          />
+
+          <Autocomplete
+            options={allBulkers}
+            loading={fetchingOptions}
+            getOptionLabel={(option) => `${option.full_name || 'Desk'} (${option.bulker_id})`}
+            onChange={(_, val) => setMissingData(prev => ({ ...prev, bulkerId: val ? val.bulker_id : '' }))}
+            renderInput={(params) => (
+              <TextField 
+                {...params} 
+                label="Assign Bulker Desk *" 
+                size="small" 
+                placeholder="Search by Bulker Name or Code..."
+                InputProps={{ ...params.InputProps, sx: { borderRadius: 1 } }}
+              />
+            )}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={() => setAddMissingOpen(false)} 
+            disabled={addingMissing}
+            sx={{ borderRadius: 1 }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={submitAddMissing}
+            disabled={addingMissing || !missingData.username || !missingData.earnerId || !missingData.bulkerId}
+            sx={{ bgcolor: '#8b5cf6', '&:hover': { bgcolor: '#7c3aed' }, borderRadius: 1 }}
+          >
+            {addingMissing ? <CircularProgress size={20} color="inherit" /> : 'Confirm & Add Submission'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Username Dialog */}
+      <Dialog
+        open={editUsernameDialog.open}
+        onClose={() => !editUsernameDialog.saving && setEditUsernameDialog(prev => ({ ...prev, open: false }))}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 1,
+            bgcolor: isDark ? '#0f172a' : '#fff',
+            border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <EditIcon sx={{ color: '#8b5cf6' }} />
+          <Typography variant="h6" fontWeight="bold">Edit Submitted Username</Typography>
+        </DialogTitle>
+        <DialogContent dividers sx={{ pt: 2 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+            Earner: <strong>{editUsernameDialog.member?.formatted_earner}</strong>
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Corrected Username *"
+            value={editUsernameDialog.newUsername}
+            onChange={(e) => setEditUsernameDialog(prev => ({ ...prev, newUsername: e.target.value }))}
+            InputProps={{ sx: { borderRadius: 1 } }}
+            helperText="Changing username will automatically re-run Play Store AI matching for this member."
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={() => setEditUsernameDialog(prev => ({ ...prev, open: false }))} 
+            disabled={editUsernameDialog.saving}
+            sx={{ borderRadius: 1 }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={handleSaveUsername}
+            disabled={editUsernameDialog.saving || !editUsernameDialog.newUsername.trim()}
+            sx={{ bgcolor: '#8b5cf6', '&:hover': { bgcolor: '#7c3aed' }, borderRadius: 1 }}
+          >
+            {editUsernameDialog.saving ? <CircularProgress size={20} color="inherit" /> : 'Update Username'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar feedback */}
       <Snackbar
