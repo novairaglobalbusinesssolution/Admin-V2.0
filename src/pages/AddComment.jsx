@@ -73,6 +73,7 @@ export default function AddComment() {
   const [starCounts, setStarCounts] = useState({ 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 });
 
   // === REGISTRATION MODE ===
+  const [regLink, setRegLink] = useState('');
   const [regProcedure, setRegProcedure] = useState('');
   const [regVideoType, setRegVideoType] = useState('youtube'); // 'youtube' or 'server'
   const [regVideoUrl, setRegVideoUrl] = useState('');
@@ -151,8 +152,9 @@ export default function AddComment() {
         }
         
         if (newValue.task_type === 'Registration') {
+          setRegLink(data.app_package || '');
           setRegProcedure(data.instructions || '1. Click the registration link\n2. Complete signup with valid mobile number & email\n3. Verify OTP & submit basic KYC\n4. Upload account dashboard screenshot showing registered User ID');
-          setRegVideoUrl(data.app_package || '');
+          setRegVideoUrl('');
         } else if (newValue.task_type === 'YT Video') {
           setYtProcedure(data.instructions || 'Watch full video (minimum 2 mins), hit like button, and subscribe to the channel.');
           setYtVideoUrl(data.app_package || '');
@@ -257,6 +259,9 @@ export default function AddComment() {
           });
         }
       } else if (effectiveType === 'Registration') {
+        if (regLink.trim()) {
+          appUpdatePayload.app_package = regLink.trim();
+        }
         if (regProcedure.trim()) {
           let instructionsText = regProcedure.trim();
           if (regVideoUrl.trim()) {
@@ -270,7 +275,7 @@ export default function AddComment() {
           for (let i = 0; i < count; i++) {
             newComments.push({
               app_id: selectedApp.id,
-              content: '',
+              content: 'Web Registration Task',
               rating: 5,
               status: 'active'
             });
@@ -1264,6 +1269,39 @@ export default function AddComment() {
               <Typography variant="body2" color="text.secondary">
                 Provide comprehensive signup guidelines, tutorial link, and total earner capacity.
               </Typography>
+            </Box>
+
+            {/* Target Registration Portal Link */}
+            <Box sx={{ width: '100%' }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1 }}>
+                TARGET REGISTRATION / SIGNUP LINK (URL) *
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="https://example.com/register?ref=..."
+                value={regLink}
+                onChange={(e) => setRegLink(e.target.value)}
+                InputProps={{
+                  startAdornment: <LinkIcon color="action" sx={{ mr: 1, fontSize: 18 }} />,
+                  endAdornment: regLink && (
+                    <InputAdornment position="end">
+                      <Tooltip title="Test Registration Link">
+                        <IconButton size="small" onClick={() => window.open(regLink, '_blank')}>
+                          <OpenInNewIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }}
+                sx={{
+                  width: '100%',
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '14px',
+                    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'
+                  }
+                }}
+              />
             </Box>
 
             {/* Registration Procedure Full Width Textarea */}
