@@ -53,6 +53,27 @@ export default function ManageComment() {
   // Lookup maps
   const [profileMap, setProfileMap] = useState({});
   const [bulkerMap, setBulkerMap] = useState({});
+  const [reviewSubmitMap, setReviewSubmitMap] = useState({});
+
+  const mapProfile = (pm, p) => {
+    if (!p || !p.earner_id) return;
+    const rawId = String(p.earner_id).trim();
+    const cleanId = rawId.replace(/^NOVAIRA\/INDIVIDUAL\//i, '').trim();
+    const fullId = `NOVAIRA/INDIVIDUAL/${cleanId}`;
+    pm[rawId] = p;
+    pm[cleanId] = p;
+    pm[fullId] = p;
+  };
+
+  const mapBulker = (bm, b) => {
+    if (!b || !b.bulker_id) return;
+    const rawId = String(b.bulker_id).trim();
+    const cleanId = rawId.replace(/^NOVAIRA\/BULKER\//i, '').trim();
+    const fullId = `NOVAIRA/BULKER/${cleanId}`;
+    bm[rawId] = b.full_name;
+    bm[cleanId] = b.full_name;
+    bm[fullId] = b.full_name;
+  };
 
   useEffect(() => {
     fetchApps(publishDate);
@@ -66,29 +87,51 @@ export default function ManageComment() {
     }
   }, [selectedApp]);
 
-  // Load profiles & bulkers once
+  // Load profiles & bulkers (paginated to overcome PostgREST 1000 row default limit)
   useEffect(() => {
+    let isCancelled = false;
     (async () => {
-      const [{ data: profiles }, { data: bulkers }] = await Promise.all([
-        supabase.from('profiles').select('earner_id, first_name, last_name, phone, bulker_id'),
-        supabase.from('bulker_desks').select('bulker_id, full_name')
-      ]);
-      if (profiles) {
+      try {
+        // 1. Bulker Desks
+        const { data: bulkers } = await supabase.from('bulker_desks').select('bulker_id, full_name');
+        if (bulkers && !isCancelled) {
+          const bm = {};
+          bulkers.forEach(b => mapBulker(bm, b));
+          setBulkerMap(bm);
+        }
+
+        // 2. Fetch all profiles across pages
         const pm = {};
-        profiles.forEach(p => { pm[p.earner_id] = p; });
-        setProfileMap(pm);
-      }
-      if (bulkers) {
-        const bm = {};
-        bulkers.forEach(b => {
-          bm[b.bulker_id] = b.full_name;
-          if (b.bulker_id?.startsWith('NOVAIRA/BULKER/')) {
-            bm[b.bulker_id.replace('NOVAIRA/BULKER/', '')] = b.full_name;
+        const pageSize = 1000;
+        let pageIdx = 0;
+        let keepGoing = true;
+        while (keepGoing && !isCancelled) {
+          const from = pageIdx * pageSize;
+          const to = from + pageSize - 1;
+          const { data: chunk, error } = await supabase
+            .from('profiles')
+            .select('earner_id, first_name, last_name, phone, bulker_id')
+            .range(from, to);
+
+          if (error || !chunk || chunk.length === 0) {
+            keepGoing = false;
+          } else {
+            chunk.forEach(p => mapProfile(pm, p));
+            if (chunk.length < pageSize) {
+              keepGoing = false;
+            } else {
+              pageIdx++;
+            }
           }
-        });
-        setBulkerMap(bm);
+        }
+        if (!isCancelled) {
+          setProfileMap(prev => ({ ...prev, ...pm }));
+        }
+      } catch (err) {
+        console.error('Error loading profiles/bulkers:', err);
       }
     })();
+    return () => { isCancelled = true; };
   }, []);
 
   const fetchApps = async (selectedDate = publishDate) => {
@@ -105,11 +148,64 @@ export default function ManageComment() {
   const fetchManageComments = async (appId) => {
     setLoadingManage(true);
     try {
-      const { data, error } = await supabase.from('app_comments')
-        .select('*')
-        .eq('app_id', appId)
-        .order('created_at', { ascending: false });
-      if (!error && data) setManageComments(data);
+      const [commentsRes, reviewsRes] = await Promise.all([
+        supabase.from('app_comments')
+          .select('*')
+          .eq('app_id', appId)
+          .order('created_at', { ascending: false }),
+        supabase.from('review_submit_data')
+          .select('comment_id, earner_id, bulker_id, submitted_username, screenshot_url')
+          .eq('app_id', appId)
+      ]);
+
+      const comments = commentsRes.data || [];
+      const reviews = reviewsRes.data || [];
+
+      setManageComments(comments);
+
+      // Build review submit lookup map by comment_id
+      const rMap = {};
+      reviews.forEach(r => {
+        if (r.comment_id) rMap[r.comment_id] = r;
+      });
+      setReviewSubmitMap(rMap);
+
+      // Targeted profile fetch for all earners in this app's comments and reviews
+      const earnerIds = new Set();
+      comments.forEach(c => {
+        if (c.assigned_user_id) {
+          const raw = String(c.assigned_user_id).trim();
+          const clean = raw.replace(/^NOVAIRA\/INDIVIDUAL\//i, '').trim();
+          earnerIds.add(raw);
+          earnerIds.add(clean);
+          earnerIds.add(`NOVAIRA/INDIVIDUAL/${clean}`);
+        }
+      });
+      reviews.forEach(r => {
+        if (r.earner_id) {
+          const raw = String(r.earner_id).trim();
+          const clean = raw.replace(/^NOVAIRA\/INDIVIDUAL\//i, '').trim();
+          earnerIds.add(raw);
+          earnerIds.add(clean);
+          earnerIds.add(`NOVAIRA/INDIVIDUAL/${clean}`);
+        }
+      });
+
+      if (earnerIds.size > 0) {
+        const idList = Array.from(earnerIds);
+        const { data: targetProfiles } = await supabase
+          .from('profiles')
+          .select('earner_id, first_name, last_name, phone, bulker_id')
+          .in('earner_id', idList);
+
+        if (targetProfiles && targetProfiles.length > 0) {
+          setProfileMap(prev => {
+            const next = { ...prev };
+            targetProfiles.forEach(p => mapProfile(next, p));
+            return next;
+          });
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -131,24 +227,42 @@ export default function ManageComment() {
     }
   };
 
-  const getUserInfo = (earnerIdRaw) => {
-    if (!earnerIdRaw) return { name: '-', bulkerName: '-', bulkerId: '-' };
-    const profile = profileMap[earnerIdRaw];
-    if (!profile) return { name: earnerIdRaw, bulkerName: '-', bulkerId: '-' };
+  const getUserInfo = (earnerIdRaw, commentId = null) => {
+    if (!earnerIdRaw && !commentId) return { name: '-', bulkerName: '-', bulkerId: '-' };
+    const rev = commentId ? reviewSubmitMap[commentId] : null;
+    const effectiveId = earnerIdRaw || rev?.earner_id;
+    if (!effectiveId) return { name: '-', bulkerName: '-', bulkerId: '-' };
 
-    const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.phone || earnerIdRaw;
-    const rawBulker = profile.bulker_id || '';
-    const bulkerName = bulkerMap[rawBulker]
-      || bulkerMap[`NOVAIRA/BULKER/${rawBulker}`]
-      || '-';
+    const rawId = String(effectiveId).trim();
+    const cleanId = rawId.replace(/^NOVAIRA\/INDIVIDUAL\//i, '').trim();
+    const fullId = `NOVAIRA/INDIVIDUAL/${cleanId}`;
 
-    return { name, bulkerName, bulkerId: rawBulker };
+    const profile = profileMap[rawId] || profileMap[cleanId] || profileMap[fullId];
+
+    // Bulker resolution
+    const rawBulker = profile?.bulker_id || rev?.bulker_id || '';
+    let bulkerName = '-';
+    let bulkerId = '-';
+    if (rawBulker) {
+      const cleanB = String(rawBulker).replace(/^NOVAIRA\/BULKER\//i, '').trim();
+      const fullB = `NOVAIRA/BULKER/${cleanB}`;
+      bulkerName = bulkerMap[rawBulker] || bulkerMap[cleanB] || bulkerMap[fullB] || rawBulker;
+      bulkerId = cleanB;
+    }
+
+    if (!profile) {
+      const fallbackName = rev?.submitted_username || rawId;
+      return { name: fallbackName, bulkerName, bulkerId };
+    }
+
+    const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.phone || rev?.submitted_username || rawId;
+    return { name, bulkerName, bulkerId };
   };
 
   // ——— Actions ———
 
   const handleMarkActive = async (item) => {
-    const userInfo = getUserInfo(item.assigned_user_id);
+    const userInfo = getUserInfo(item.assigned_user_id, item.id);
     const result = await Swal.fire({
       title: 'Make Comment Active?',
       html: `
@@ -298,11 +412,12 @@ export default function ManageComment() {
       if (statusFilter !== 'all' && c.status !== statusFilter) return false;
       if (searchText.trim()) {
         const q = searchText.toLowerCase();
-        const ui = getUserInfo(c.assigned_user_id);
+        const ui = getUserInfo(c.assigned_user_id, c.id);
+        const proofUser = c.extracted_username || reviewSubmitMap[c.id]?.submitted_username || '';
         return (
           c.content?.toLowerCase().includes(q) ||
           c.assigned_user_id?.toLowerCase().includes(q) ||
-          c.extracted_username?.toLowerCase().includes(q) ||
+          proofUser.toLowerCase().includes(q) ||
           ui.name?.toLowerCase().includes(q) ||
           ui.bulkerName?.toLowerCase().includes(q) ||
           ui.bulkerId?.toLowerCase().includes(q)
@@ -310,7 +425,7 @@ export default function ManageComment() {
       }
       return true;
     });
-  }, [manageComments, statusFilter, searchText, profileMap, bulkerMap]);
+  }, [manageComments, statusFilter, searchText, profileMap, bulkerMap, reviewSubmitMap]);
 
   const paginatedComments = filteredComments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
@@ -837,7 +952,7 @@ export default function ManageComment() {
                     const isActive = item.status === 'active';
                     const isTaken = item.status === 'taken';
                     const isCompleted = item.status === 'completed';
-                    const ui = getUserInfo(item.assigned_user_id);
+                    const ui = getUserInfo(item.assigned_user_id, item.id);
                     const rowNum = page * rowsPerPage + idx + 1;
 
                     return (
@@ -982,10 +1097,10 @@ export default function ManageComment() {
 
                         {/* Proof Username */}
                         <TableCell sx={{ py: 1.4 }}>
-                          {item.extracted_username ? (
+                          {(item.extracted_username || reviewSubmitMap[item.id]?.submitted_username) ? (
                             <Chip
                               size="small"
-                              label={item.extracted_username}
+                              label={item.extracted_username || reviewSubmitMap[item.id]?.submitted_username}
                               sx={{
                                 fontWeight: 700,
                                 fontSize: '0.72rem',
