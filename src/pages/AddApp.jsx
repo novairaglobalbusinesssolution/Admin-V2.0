@@ -137,15 +137,23 @@ export default function AddApp() {
   };
 
   const handlePackageInput = (rawVal) => {
-    let cleanVal = rawVal.trim();
-    if (cleanVal.includes('play.google.com') && cleanVal.includes('id=')) {
+    // Keep rawVal as full link or identifier (no automatic stripping to package id)
+    handleChange('app_package', rawVal.trim());
+  };
+
+  const getCleanPackageId = (rawVal) => {
+    if (!rawVal) return '';
+    let val = rawVal.trim();
+    if (val.includes('play.google.com') && val.includes('id=')) {
       try {
-        const url = new URL(cleanVal);
+        const url = new URL(val);
         const pkg = url.searchParams.get('id');
-        if (pkg) cleanVal = pkg;
+        if (pkg) return pkg;
       } catch (_) {}
     }
-    handleChange('app_package', cleanVal);
+    const match = val.match(/[?&]id=([a-zA-Z0-9._]+)/);
+    if (match) return match[1];
+    return val;
   };
 
   const handleBulkerToggle = (bulkerId) => {
@@ -190,10 +198,20 @@ export default function AddApp() {
       }
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        const fullVal = formData.app_package.trim();
+        const cleanPkg = getCleanPackageId(fullVal);
+
+        let query = supabase
           .from('apps')
-          .select('created_at')
-          .eq('app_package', formData.app_package)
+          .select('created_at, app_name, app_package');
+
+        if (cleanPkg && cleanPkg !== fullVal) {
+          query = query.or(`app_package.eq.${cleanPkg},app_package.eq.${fullVal},app_package.ilike.%${cleanPkg}%`);
+        } else {
+          query = query.or(`app_package.eq.${fullVal},app_package.ilike.%${fullVal}%`);
+        }
+
+        const { data, error } = await query
           .order('created_at', { ascending: false })
           .limit(1);
 
@@ -683,7 +701,7 @@ export default function AddApp() {
                 fullWidth 
                 label={
                   formData.task_type === 'Android App' 
-                    ? 'Play Store Link or Package ID *'
+                    ? 'Target App Link (Play Store) *'
                     : formData.task_type === 'iOS App' 
                     ? 'App Store Link or Bundle ID *'
                     : formData.task_type === 'YT Video' 
@@ -693,7 +711,7 @@ export default function AddApp() {
                 variant="outlined" 
                 placeholder={
                   formData.task_type === 'Android App'
-                    ? 'e.g. com.whatsapp or play.google.com link'
+                    ? 'https://play.google.com/store/apps/details?id=...'
                     : 'https://...'
                 }
                 value={formData.app_package} 
@@ -1361,7 +1379,7 @@ export default function AddApp() {
                     {formData.app_name || 'Application Title'}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.72rem' }}>
-                    {formData.app_package || 'com.package.identifier'}
+                    {formData.app_package || 'https://play.google.com/store/apps/details?id=...'}
                   </Typography>
                 </Box>
               </Box>
