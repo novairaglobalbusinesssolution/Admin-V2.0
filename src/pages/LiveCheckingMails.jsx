@@ -411,6 +411,31 @@ export default function LiveCheckingMails() {
               border: '1px solid rgba(6,182,212,0.25)'
             }}
           />
+          <Tooltip title="Open tasks JSON API for review recording automation">
+            <Button
+              size="small"
+              component="a"
+              href={`/api/live-checking-tasks?date=${selectedDate}`}
+              target="_blank"
+              rel="noreferrer"
+              startIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+              sx={{
+                borderRadius: '12px',
+                fontWeight: 700,
+                textTransform: 'none',
+                px: 2,
+                py: 0.9,
+                color: '#06b6d4',
+                bgcolor: isDark ? 'rgba(6,182,212,0.1)' : 'rgba(6,182,212,0.06)',
+                border: '1px solid rgba(6,182,212,0.3)',
+                '&:hover': {
+                  bgcolor: isDark ? 'rgba(6,182,212,0.2)' : 'rgba(6,182,212,0.12)'
+                }
+              }}
+            >
+              Tasks API (JSON)
+            </Button>
+          </Tooltip>
           <Button
             size="small"
             onClick={fetchData}

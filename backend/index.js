@@ -2128,6 +2128,116 @@ app.get('/api/live-sheets/download/:taskId', (req, res) => {
     }
 });
 
+// =========================================================================
+// API ENDPOINT: Live Checking & Review Recording Tasks (JSON API)
+// Provides clean Play Store task list for automation and review recording
+// =========================================================================
+function extractCleanPackageAndLink(rawPackage) {
+    if (!rawPackage) return { packageName: '', playstoreUrl: '' };
+    let pkg = String(rawPackage).trim();
+    if (pkg.includes('details?id=')) {
+        const match = pkg.match(/[?&]id=([a-zA-Z0-9._]+)/);
+        if (match && match[1]) pkg = match[1];
+    } else if (pkg.startsWith('http')) {
+        const parts = pkg.split('/');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart) pkg = lastPart;
+    }
+    pkg = pkg.split('?')[0].split('&')[0].replace(/[#/]/g, '').trim();
+    const playstoreUrl = pkg ? `https://play.google.com/store/apps/details?id=${pkg}` : '';
+    return { packageName: pkg, playstoreUrl };
+}
+
+function formatDateToDDMMYYYY(dateInput) {
+    if (!dateInput) return '';
+    const str = String(dateInput).trim();
+    const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (isoMatch) {
+        return `${isoMatch[3].padStart(2, '0')}/${isoMatch[2].padStart(2, '0')}/${isoMatch[1]}`;
+    }
+    const slashMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (slashMatch) {
+        return `${slashMatch[1].padStart(2, '0')}/${slashMatch[2].padStart(2, '0')}/${slashMatch[3]}`;
+    }
+    return str;
+}
+
+function resolveISODate(dateInput) {
+    if (!dateInput) {
+        const now = new Date();
+        const ist = new Date(now.getTime() + (330 * 60000));
+        return ist.toISOString().split('T')[0];
+    }
+    const str = String(dateInput).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const parts = str.split(/[\/-]/);
+    if (parts.length === 3) {
+        if (parts[0].length === 4) {
+            return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        } else {
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+    }
+    return str;
+}
+
+async function handleLiveCheckingTasksRoute(req, res) {
+    try {
+        const rawDate = req.query.date || (req.body && req.body.date);
+        const targetIsoDate = resolveISODate(rawDate);
+        const targetBy = (req.query.target_by || (req.body && req.body.target_by) || 'release').toLowerCase();
+
+        const { data: apps, error: dbError } = await supabaseWork
+            .from('apps')
+            .select('*')
+            .eq('live_checking_date', targetIsoDate)
+            .order('created_at', { ascending: false });
+
+        if (dbError) {
+            console.error('[API live-checking-tasks] Error:', dbError);
+            return res.status(500).json({ status: 'error', message: dbError.message });
+        }
+
+        const appList = apps || [];
+        const tasks = appList.map((app) => {
+            const { packageName, playstoreUrl } = extractCleanPackageAndLink(app.app_package);
+            const formattedReleaseDate = formatDateToDDMMYYYY(app.app_date);
+            const formattedLiveDate = formatDateToDDMMYYYY(app.live_checking_date);
+            const targetDay = targetBy === 'live' ? formattedLiveDate : formattedReleaseDate;
+
+            return {
+                task_id: String(app.task_id || app.id),
+                package_name: packageName,
+                app_name: app.app_name || '',
+                app_link: playstoreUrl,
+                playstore_url: playstoreUrl,
+                target_day: targetDay,
+                release_date: formattedReleaseDate,
+                app_date: app.app_date || '',
+                live_checking_date: formattedLiveDate,
+                raw_live_checking_date: app.live_checking_date || '',
+                sponsor_id: app.sponsor_id || ''
+            };
+        });
+
+        res.json({
+            status: 'success',
+            total: tasks.length,
+            live_checking_date: formatDateToDDMMYYYY(targetIsoDate),
+            query_date: targetIsoDate,
+            target_by: targetBy,
+            tasks
+        });
+    } catch (err) {
+        console.error('[API live-checking-tasks] Exception:', err);
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+}
+
+app.all('/api/live-checking-tasks', handleLiveCheckingTasksRoute);
+app.all('/api/recording-tasks', handleLiveCheckingTasksRoute);
+
+
 
 
 
