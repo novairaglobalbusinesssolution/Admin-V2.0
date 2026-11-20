@@ -143,17 +143,17 @@ export default function AddApp() {
 
   const getCleanPackageId = (rawVal) => {
     if (!rawVal) return '';
-    let val = rawVal.trim();
-    if (val.includes('play.google.com') && val.includes('id=')) {
+    let val = String(rawVal).trim();
+    if (val.includes('play.google.com') || val.includes('id=')) {
       try {
-        const url = new URL(val);
+        const match = val.match(/[?&]id=([a-zA-Z0-9._]+)/);
+        if (match && match[1]) return match[1].trim();
+        const url = new URL(val.startsWith('http') ? val : `https://${val}`);
         const pkg = url.searchParams.get('id');
-        if (pkg) return pkg;
+        if (pkg) return pkg.trim();
       } catch (_) {}
     }
-    const match = val.match(/[?&]id=([a-zA-Z0-9._]+)/);
-    if (match) return match[1];
-    return val;
+    return val.split('?')[0].split('&')[0].replace(/\/+$/, '').trim();
   };
 
   const handleBulkerToggle = (bulkerId) => {
@@ -201,33 +201,51 @@ export default function AddApp() {
         const fullVal = formData.app_package.trim();
         const cleanPkg = getCleanPackageId(fullVal);
 
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
         let query = supabase
           .from('apps')
-          .select('created_at, app_name, app_package');
+          .select('id, created_at, app_name, app_package')
+          .gte('created_at', sevenDaysAgo.toISOString())
+          .order('created_at', { ascending: false });
 
-        if (cleanPkg && cleanPkg !== fullVal) {
-          query = query.or(`app_package.eq.${cleanPkg},app_package.eq.${fullVal},app_package.ilike.%${cleanPkg}%`);
+        if (cleanPkg) {
+          query = query.or(`app_package.eq.${cleanPkg},app_package.eq.${fullVal},app_package.ilike.%id=${cleanPkg}%`);
         } else {
-          query = query.or(`app_package.eq.${fullVal},app_package.ilike.%${fullVal}%`);
+          query = query.eq('app_package', fullVal);
         }
 
-        const { data, error } = await query
-          .order('created_at', { ascending: false })
-          .limit(1);
+        const { data, error } = await query.limit(50);
 
         if (error) throw error;
+
         if (data && data.length > 0) {
-          const lastDate = new Date(data[0].created_at);
-          const now = new Date();
-          const diffDays = Math.ceil(Math.abs(now - lastDate) / (1000 * 60 * 60 * 24));
-          
-          if (diffDays <= 7) {
-            setDuplicateWarning({ 
-              lastDate: lastDate.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium' }),
-              diffDays
-            });
-            setLoading(false);
-            return; 
+          const targetPkgLower = cleanPkg.toLowerCase();
+          const targetFullLower = fullVal.toLowerCase();
+
+          // STRICT EXACT MATCH: Verify clean package ID strictly matches
+          // Prevents false positives (e.g. 'com.shiprocket.quick' matching 'com.shiprocket.quickpartner')
+          const exactDuplicate = data.find((row) => {
+            const rowRaw = (row.app_package || '').trim();
+            if (rowRaw.toLowerCase() === targetFullLower) return true;
+            const rowCleanPkg = getCleanPackageId(rowRaw).toLowerCase();
+            return rowCleanPkg && rowCleanPkg === targetPkgLower;
+          });
+
+          if (exactDuplicate) {
+            const lastDate = new Date(exactDuplicate.created_at);
+            const now = new Date();
+            const diffDays = Math.ceil(Math.abs(now - lastDate) / (1000 * 60 * 60 * 24));
+            
+            if (diffDays <= 7) {
+              setDuplicateWarning({ 
+                lastDate: lastDate.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium' }),
+                diffDays
+              });
+              setLoading(false);
+              return; 
+            }
           }
         }
         handleNext();

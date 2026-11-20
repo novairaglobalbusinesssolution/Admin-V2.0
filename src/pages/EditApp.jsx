@@ -165,6 +165,21 @@ export default function EditApp() {
   const handleNext = () => setActiveStep((prev) => prev + 1);
   const handleBack = () => setActiveStep((prev) => prev - 1);
 
+  const getCleanPackageId = (rawVal) => {
+    if (!rawVal) return '';
+    let val = String(rawVal).trim();
+    if (val.includes('play.google.com') || val.includes('id=')) {
+      try {
+        const match = val.match(/[?&]id=([a-zA-Z0-9._]+)/);
+        if (match && match[1]) return match[1].trim();
+        const url = new URL(val.startsWith('http') ? val : `https://${val}`);
+        const pkg = url.searchParams.get('id');
+        if (pkg) return pkg.trim();
+      } catch (_) {}
+    }
+    return val.split('?')[0].split('&')[0].replace(/\/+$/, '').trim();
+  };
+
   // Skip duplicate check for editing, unless the package changed
   const checkDuplicateAndProceed = async () => {
     if (!formData.app_package) {
@@ -173,24 +188,55 @@ export default function EditApp() {
     }
     setLoading(true);
     try {
+      const fullVal = formData.app_package.trim();
+      const cleanPkg = getCleanPackageId(fullVal);
+
       // Find if this package exists on ANOTHER app within last 7 days
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('apps')
-        .select('app_name, created_at, id')
-        .eq('app_package', formData.app_package)
+        .select('app_name, created_at, id, app_package')
         .gte('created_at', sevenDaysAgo.toISOString())
         .neq('id', id); // exclude current app
+
+      if (cleanPkg) {
+        query = query.or(`app_package.eq.${cleanPkg},app_package.eq.${fullVal},app_package.ilike.%id=${cleanPkg}%`);
+      } else {
+        query = query.eq('app_package', fullVal);
+      }
+
+      const { data, error } = await query.limit(50);
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setDuplicateWarning(data[0]);
-      } else {
-        handleNext();
+        const targetPkgLower = cleanPkg.toLowerCase();
+        const targetFullLower = fullVal.toLowerCase();
+
+        const exactDuplicate = data.find((row) => {
+          const rowRaw = (row.app_package || '').trim();
+          if (rowRaw.toLowerCase() === targetFullLower) return true;
+          const rowCleanPkg = getCleanPackageId(rowRaw).toLowerCase();
+          return rowCleanPkg && rowCleanPkg === targetPkgLower;
+        });
+
+        if (exactDuplicate) {
+          const lastDate = new Date(exactDuplicate.created_at);
+          const now = new Date();
+          const diffDays = Math.ceil(Math.abs(now - lastDate) / (1000 * 60 * 60 * 24));
+
+          setDuplicateWarning({
+            ...exactDuplicate,
+            lastDate: lastDate.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium' }),
+            diffDays
+          });
+          setLoading(false);
+          return;
+        }
       }
+      handleNext();
     } catch (error) {
       setSnack({ open: true, message: error.message, severity: 'error' });
     } finally {
